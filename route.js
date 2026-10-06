@@ -10,18 +10,19 @@ function planRoute() {
     let nowA = info ? info.now.filter(o => o.store.tier === 'A') : [];
     if (heavy) nowA = nowA.slice().sort(rank); // bei Schwerem sind Großpackungen (z. B. Kiste) okay
     const lidl = info && !heavy ? info.now.find(o => o.store.tier === 'B') || null : null;
-    return { it, p, info, heavy, nowA, near: nowA[0] || null, lidl, offer: null, storeId: null, note: '' };
+    return { it, p, info, heavy, nowA, near: nowA[0] || null, lidl, pf: prefOf(p, it.name), offer: null, storeId: null, note: '' };
   });
 
   // 1) Standardwahl im City-Center (mit deinem Lieblingsladen, falls bekannt)
   for (const r of rows) {
-    const { p, nowA } = r;
-    if (p && p.pref) {
-      const po = nowA.find(o => o.store.id === p.pref);
-      const other = nowA.find(o => o.store.id !== p.pref);
-      if (po && !(other && other.up && po.up && other.up.v < po.up.v * 0.9)) { r.offer = po; r.storeId = p.pref; r.note = 'dein Standard'; }
+    const { nowA, pf } = r;
+    const why = pf && pf.fb ? 'bei ' + STORE(pf.id).short + ', sonst ' + STORE(pf.fb).short : 'dein Standard';
+    if (pf) { // Standardladen (z. B. dm für Waschmittel und Drogerie, REWE für Küchenrollen)
+      const po = nowA.find(o => o.store.id === pf.id);
+      const other = nowA.find(o => o.store.id !== pf.id);
+      if (po && !(other && other.up && po.up && other.up.v < po.up.v * 0.9)) { r.offer = po; r.storeId = pf.id; r.note = why; }
       else if (other && other.pct != null && !other.dubious && other.pct >= 0.15) { r.offer = other; r.storeId = other.store.id; r.note = 'echtes Angebot'; }
-      else { r.storeId = p.pref; r.note = 'dein Standard (kein besseres Angebot bekannt)'; }
+      else { r.storeId = pf.id; r.note = pf.fb ? why : 'dein Standard (kein besseres Angebot bekannt)'; }
     } else if (r.near) { r.offer = r.near; r.storeId = r.near.store.id; }
   }
   // 2) Lidl-Spaziergang: nur Leichtes, nur wenn es sich lohnt (oder du es willst)
@@ -40,19 +41,23 @@ function planRoute() {
   }
   // 3) Schwere Sachen auf einen Laden bündeln (der mit den meisten schweren Artikeln)
   const heavyRows = rows.filter(r => r.heavy && r.storeId && r.storeId !== 'lidl');
-  const cnt = {}; heavyRows.forEach(r => cnt[r.storeId] = (cnt[r.storeId] || 0) + 1);
+  const cnt = {}; heavyRows.forEach(r => cnt[r.storeId] = (cnt[r.storeId] || 0) + (r.pf ? 3 : 1)); // dein Standardladen (z. B. REWE für Küchenrollen) zählt dreifach
   const anchor = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || null;
   if (anchor) for (const r of heavyRows) {
-    if (r.storeId === anchor || (r.p && r.p.pref)) continue;
+    if (r.storeId === anchor || r.pf) continue;
+    if (anchor === 'dm' && !(r.p && r.p.cat === 'Haushalt & Wäsche')) continue; // dm verkauft keine Getränke- oder Lebensmittel-Großpackungen
     const ao = r.nowA.find(o => o.store.id === anchor);
     if (ao && (!r.offer || !r.offer.up || !ao.up || ao.up.v <= r.offer.up.v * 1.15)) { r.offer = ao; r.storeId = anchor; r.note = 'mit dem Schweren zusammen'; }
+    else if (!r.offer || r.offer.pct == null || r.offer.dubious || r.offer.pct < 0.15) { r.offer = null; r.storeId = anchor; r.note = 'normal, zusammen mit dem Schweren'; } // kleiner Rabatt lohnt keinen Umweg mit schwerer Tasche
   }
   // 4) Stopps bilden und ordnen: erst Lidl, dann City-Center-Läden mit wenig Schwerem, schwerster Laden zuletzt
   const byStore = {};
   const put = (r, id) => { r.storeId = id; (byStore[id] = byStore[id] || []).push(r); };
   rows.filter(r => r.storeId).forEach(r => put(r, r.storeId));
   let centerIds = Object.keys(byStore).filter(id => id !== 'lidl');
-  const hv = id => byStore[id].filter(r => r.heavy).length;
+  // Gewicht je Artikel: Getränke am schwersten, Waschmittel & Co. mittel, Sperriges (Klopapier, Küchenrollen) leicht. Der Laden mit dem meisten Gewicht kommt zuletzt.
+  const wt = r => !r.heavy ? 0 : /wasser|bier|getränk|kasten|kiste|cola|saft/i.test(r.it.name) ? 3 : /waschmittel|weichspüler|spülmittel|reiniger|mehl|zucker|katzenstreu/i.test(r.it.name) ? 2 : 1;
+  const hv = id => byStore[id].reduce((s, r) => s + wt(r), 0);
   centerIds.sort((a, b) => hv(a) - hv(b) || byStore[b].length - byStore[a].length);
   // 5) Artikel ohne bekannten Laden: Leichtes beim ersten Stopp, Schweres beim letzten (sonst Standardladen)
   const lonely = rows.filter(r => !r.storeId);
@@ -60,7 +65,7 @@ function planRoute() {
     r.note = 'kein Angebot bekannt, normal mitkaufen';
     const cat = r.p && r.p.cat, def = (cat === 'Haushalt & Wäsche') ? 'dm' : null;
     let id;
-    if (r.heavy) id = centerIds[centerIds.length - 1] || (r.p && r.p.pref) || 'rewe';
+    if (r.heavy) { let last = centerIds[centerIds.length - 1]; if (last === 'dm' && !(r.p && r.p.cat === 'Haushalt & Wäsche')) last = centerIds.filter(i => i !== 'dm').pop(); id = last || (r.pf && r.pf.id) || 'rewe'; }
     else id = def || centerIds[0] || 'netto';
     if (!byStore[id]) { byStore[id] = []; centerIds.push(id); centerIds.sort((a, b) => hv(a) - hv(b) || byStore[b].length - byStore[a].length); }
     put(r, id);
@@ -76,7 +81,7 @@ function planRoute() {
 }
 
 function routeText(plan) {
-  return 'Einkaufsroute\n' + plan.stops.map((s, i) => `${i + 1}. ${s.store.name}${s.kind === 'lidl' ? ' (Spaziergang, Rucksack)' : ''}:\n` + s.items.map(x => `   - ${x.it.name}${x.it.qty ? ' ×' + x.it.qty : ''}${x.heavy ? ' (schwer)' : ''}`).join('\n')).join('\n') + '\nDanach nach Hause.';
+  return 'Einkaufsroute\n' + plan.stops.map((s, i) => `${i + 1}. ${s.store.name}${s.kind === 'lidl' ? ' (Spaziergang, Rucksack)' : ''}:\n` + s.items.map(x => `   - ${x.it.name}${x.it.qty ? ' (' + x.it.qty + ')' : ''}${x.heavy ? ' (schwer)' : ''}`).join('\n')).join('\n') + '\nDanach nach Hause.';
 }
 function copyRoute() {
   const t = routeText(planRoute());
@@ -92,7 +97,7 @@ function routeView() {
   const row = x => {
     const o = x.offer, id = x.it.id;
     return `<div class="item"><button class="chk" onclick="tick('${id}');" aria-label="abhaken"></button>${thumb(o && o.img, iconFor(x.p, x.it.name), 'sm')}
-    <div class="grow"><div class="nm" style="cursor:default">${esc(x.it.name)}${x.it.qty ? ` <span class="mute">× ${esc(x.it.qty)}</span>` : ''}${x.heavy ? ' <span class="tag t-warn">🏋️ schwer</span>' : ''}</div>
+    <div class="grow"><div class="nm" style="cursor:default">${esc(x.it.name)}${x.it.qty ? ` <span class="mute">${esc(qtyLabel(x.it.qty))}</span>` : ''}${x.heavy ? ' <span class="tag t-warn">🏋️ schwer</span>' : ''}</div>
     <div class="row small" style="margin-top:2px">${o ? `<b>${eur(o.price)}</b>${o.up ? `<span class="mute">${eur(o.up.v)}/${unitLbl(o.up.base)}</span>` : ''}${o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}">−${Math.round(o.pct * 100)} %</span>` : ''}` : `<span class="mute">${esc(x.note || 'normal kaufen')}</span>`}${o && x.note ? `<span class="mute">· ${esc(x.note)}</span>` : ''}</div>
     ${o ? `<div class="mute clamp">${esc(o.name.slice(0, 44))}${o.desc ? ' · ' + esc(o.desc.slice(0, 40)) : ''}</div>` : ''}</div></div>`;
   };
@@ -114,5 +119,6 @@ function routeView() {
   ${plan.lidlPossible || mode !== 'auto' ? SEG(mode, [['auto', 'Lidl: Automatisch'], ['ja', 'Lidl: Ja'], ['nein', 'Lidl: Nein']], 'setLidl') + `<div class="mute" style="margin:-6px 4px 12px">${mode === 'auto' ? 'Lidl wird nur eingeplant, wenn du dort mindestens 1,50 € sparst.' : mode === 'ja' ? 'Lidl wird eingeplant, sobald es dort etwas Günstigeres für leichte Artikel gibt.' : 'Lidl wird nicht eingeplant.'}</div>` : ''}
   <div class="mute" style="margin:4px 4px 10px">Reihenfolge: Leichtes zuerst, Schweres und Sperriges (Wasser, Klopapier, Küchentücher, Waschmittel) zuletzt. Ob ein Artikel als „schwer" gilt, kannst du in der Liste beim Artikel ändern.</div>
   ${cards}
-  <div class="card" style="text-align:center">🏠 <b>Fertig, nach Hause</b> <span class="mute">· ca. 3 Min</span></div>`;
+  <div class="card" style="text-align:center">🏠 <b>Fertig, nach Hause</b> <span class="mute">· ca. 3 Min</span></div>
+  <div style="text-align:center;margin:8px 0"><button class="btn" onclick="go('bon')">🧾 Danach: Kassenbon einlesen</button></div>`;
 }

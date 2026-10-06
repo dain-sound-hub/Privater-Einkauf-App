@@ -1,5 +1,5 @@
 // Angebotssuche (kaufDA). Wird vom lokalen Server UND vom automatischen Aktualisieren (GitHub) benutzt.
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
+const UA = 'Einkaufsliste-PrivateApp/1.0 (persoenlicher Preisvergleich, 1x taeglich, 2 Sekunden Pause zwischen Abfragen)';
 const RETAILER = [[/netto marken/i, 'netto'], [/^rewe/i, 'rewe'], [/aldi s/i, 'aldi'], [/^dm/i, 'dm'], [/^lidl/i, 'lidl'], [/^metro/i, 'metro'], [/selgros/i, 'selgros'], [/handelshof/i, 'handelshof']]; // Penny bewusst nicht dabei
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const berlinDay = iso => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
@@ -75,13 +75,13 @@ async function research(body, progress) {
             const prev = out.get(o.id); // gleiche Angebote aus mehreren Suchen: Suchbegriffe merken
             if (prev) { if (!prev.found.includes(term)) prev.found.push(term); } else { o.found = [term]; out.set(o.id, o); }
           }
-          page++; await sleep(150);
+          page++; await sleep(2100); // kaufDA verlangt laut robots.txt 2 Sekunden Pause
         } while (got < total && page <= 3 && got > 0);
       } catch (e) { errors.push(term + ': ' + e.message); }
       done++; if (progress) progress(done, terms.length, term, out.size);
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  await worker(); // bewusst nur ein Zugriff nach dem anderen
   const offers = [...out.values()];
   if (!offers.length) throw new Error('Keine Angebote erhalten. Internetverbindung prüfen. ' + errors.slice(0, 2).join(' | '));
   return { fetched: new Date().toISOString(), source: 'kaufDA (Händler-weite Prospekte, nicht filial-genau)', terms: terms.length, errors, offers };

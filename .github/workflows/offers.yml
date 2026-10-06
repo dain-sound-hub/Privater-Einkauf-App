@@ -11,19 +11,24 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: angebote
+  cancel-in-progress: false
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Angebote holen
+      - name: Angebote holen (ca. 10 Minuten, mit Pausen)
         run: node refresh-offers.js
       - name: offers.json speichern
         run: |
           git config user.name "Angebote-Bot"
           git config user.email "bot@users.noreply.github.com"
           git add offers.json
-          git diff --cached --quiet || (git commit -m "Angebote aktualisiert" && git push)
+          git diff --cached --quiet || (git commit -m "Angebote aktualisiert" && git pull --rebase origin main && git push)

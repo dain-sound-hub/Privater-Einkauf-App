@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#d62f3f">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://content-media.bonial.biz https://images.unsplash.com; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -17,7 +20,7 @@
 @media(prefers-color-scheme:dark){:root{--bg:#0d1411;--bg2:#101a15;--card:#18211c;--ink:#e8efeb;--mute:#93a49b;--line:#26332c;--acc:#35c98b;--acc-d:#1f9a69;--acc-l:#6ee7b0;--acc2:#15322a;--warn:#f5a45c;--warn2:#352613;--blue:#86b6f4;--blue2:#172a45;--vio:#c3a0ee;--vio2:#2b2040;--red:#f58a82;--glow:rgba(53,201,139,.3);--sh1:0 1px 2px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.3);--sh2:0 2px 4px rgba(0,0,0,.4),0 16px 36px rgba(0,0,0,.5);--hi:inset 0 1px 0 rgba(255,255,255,.06)}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0}
-body{background:radial-gradient(900px 500px at 85% -10%,var(--bg2),transparent 70%),radial-gradient(700px 400px at -10% 30%,var(--bg2),transparent 70%),var(--bg);background-attachment:fixed;color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:96px}
+body{background:radial-gradient(900px 500px at 85% -10%,var(--bg2),transparent 70%),radial-gradient(700px 400px at -10% 30%,var(--bg2),transparent 70%),var(--bg);background-attachment:fixed;color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:170px}
 .wrap{max-width:760px;margin:auto;padding:0 14px}
 button,input,select{font:inherit}button{cursor:pointer}
 :focus-visible{outline:3px solid var(--glow);outline-offset:2px}
@@ -79,7 +82,7 @@ input:hover,select:hover{border-color:var(--acc-l)}input:focus,select:focus{bord
 .chk{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--line);flex:none;background:var(--card);display:grid;place-items:center;color:#fff;font-size:16px;padding:0;box-shadow:inset 0 2px 3px rgba(15,40,28,.1);transition:all .15s}
 .chk:hover{border-color:var(--acc);transform:scale(1.12)}.chk.on{background:linear-gradient(var(--acc-l),var(--acc));border-color:var(--acc);box-shadow:0 4px 10px var(--glow)}
 .item.done .nm{text-decoration:line-through;color:var(--mute)}.nm{font-weight:700;cursor:pointer}.nm:hover{color:var(--acc-d)}
-.ico{border:0;background:none;font-size:21px;padding:5px 6px;opacity:.4;filter:grayscale(1);border-radius:12px;transition:all .15s}.ico:hover{opacity:1;filter:none;background:var(--card);transform:scale(1.2);box-shadow:var(--sh1)}.ico.on{opacity:1;filter:none;background:var(--warn2);box-shadow:0 0 0 2px var(--warn) inset}
+.ico{border:0;background:none;font-size:21px;padding:9px 10px;min-width:42px;min-height:42px;opacity:.4;filter:grayscale(1);border-radius:12px;transition:all .15s}.ico:hover{opacity:1;filter:none;background:var(--card);transform:scale(1.2);box-shadow:var(--sh1)}.ico.on{opacity:1;filter:none;background:var(--warn2);box-shadow:0 0 0 2px var(--warn) inset}
 
 /* Kennzeichen */
 .tag{display:inline-block;font-size:12px;font-weight:700;border-radius:9px;padding:3px 9px;background:var(--bg2);color:var(--mute)}.t-new{background:var(--vio2);color:var(--vio)}.t-watch{background:var(--warn2);color:var(--warn)}.t-stock{background:var(--blue2);color:var(--blue)}.t-ok{background:var(--acc2);color:var(--acc-d)}.t-warn{background:var(--warn2);color:var(--warn)}.t-tier{background:var(--bg2);color:var(--ink)}
@@ -93,9 +96,34 @@ input:hover,select:hover{border-color:var(--acc-l)}input:focus,select:focus{bord
 a{color:var(--blue);font-weight:600}a:hover{text-decoration:underline}table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 details summary{cursor:pointer;padding:6px 0;border-radius:10px}details summary:hover{color:var(--acc-d)}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute)}.chip.arrow{background:var(--acc2);color:var(--acc-d);font-weight:700;padding:5px 12px;font-size:13px}
+.dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));width:min(560px,calc(100% - 20px));z-index:11;background:color-mix(in srgb,var(--card) 90%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh2),var(--hi);padding:6px}
+.dockrow{display:flex;gap:6px}.dockrow input{flex:1;padding:9px 12px;border-radius:14px;font-size:15px}.dockrow .btn{padding:8px 13px;border-radius:14px;box-shadow:0 3px 0 var(--line)}.dockrow .btn.pri{box-shadow:0 3px 0 var(--acc-d)}
+.fb{font-size:13px;padding:3px 6px 7px;color:var(--ink);line-height:1.3}.fb.warn{color:var(--warn)}.fb[hidden]{display:none}.lnk{border:0;background:none;color:var(--blue);font-weight:700;text-decoration:underline;padding:0 2px;font-size:13px}
+.bdg{position:absolute;top:-4px;right:-10px;background:var(--red);color:#fff;border-radius:999px;font-size:10px;line-height:1;padding:3px 5px;font-weight:800}nav.bottom button span{position:relative}
+.item.flash{animation:fl 2.2s ease-out}@keyframes fl{0%,35%{background:var(--acc2);box-shadow:0 0 0 3px var(--glow)}100%{background:transparent;box-shadow:none}}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:6px}.chips.scroll::-webkit-scrollbar{display:none}.chips.scroll .chip{flex:none}
+.seg3 button{padding:10px 4px;font-size:13px;min-width:0}.seg3 button small{display:block;font-size:11px;margin:0}
+.seg small{opacity:.75;font-weight:600;margin-left:2px}
+.info{border:0;background:var(--blue2);color:var(--blue);width:26px;height:26px;border-radius:50%;font-weight:800;font-style:italic;font-family:Georgia,serif;font-size:15px;padding:0;line-height:26px;text-align:center;box-shadow:0 2px 0 var(--line);transition:transform .12s}.info:hover{transform:scale(1.15)}
+.nxt{color:var(--warn);margin-top:3px;font-weight:600}.chip.due{border-color:var(--warn);background:var(--warn2);color:var(--warn);font-weight:700}
+details.later summary{cursor:pointer;font-weight:700;padding:10px 0}
+.sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center}.sheet[hidden]{display:none}
+.sheetbox{background:var(--card);width:min(640px,100%);max-height:80vh;overflow:auto;border-radius:24px 24px 0 0;padding:16px 16px calc(22px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.35);animation:up .22s ease-out}@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.sheetbox h4{margin:14px 0 4px;color:var(--mute);text-transform:uppercase;letter-spacing:.6px;font-size:12px}.cmp td{vertical-align:top}.cmp tr.win td{background:var(--acc2)}.cmp td:first-child{white-space:nowrap;font-weight:600}
+.nstat{font-size:13px;margin:0 0 10px;padding:9px 12px;background:var(--card);border-radius:14px;border:1px solid var(--line);box-shadow:var(--sh1)}
+.sug{display:flex;flex-direction:column;gap:4px;padding:2px 2px 6px}.sug[hidden]{display:none}.sugrow{display:flex;align-items:center;gap:10px;border:0;background:var(--bg);border-radius:14px;padding:8px 12px;text-align:left;color:var(--ink);transition:background .12s,transform .12s;width:100%}.sugrow:hover,.sugrow:active{background:var(--acc2);transform:translateX(3px)}.sugrow b{display:block;font-weight:700}.sugrow small{display:block;color:var(--mute);font-size:12px}.sugrow .em{font-size:22px}.sugrow .plus{color:var(--acc-d);font-weight:800;font-size:22px}.dock.sugon #fb{display:none}
+.chip.main{border-color:var(--acc);font-weight:600}.chip.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
 .hs{display:flex;gap:14px;overflow-x:auto;padding:4px 14px 18px;scroll-snap-type:x proximity;margin:0 -14px;scrollbar-width:none}.hs::-webkit-scrollbar{display:none}.hs .card{flex:0 0 82%;max-width:320px;margin:0;scroll-snap-align:start}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Daumen-Komfort: größere Tippflächen auf Touchgeräten (mind. ca. 40 px) */
+@media (pointer:coarse){
+.btn.sm{min-height:40px;padding:9px 15px}.rbtn{min-height:42px}.chip{min-height:40px}.chip.arrow{padding:8px 14px}
+.chk{width:36px;height:36px}.info{width:36px;height:36px;line-height:36px;font-size:17px}
+.nm{padding:8px 0;min-height:36px}.lnk{padding:10px 6px;display:inline-block}a{display:inline-block;padding:9px 3px}
+summary{min-height:42px;display:flex;align-items:center}.sugrow{min-height:48px}.seg button{min-height:42px}
+.dockrow .btn{min-height:44px}.dockrow input{min-height:44px}
+}
 </style>
 </head>
 <body>
@@ -104,10 +132,15 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mu
   <div class="meta"><span id="sub"></span><span id="rstat" class="rstat"></span></div>
 </div></header>
 <div class="wrap"><main id="view"></main></div>
+<div class="dock" id="dock"><div id="sug" class="sug" hidden></div>
+  <div id="fb" class="fb" role="status" aria-live="polite" hidden></div>
+  <div class="dockrow"><input id="ni" placeholder="Was brauchst du? z. B. 2 Milch" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" oninput="suggest()" onkeydown="if(event.key==='Enter')addItem();else if(event.key==='Escape')hideSug()"><button class="btn" id="micb" onclick="mic()" title="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen">+</button></div></div>
+<div class="sheet" id="sheet" hidden onclick="if(event.target===this)closeSheet()"><div class="sheetbox" id="sheetbox"></div></div>
 <nav class="bottom"><div id="tabs"></div></nav>
 <script src="data.js"></script>
 <script src="offers.js"></script>
 <script src="route.js"></script>
+<script src="receipt.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
