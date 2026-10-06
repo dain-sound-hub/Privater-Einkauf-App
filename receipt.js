@@ -262,7 +262,7 @@ function bonSave() {
 /* ---------- Foto lesen: Bon fotografieren, KI schreibt den Text ab, der Bon-Leser oben macht den Rest ---------- */
 // Optional und nur mit deinem eigenen Schlüssel (liegt nur auf diesem Gerät, nie im Export und nie auf GitHub).
 // Zwei Anbieter: Google Gemini (kostenlos, ohne Karte) oder Anthropic Claude (Karte nötig).
-const AI_KEY_STORE = 'einkauf.ai.key', AI_PROV_STORE = 'einkauf.ai.prov', AI_MODEL_STORE = 'einkauf.ai.model', MAX_PHOTOS = 4;
+const AI_KEY_STORE = 'einkauf.ai.key', AI_PROV_STORE = 'einkauf.ai.prov', AI_MODELS_STORE = 'einkauf.ai.models', MAX_PHOTOS = 4;
 const AI_URL = 'https://api.anthropic.com/v1/messages', AI_MODEL = 'claude-haiku-4-5-20251001', GEM_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const lsSet = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); return true; } catch (e) { return false; } };
@@ -320,19 +320,19 @@ async function aiFetch(url, headers, body, timeoutMs) {
   catch (e) { throw new Error(e.name === 'AbortError' ? 'Das Auslesen hat zu lange gedauert. Bitte nochmal versuchen.' : 'Keine Verbindung zum Lese-Dienst. Internet prüfen.'); }
   finally { clearTimeout(timer); }
   let j = null; try { j = await r.json(); } catch (e) { }
-  if (!r.ok) { const e = aiFail(r.status, (j && j.error && j.error.message) || ''); e.status = r.status; throw e; }
+  if (!r.ok) { const e = aiFail(r.status, (j && j.error && j.error.message) || ''); e.status = r.status; e.raw = String((j && j.error && j.error.message) || '').replace(/\s+/g, ' '); throw e; }
   return j || {};
 }
 const aiNote = t => { BON.status = t; if (BON.busy) render(); }; // Statuszeile am Knopf („neuer Versuch …“)
 const sleepMs = ms => new Promise(r => setTimeout(r, ms));
 async function geminiModels(key) { // Flash-Modelle, die dein Schlüssel nutzen darf: neuestes zuerst, dann Flash-Lite (Namen ändern sich bei Google öfter)
-  try { const s = JSON.parse(lsGet(AI_MODEL_STORE) || 'null'); if (Array.isArray(s) && s.length) return s; } catch (e) { }
+  try { const s = JSON.parse(lsGet(AI_MODELS_STORE) || 'null'); if (Array.isArray(s) && s.length) return s; } catch (e) { }
   const j = await aiFetch(GEM_URL + '/models?pageSize=200', { 'x-goog-api-key': key });
   const ver = n => parseFloat((n.match(/[\d.]+/) || ['0'])[0]);
   const list = (j.models || []).filter(m => /^models\/gemini-[\d.]+-flash(-lite)?$/.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.slice(7))
-    .sort((a, b) => ver(b) - ver(a) || (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0)).slice(0, 4);
+    .sort((a, b) => ver(b) - ver(a) || (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0)).slice(0, 6);
   if (!list.length) throw new Error('Für diesen Schlüssel habe ich kein passendes Lese-Modell gefunden.');
-  lsSet(AI_MODEL_STORE, JSON.stringify(list)); return list;
+  lsSet(AI_MODELS_STORE, JSON.stringify(list)); return list;
 }
 async function aiAsk(images, text, maxTokens) { // images: Liste base64-JPEG; gibt den Antworttext zurück
   const key = aiKey(); if (!key) throw new Error('Foto-Lesen ist noch nicht eingerichtet.');
@@ -342,25 +342,26 @@ async function aiAsk(images, text, maxTokens) { // images: Liste base64-JPEG; gi
     return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
   }
   const models = await geminiModels(key), body = { contents: [{ role: 'user', parts: [...images.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })), { text }] }], generationConfig: { temperature: 0, maxOutputTokens: Math.max(maxTokens, 4000) } };
-  let last = null, tries = 0;
-  for (const model of models) {
-    for (let t = 0; t < 2; t++) {
-      if (tries >= 5) break; tries++;
-      try {
-        const j = await aiFetch(GEM_URL + '/models/' + model + ':generateContent', { 'x-goog-api-key': key }, body, 45000);
-        const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('\n').trim();
-        if (!out && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Google hat das Bild abgelehnt. Mach bitte ein neues Foto.');
-        if (!out) { last = new Error('Google hat keine Antwort geliefert. Gleich nochmal versuchen.'); last.status = 500; continue; }
-        return out;
-      } catch (e) {
-        last = e;
-        if (e.status === 404) { lsSet(AI_MODEL_STORE, ''); break; } // Modell gibt es nicht mehr: beim nächsten Mal neu suchen
-        if (e.status !== 429 && !(e.status >= 500) && !/zu lange gedauert/.test(e.message)) throw e; // Schlüssel, Bild usw.: nicht wiederholen
-        if (t === 0) { aiNote('Google ist ausgelastet, neuer Versuch …'); await sleepMs(3000); } else aiNote('Probiere ein anderes Modell …');
-      }
+  // Reihenfolge: alle Modelle einmal, dann nach einer Pause die ersten beiden noch einmal (höchstens 8 Versuche)
+  const order = [...models, ...models.slice(0, 2)].slice(0, 8), diag = []; let last = null;
+  for (let i = 0; i < order.length; i++) {
+    const model = order[i];
+    if (i === models.length) { aiNote('Google ist ausgelastet. Kurze Pause, dann neuer Versuch …'); await sleepMs(8000); }
+    aiNote(`Versuch ${i + 1} von ${order.length} (${model.replace('gemini-', '')}) …`);
+    try {
+      const j = await aiFetch(GEM_URL + '/models/' + model + ':generateContent', { 'x-goog-api-key': key }, body, 45000);
+      const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('\n').trim();
+      if (!out && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Google hat das Bild abgelehnt. Mach bitte ein neues Foto.');
+      if (!out) { const e = new Error('Google hat keine Antwort geliefert.'); e.status = 500; throw e; }
+      return out;
+    } catch (e) {
+      last = e; diag.push(model.replace('gemini-', '') + ': ' + (e.status || 'Zeit') + (e.raw ? ' ' + e.raw.slice(0, 70) : ''));
+      if (e.status === 404) { lsSet(AI_MODELS_STORE, ''); continue; } // Modell gibt es nicht mehr: beim nächsten Mal neu suchen
+      if (e.status !== 429 && !(e.status >= 500) && !/zu lange gedauert/.test(e.message)) throw e; // Schlüssel, Bild usw.: nicht wiederholen
+      await sleepMs(1500);
     }
   }
-  throw new Error((last ? last.message : 'Das Auslesen hat nicht geklappt.') + (last && last.status ? ' (Google ' + last.status + ', ' + tries + ' Versuche)' : ''));
+  const err = new Error((last ? last.message : 'Das Auslesen hat nicht geklappt.') + ' Versucht: ' + diag.join(' · ')); err.status = last && last.status; throw err;
 }
 async function bonReadPhotos() {
   if (BON.busy && Date.now() - BON.busyAt < 150000) return feedbackText('Ich lese den Bon gerade. Das kann bis zu 2 Minuten dauern, wenn Google ausgelastet ist.');
@@ -394,8 +395,8 @@ function aiSheet(prov) {
 async function aiSave() {
   const k = ($('#aik').value || '').trim(), g = AI_SEL !== 'anthropic', msg = t => { const m = $('#aimsg'); if (m) m.innerHTML = t; };
   if (g ? !/^(AIza[\w-]{20,}|AQ\.[\w.-]{20,})$/.test(k) : !/^sk-ant-[\w-]{20,}$/.test(k)) return msg(`⚠ Das sieht nicht wie ein Schlüssel aus. Er beginnt mit „${g ? 'AQ.' : 'sk-ant-'}“${g ? ' oder „AIza“' : ''}.`);
-  const old = [aiKey(), lsGet(AI_PROV_STORE), lsGet(AI_MODEL_STORE)]; lsSet(AI_KEY_STORE, k); lsSet(AI_PROV_STORE, g ? 'gemini' : 'anthropic'); lsSet(AI_MODEL_STORE, ''); msg('⏳ Teste Verbindung …');
+  const old = [aiKey(), lsGet(AI_PROV_STORE), lsGet(AI_MODELS_STORE)]; lsSet(AI_KEY_STORE, k); lsSet(AI_PROV_STORE, g ? 'gemini' : 'anthropic'); lsSet(AI_MODELS_STORE, ''); msg('⏳ Teste Verbindung …');
   try { await aiAsk([], 'Antworte nur mit OK.', 8); msg('✓ Verbunden. Du kannst jetzt Bons fotografieren.'); render(); }
-  catch (e) { lsSet(AI_KEY_STORE, old[0]); lsSet(AI_PROV_STORE, old[1]); lsSet(AI_MODEL_STORE, old[2]); msg('⚠ ' + esc(e.message)); }
+  catch (e) { lsSet(AI_KEY_STORE, old[0]); lsSet(AI_PROV_STORE, old[1]); lsSet(AI_MODELS_STORE, old[2]); msg('⚠ ' + esc(e.message)); }
 }
-function aiRemove() { lsSet(AI_KEY_STORE, ''); lsSet(AI_MODEL_STORE, ''); closeSheet(); render(); feedbackText('Schlüssel entfernt.'); }
+function aiRemove() { lsSet(AI_KEY_STORE, ''); lsSet(AI_MODELS_STORE, ''); closeSheet(); render(); feedbackText('Schlüssel entfernt.'); }
