@@ -1,0 +1,29 @@
+name: Angebote aktualisieren
+
+# Holt automatisch frische Angebote und speichert sie in offers.json.
+# Läuft täglich früh am Morgen (sowie samstags abends für die neue Woche) und lässt sich von Hand starten.
+on:
+  schedule:
+    - cron: '30 4 * * *'
+    - cron: '0 16 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Angebote holen
+        run: node refresh-offers.js
+      - name: offers.json speichern
+        run: |
+          git config user.name "Angebote-Bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add offers.json
+          git diff --cached --quiet || (git commit -m "Angebote aktualisiert" && git push)

@@ -1,0 +1,14 @@
+# Persönliche Daten: werden NICHT hochgeladen
+Uebergabedokument*.pdf
+Einkaufs_App_Produkte_und_Laeden.xlsx
+*.xlsx
+*.pdf
+
+# Nur für den PC gedacht, nicht fürs Handy
+server.js
+*.bat
+.claude/
+
+# Sonstiges
+node_modules/
+*.log
