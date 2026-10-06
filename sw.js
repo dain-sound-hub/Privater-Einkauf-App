@@ -1,6 +1,6 @@
 // Offline-Speicher: Die App und die zuletzt geladenen Angebote funktionieren auch ohne Internet (z. B. im Laden).
 // Die App startet sofort aus dem Speicher (auch bei schwachem Netz) und aktualisiert sich im Hintergrund.
-const V = 'einkauf-v10', SHELL = ['./', 'index.html', 'app.js', 'route.js', 'receipt.js', 'data.js', 'offers.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const V = 'einkauf-v11', SHELL = ['./', 'index.html', 'app.js', 'route.js', 'receipt.js', 'data.js', 'offers.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 const put = (key, res) => { if (res && res.ok) { const c = res.clone(); caches.open(V).then(ca => ca.put(key, c)); } return res; };

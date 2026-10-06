@@ -366,17 +366,17 @@ function aiSheet(prov) {
   const p = AI_SEL = prov || (aiKey() ? aiProv() : 'gemini'), g = p === 'gemini';
   $('#sheetbox').innerHTML = `<div class="row sp"><h3>📷 Foto-Lesen einrichten</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
     <div class="row" style="margin:8px 0"><button class="btn sm ${g ? 'pri' : ''}" onclick="aiSheet('gemini')">Google Gemini · kostenlos</button><button class="btn sm ${g ? '' : 'pri'}" onclick="aiSheet('anthropic')">Claude · Karte nötig</button></div>
-    ${g ? `<ol class="small" style="padding-left:20px;margin:8px 0"><li>Im Browser <b>aistudio.google.com/apikey</b> öffnen und mit einem Google-Konto anmelden (machst du selbst, ab 18).</li><li>Auf <b>„Create API key“</b> tippen und den Schlüssel kopieren. Er beginnt mit „AIza“.</li><li>Hier einfügen. Kostet nichts und braucht keine Karte.</li></ol>
+    ${g ? `<ol class="small" style="padding-left:20px;margin:8px 0"><li>Im Browser <b>aistudio.google.com/apikey</b> öffnen und mit einem Google-Konto anmelden (machst du selbst, ab 18).</li><li>Auf <b>„Create API key“</b> tippen und den Schlüssel kopieren. Er beginnt mit „AQ.“ oder „AIza“. Dort das Kopier-Symbol neben „API-Schlüssel“ antippen.</li><li>Hier einfügen. Kostet nichts und braucht keine Karte.</li></ol>
       <div class="mute small">In Deutschland gelten für die Gratis-Nutzung die Datenschutz-Regeln der Bezahl-Variante: Google nutzt deine Fotos nicht zum Training. Es gibt ein Tageslimit, das für Bons reicht.</div>`
     : `<ol class="small" style="padding-left:20px;margin:8px 0"><li><b>console.anthropic.com</b> öffnen, Konto anlegen (machst du selbst).</li><li>Unter „Billing“ Guthaben aufladen (nur Visa/Mastercard, kein PayPal). Ein Bon kostet etwa 1 Cent.</li><li>Ausgabenlimit setzen, unter „API Keys“ einen Schlüssel erzeugen und hier einfügen („sk-ant-…“).</li></ol>`}
-    <input id="aik" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${g ? 'AIza…' : 'sk-ant-…'}" value="" style="width:100%;margin-top:8px" aria-label="API-Schlüssel">
+    <input id="aik" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${g ? 'AQ.… oder AIza…' : 'sk-ant-…'}" value="" style="width:100%;margin-top:8px" aria-label="API-Schlüssel">
     <div class="mute small" style="margin:6px 0">Der Schlüssel bleibt nur auf diesem Gerät (nicht im Export, nicht auf GitHub). Beim Auslesen geht das Foto an ${g ? 'Google' : 'Anthropic'}. Die App speichert es nicht.</div>
     <div class="row"><button class="btn pri sm" onclick="aiSave()">Speichern &amp; testen</button>${aiKey() ? '<button class="btn sm" onclick="aiRemove()">Schlüssel entfernen</button>' : ''}</div><div id="aimsg" class="small" style="margin-top:8px" role="status"></div>`;
   $('#sheet').hidden = false; setTimeout(() => { const e = $('#aik'); if (e) e.focus(); }, 50);
 }
 async function aiSave() {
   const k = ($('#aik').value || '').trim(), g = AI_SEL !== 'anthropic', msg = t => { const m = $('#aimsg'); if (m) m.innerHTML = t; };
-  if (g ? !/^AIza[\w-]{20,}$/.test(k) : !/^sk-ant-[\w-]{20,}$/.test(k)) return msg(`⚠ Das sieht nicht wie ein Schlüssel aus. Er beginnt mit „${g ? 'AIza' : 'sk-ant-'}“.`);
+  if (g ? !/^(AIza[\w-]{20,}|AQ\.[\w.-]{20,})$/.test(k) : !/^sk-ant-[\w-]{20,}$/.test(k)) return msg(`⚠ Das sieht nicht wie ein Schlüssel aus. Er beginnt mit „${g ? 'AQ.' : 'sk-ant-'}“${g ? ' oder „AIza“' : ''}.`);
   const old = [aiKey(), lsGet(AI_PROV_STORE), lsGet(AI_MODEL_STORE)]; lsSet(AI_KEY_STORE, k); lsSet(AI_PROV_STORE, g ? 'gemini' : 'anthropic'); lsSet(AI_MODEL_STORE, ''); msg('⏳ Teste Verbindung …');
   try { await aiAsk([], 'Antworte nur mit OK.', 8); msg('✓ Verbunden. Du kannst jetzt Bons fotografieren.'); render(); }
   catch (e) { lsSet(AI_KEY_STORE, old[0]); lsSet(AI_PROV_STORE, old[1]); lsSet(AI_MODEL_STORE, old[2]); msg('⚠ ' + esc(e.message)); }
