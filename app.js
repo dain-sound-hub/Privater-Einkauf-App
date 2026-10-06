@@ -374,9 +374,23 @@ function woandersBody() {
   const offs = OFFERS_ALL().filter(o => o.store.tier === 'D' && o.state === 'now').sort((a, b) => (b.pct || 0) - (a.pct || 0));
   return `<div class="banner info">Optional, wenn du Zeit und Lust hast: Großmarkt (Selgros Köln-Am Butzweilerhof, METRO, Handelshof) oder Bestellung. Das gehört nicht zur normalen Einkaufsliste. METRO-Preise gelten für Gewerbekunden. Orte und Öffnungszeiten findest du unter Mehr → Läden.</div>` + (offs.length ? grid(offs.map(o => offerCard(o)).join('')) : empty('🏪', 'Aktuell keine Großmarkt-Angebote bekannt. Eigene Funde (z. B. aus dem Selgros-Prospekt) trägst du unter Mehr ein.'));
 }
+// Prospekte: je Laden Zugang zu den Aktionsseiten, mit Stand aus den geladenen Daten
+V.pro = () => {
+  const all = OFFERS_ALL(), cnt = (id, st) => all.filter(o => o.store.id === id && o.state === st).length;
+  const aldiNext = all.filter(o => o.store.id === 'aldi' && o.state === 'next').map(o => o.valid[0]).sort()[0];
+  const card = s => {
+    const now = cnt(s.id, 'now'), next = cnt(s.id, 'next'), canNext = NEXT_STORES.includes(s.id);
+    const links = s.id === 'aldi' ? [['Diese Woche', s.links[0][1]], ['Nächste Woche', aldiNext ? 'https://www.aldi-sued.de/angebote/' + aldiNext : s.links[0][1]], ...s.links.slice(1)] : s.links;
+    return `<div class="card"><div class="row sp"><b>${esc(s.short)}</b><span class="mute">${now ? '✓ ' + now + ' Angebote in der App' : 'keine Preise in der App'}</span></div>
+      ${canNext ? `<div class="mute" style="margin-top:2px">Nächste Woche: ${next ? '✓ ' + next + ' Angebote da' : '⏳ noch nicht veröffentlicht'}</div>` : ''}
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px">${links.map(l => `<a class="btn" href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join('')}</div></div>`;
+  };
+  return `<h2>📰 Prospekte</h2><div class="mute" style="margin:0 4px 8px">Die Seiten öffnen sich in deinem Browser. Der Stand zeigt, was die App von dort schon geladen hat.</div>` +
+    ['A', 'B', 'D'].map(t => `<h3 style="margin:14px 4px 6px"><i class="dot t${t}"></i> ${TIER_LABEL[t]}</h3>` + STORES.filter(s => s.tier === t && s.links.length).map(card).join('')).join('');
+};
 V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow">Bon einlesen: Die App lernt, wo du was kaufst, und findet Spartipps.<div class="mute">${S.bons.length} Bons gespeichert</div></div><button class="btn pri sm" onclick="go('bon')">Einlesen</button></div>
   <h2>Datenstand</h2><div class="card"><div>${SRC.live ? `Letzte Suche: <b>${new Date(SRC.fetched).toLocaleString('de-DE')}</b><br><span class="mute">${SRC.offers.length} Angebote · ${esc(SRC.source)}</span>` : 'Noch keine Suche. Tippe oben auf „Angebote suchen".'}</div>
-  <div class="mute" style="margin-top:8px">Wichtig: Die Angebote sind Händler-weit. Ob genau deine Filiale in Chorweiler mitmacht, wird nicht geprüft. <b>ALDI SÜD</b> liefert keine einzelnen Angebote an kaufDA, dafür bitte den Prospekt-Link bei „Läden" nutzen. Abgedeckt sind REWE, Netto, Lidl, METRO und teilweise dm. Penny ist bewusst nicht dabei.</div></div>
+  <div class="mute" style="margin-top:8px">Wichtig: Die Angebote sind Händler-weit. Ob genau deine Filiale in Chorweiler mitmacht, wird nicht geprüft. <b>ALDI SÜD</b> kommt direkt von der ALDI-Webseite: ${SRC.aldi && SRC.aldi.ok ? '✓ ' + SRC.aldi.count + ' Produkte geladen' : '⚠ aktuell nicht geladen' + (SRC.aldi && SRC.aldi.error ? ' (' + esc(SRC.aldi.error) + ')' : '') + ', bitte Prospekt-Link bei Läden nutzen'}. Abgedeckt sind REWE, Netto, Lidl, METRO, ALDI und teilweise dm. Penny ist bewusst nicht dabei.</div></div>
   <h2>Läden</h2>${['A', 'B', 'D'].map(t => `<div class="card"><h3><i class="dot t${t}"></i>${TIER_LABEL[t]}</h3>${STORES.filter(s => s.tier === t).map(s => `<details style="margin-top:8px"><summary><b>${esc(s.short)}</b> <span class="mute">${t === 'A' ? '3 Min zu Fuß' : t === 'B' ? s.walk + ' Min zu Fuß' : s.car ? 'ca. ' + s.car + ' Min Auto' : ''}</span></summary><div class="mute" style="padding:6px 0">${esc(s.addr)}<br>Öffnungszeiten: ${esc(s.hours)}${s.transit ? '<br>' + esc(s.transit) : ''}${s.note ? '<br>' + esc(s.note) : ''}</div><div class="row">${s.links.map(l => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join(' · ')}</div></details>`).join('')}</div>`).join('')}
   <h2>Angebot selbst eintragen</h2><div class="card"><div class="fgrid">
   <label class="f">Produkt<input id="mn" list="pl2"><datalist id="pl2">${PRODUCTS.map(p => `<option value="${esc(p.name)}">`).join('')}</datalist></label>
@@ -576,10 +590,10 @@ function nextHint(info) {
   return cheaper ? { o: nb, why: 'Nächste Woche günstiger' } : null;
 }
 const nextLine = (nh, extra = '') => nh ? `<div class="small nxt">📅 ${esc(nh.why)}: <b>${eur(nh.o.price)}</b> bei ${esc(nh.o.store.short)} (ab ${fmtD(nh.o.valid[0])}) ${extra}</div>` : '';
-const NEXT_STORES = ['netto', 'rewe', 'lidl']; // Läden, die überhaupt Prospektdaten liefern
+const NEXT_STORES = ['netto', 'rewe', 'lidl', 'aldi']; // Läden, die überhaupt Prospektdaten liefern
 function nextStatus() { const all = OFFERS_ALL(); return NEXT_STORES.map(id => ({ s: STORE(id), n: all.filter(o => o.store.id === id && o.state === 'next').length })); }
 const nextBadge = () => { const st = nextStatus(); return st.filter(x => x.n > 0).length + '/' + st.length; };
-function nextStatusLine() { const st = nextStatus(), ok = st.filter(x => x.n > 0), wait = st.filter(x => !x.n); return `<div class="nstat">📅 Nächste Woche: ${ok.length ? '✓ ' + ok.map(x => esc(x.s.short)).join(', ') + ' schon da' : 'noch kein Laden hat sie veröffentlicht'}${wait.length ? ' · ⏳ ' + wait.map(x => esc(x.s.short)).join(', ') + ' noch nicht' : ''}<span class="mute"> · ALDI und dm liefern keine Prospektpreise</span></div>`; }
+function nextStatusLine() { const st = nextStatus(), ok = st.filter(x => x.n > 0), wait = st.filter(x => !x.n); return `<div class="nstat">📅 Nächste Woche: ${ok.length ? '✓ ' + ok.map(x => esc(x.s.short)).join(', ') + ' schon da' : 'noch kein Laden hat sie veröffentlicht'}${wait.length ? ' · ⏳ ' + wait.map(x => esc(x.s.short)).join(', ') + ' noch nicht' : ''}<span class="mute"> · dm liefert keine Prospektpreise</span></div>`; }
 function addLater(p, from, qty, name) {
   if (S.later.some(x => x.pid === p.id)) return false;
   S.later.push({ id: uid(), pid: p.id, name: (name || p.name).slice(0, 80), qty: qty || '', from: from || nextMonday() });
@@ -638,7 +652,7 @@ function compare(pid) {
     rows.filter(r => r.o).forEach(r => { if (!best || ((r.o.up && best.o.up && r.o.up.base === best.o.up.base) ? r.o.up.v < best.o.up.v : r.o.price < best.o.price)) best = r; });
     const cell = r => r.o
       ? `<td><b>${eur(r.o.price)}</b>${r.o.regular ? ` <s class="mute">${eur(r.o.regular)}</s>` : ''}<div class="mute clamp">${esc(r.o.name.slice(0, 40))}</div></td><td>${r.o.up ? eur(r.o.up.v) + '/' + unitLbl(r.o.up.base) : ''}${r.o.pct != null && !r.o.dubious ? `<div><span class="pct">−${Math.round(r.o.pct * 100)} %</span></div>` : ''}</td>`
-            : `<td colspan="2" class="mute">${nextMode && NEXT_STORES.includes(r.s.id) && !OFFERS_ALL().some(o => o.store.id === r.s.id && o.state === 'next') ? '⏳ Prospekt für nächste Woche noch nicht veröffentlicht' : 'kein Angebot bekannt' + (r.s.id === 'dm' || r.s.id === 'aldi' ? ' (hat selten Prospektpreise)' : '')}</td>`;
+            : `<td colspan="2" class="mute">${nextMode && NEXT_STORES.includes(r.s.id) && !OFFERS_ALL().some(o => o.store.id === r.s.id && o.state === 'next') ? '⏳ Prospekt für nächste Woche noch nicht veröffentlicht' : 'kein Angebot bekannt' + (r.s.id === 'dm' ? ' (hat selten Prospektpreise)' : '')}</td>`;
     return `<h4>${label}</h4><table class="cmp">${rows.map(r => `<tr class="${best && r === best ? 'win' : ''}"><td><i class="dot t${r.s.tier}"></i>${esc(r.s.short)}${best && r === best ? ' ✓' : ''}</td>${cell(r)}</tr>`).join('')}</table>${best ? `<div class="small">✓ Am günstigsten: <b>${esc(best.s.name)}</b></div>` : ''}`;
   };
   const nh = nextHint(info);
@@ -726,7 +740,7 @@ async function startResearch() {
 }
 
 /* ================= Shell ================= */
-const TABS = [['list', '🛒', 'Liste'], ['route', '🧭', 'Route'], ['offers', '🏷️', 'Angebote'], ['watch', '👁', 'Beobachten'], ['more', '⚙️', 'Mehr']];
+const TABS = [['list', '🛒', 'Liste'], ['route', '🧭', 'Route'], ['offers', '🏷️', 'Angebote'], ['watch', '👁', 'Beobachten'], ['pro', '📰', 'Prospekte'], ['more', '⚙️', 'Mehr']];
 let cur = (location.hash || '#list').slice(1);
 function render() {
   TIPS = null;

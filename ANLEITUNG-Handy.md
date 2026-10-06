@@ -43,7 +43,7 @@
 - Die **Liste liegt nur auf dem jeweiligen Gerät**. Am Handy ist sie getrennt von der am PC. Mit **Mehr → Exportieren/Importieren** überträgst du sie.
 - **Im Laden:** Liste, Haken setzen und die zuletzt geladenen Angebote gehen ohne Netz. „Neueste Angebote" braucht Internet.
 - **Spracheingabe** geht am Handy über die https-Adresse (Mikrofon erlauben).
-- Die Angebote sind weiter händlerweit, nicht filial-genau, und ALDI SÜD fehlt.
+- Die Angebote sind weiter händlerweit, nicht filial-genau, ALDI SÜD kommt von der ALDI-Webseite (falls ALDI die GitHub-Server sperrt, steht unter Mehr → Datenstand ein Hinweis).
 - Der Ordner ist öffentlich lesbar (Programmcode und deine Produktregeln, **nicht** deine Liste).
 - Falls die Aktualisierung nach längerer Zeit stoppt: **Actions** → Zeitplan wieder aktivieren („Enable workflow").
 - Eigene Beobachtungs-Produkte werden nur gefunden, wenn sie in den allgemeinen Suchbegriffen vorkommen. Für neue Suchbegriffe sag mir Bescheid, ich trage sie ein.
