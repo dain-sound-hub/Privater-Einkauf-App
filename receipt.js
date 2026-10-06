@@ -157,7 +157,8 @@ function bonView() {
     <input id="bp1" type="file" accept="image/*" capture="environment" hidden onchange="bonAddPhotos(this.files);this.value=''">
     <input id="bp2" type="file" accept="image/*" multiple hidden onchange="bonAddPhotos(this.files);this.value=''">
     <div class="row" style="margin-top:10px"><button class="btn ${BON.photos.length ? '' : 'pri'}" onclick="$('#bp1').click()" ${BON.busy ? 'disabled' : ''}>📷 ${BON.photos.length ? 'Weiteres Foto' : 'Foto machen'}</button><button class="btn" onclick="$('#bp2').click()" ${BON.busy ? 'disabled' : ''}>🖼️ Aus Galerie</button></div>
-    ${BON.photos.length ? `<button class="btn pri" style="margin-top:10px;width:100%" onclick="bonReadPhotos()" ${BON.busy ? 'disabled' : ''}>${BON.busy ? '⏳ Lese den Bon … (ca. 10 Sekunden)' : 'Bon auslesen'}</button>` : ''}
+    ${BON.photos.length ? `<button class="btn pri" style="margin-top:10px;width:100%" onclick="bonReadPhotos()" ${BON.busy ? 'disabled' : ''}>${BON.busy ? '⏳ ' + esc(BON.status || 'Lese den Bon … (ca. 10 bis 30 Sekunden)') : 'Bon auslesen'}</button>` : ''}
+    ${BON.err ? `<div class="small" style="color:var(--warn);margin-top:10px" role="alert">⚠ ${esc(BON.err)}</div>` : ''}
     <div class="mute small" style="margin-top:10px">${aiKey() ? '✓ Foto-Lesen ist eingerichtet. ' : 'Einmalig nötig: '}<button class="lnk" onclick="aiSheet()">${aiKey() ? 'Einstellungen' : 'Foto-Lesen einrichten'}</button></div></div>
     <details class="card tight"${BON.text ? ' open' : ''}><summary class="mute">Oder Bon-Text einfügen (z. B. aus Google Lens)</summary>
     <textarea id="bt" rows="8" maxlength="20000" placeholder="Bon-Text hier einfügen …" style="width:100%;border-radius:16px;padding:12px;font:inherit;background:var(--card);color:var(--ink);border:2px solid var(--line);margin-top:8px">${esc(BON.text)}</textarea>
@@ -298,10 +299,10 @@ async function bonAddPhotos(files) {
     if (BON.photos.length >= MAX_PHOTOS) { feedbackText(`Mehr als ${MAX_PHOTOS} Fotos pro Bon gehen nicht.`, true); break; }
     try { BON.photos.push(await bonLoadPhoto(f)); } catch (e) { feedbackText(esc(e.message), true); }
   }
-  BON.parsed = null; render();
+  BON.parsed = null; BON.err = ""; render();
   const bad = BON.photos.filter(p => p.warn).length; if (bad) feedbackText('⚠ Das Foto sieht ' + esc(BON.photos.find(p => p.warn).warn) + ' aus. Besser neu aufnehmen, sonst liest die KI vielleicht falsch.', true);
 }
-const bonDropPhoto = i => { BON.photos.splice(i, 1); render(); };
+const bonDropPhoto = i => { BON.photos.splice(i, 1); BON.err = ""; render(); };
 function bonMorePhoto() { BON.parsed = null; render(); scrollTo(0, 0); feedbackText('Mach ein Foto vom fehlenden Teil (z. B. dem unteren Ende) und tippe wieder auf „Bon auslesen“.'); }
 function aiFail(status, msg) { // verständliche Fehlermeldung, gleich für beide Anbieter
   msg = msg || '';
@@ -312,22 +313,26 @@ function aiFail(status, msg) { // verständliche Fehlermeldung, gleich für beid
   if (status >= 500) return new Error('Der Lese-Dienst ist gerade überlastet. Gleich nochmal versuchen.');
   return new Error('Das Auslesen hat nicht geklappt (Fehler ' + status + ').');
 }
-async function aiFetch(url, headers, body) {
+async function aiFetch(url, headers, body, timeoutMs) {
   if (navigator.onLine === false) throw new Error('Kein Internet. Zum Auslesen brauchst du kurz Netz.');
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 90000);
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs || 60000);
   let r; try { r = await fetch(url, { method: body ? 'POST' : 'GET', signal: ctl.signal, headers: { 'content-type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined }); }
   catch (e) { throw new Error(e.name === 'AbortError' ? 'Das Auslesen hat zu lange gedauert. Bitte nochmal versuchen.' : 'Keine Verbindung zum Lese-Dienst. Internet prüfen.'); }
   finally { clearTimeout(timer); }
   let j = null; try { j = await r.json(); } catch (e) { }
-  if (!r.ok) throw aiFail(r.status, (j && j.error && j.error.message) || '');
+  if (!r.ok) { const e = aiFail(r.status, (j && j.error && j.error.message) || ''); e.status = r.status; throw e; }
   return j || {};
 }
-async function geminiModel(key) { // nimmt das neueste „Flash“-Modell, das dein Schlüssel nutzen darf (Namen ändern sich bei Google öfter)
-  const saved = lsGet(AI_MODEL_STORE); if (saved) return saved;
+const aiNote = t => { BON.status = t; if (BON.busy) render(); }; // Statuszeile am Knopf („neuer Versuch …“)
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+async function geminiModels(key) { // Flash-Modelle, die dein Schlüssel nutzen darf: neuestes zuerst, dann Flash-Lite (Namen ändern sich bei Google öfter)
+  try { const s = JSON.parse(lsGet(AI_MODEL_STORE) || 'null'); if (Array.isArray(s) && s.length) return s; } catch (e) { }
   const j = await aiFetch(GEM_URL + '/models?pageSize=200', { 'x-goog-api-key': key });
-  const list = (j.models || []).filter(m => /^models\/gemini-[\d.]+-flash$/.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.slice(7)).sort((a, b) => parseFloat(b.match(/[\d.]+/)[0]) - parseFloat(a.match(/[\d.]+/)[0]));
+  const ver = n => parseFloat((n.match(/[\d.]+/) || ['0'])[0]);
+  const list = (j.models || []).filter(m => /^models\/gemini-[\d.]+-flash(-lite)?$/.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.slice(7))
+    .sort((a, b) => ver(b) - ver(a) || (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0)).slice(0, 4);
   if (!list.length) throw new Error('Für diesen Schlüssel habe ich kein passendes Lese-Modell gefunden.');
-  lsSet(AI_MODEL_STORE, list[0]); return list[0];
+  lsSet(AI_MODEL_STORE, JSON.stringify(list)); return list;
 }
 async function aiAsk(images, text, maxTokens) { // images: Liste base64-JPEG; gibt den Antworttext zurück
   const key = aiKey(); if (!key) throw new Error('Foto-Lesen ist noch nicht eingerichtet.');
@@ -336,20 +341,32 @@ async function aiAsk(images, text, maxTokens) { // images: Liste base64-JPEG; gi
       { model: AI_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: [...images.map(d => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: d } })), { type: 'text', text }] }] });
     return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
   }
-  const model = await geminiModel(key);
-  try {
-    const j = await aiFetch(GEM_URL + '/models/' + model + ':generateContent', { 'x-goog-api-key': key },
-      { contents: [{ role: 'user', parts: [...images.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })), { text }] }], generationConfig: { temperature: 0, maxOutputTokens: Math.max(maxTokens, 4000) } });
-    const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('\n').trim();
-    if (!out && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Google hat das Bild abgelehnt. Mach bitte ein neues Foto.');
-    return out;
-  } catch (e) { if (/Modell gibt es nicht/.test(e.message)) lsSet(AI_MODEL_STORE, ''); throw e; }
+  const models = await geminiModels(key), body = { contents: [{ role: 'user', parts: [...images.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })), { text }] }], generationConfig: { temperature: 0, maxOutputTokens: Math.max(maxTokens, 4000) } };
+  let last = null, tries = 0;
+  for (const model of models) {
+    for (let t = 0; t < 2; t++) {
+      if (tries >= 5) break; tries++;
+      try {
+        const j = await aiFetch(GEM_URL + '/models/' + model + ':generateContent', { 'x-goog-api-key': key }, body, 45000);
+        const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('\n').trim();
+        if (!out && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Google hat das Bild abgelehnt. Mach bitte ein neues Foto.');
+        if (!out) { last = new Error('Google hat keine Antwort geliefert. Gleich nochmal versuchen.'); last.status = 500; continue; }
+        return out;
+      } catch (e) {
+        last = e;
+        if (e.status === 404) { lsSet(AI_MODEL_STORE, ''); break; } // Modell gibt es nicht mehr: beim nächsten Mal neu suchen
+        if (e.status !== 429 && !(e.status >= 500) && !/zu lange gedauert/.test(e.message)) throw e; // Schlüssel, Bild usw.: nicht wiederholen
+        if (t === 0) { aiNote('Google ist ausgelastet, neuer Versuch …'); await sleepMs(3000); } else aiNote('Probiere ein anderes Modell …');
+      }
+    }
+  }
+  throw new Error((last ? last.message : 'Das Auslesen hat nicht geklappt.') + (last && last.status ? ' (Google ' + last.status + ', ' + tries + ' Versuche)' : ''));
 }
 async function bonReadPhotos() {
-  if (BON.busy) return;
+  if (BON.busy && Date.now() - BON.busyAt < 150000) return feedbackText('Ich lese den Bon gerade. Das kann bis zu 2 Minuten dauern, wenn Google ausgelastet ist.');
   if (!BON.photos.length) return feedbackText('Mach zuerst ein Foto vom Bon.', true);
   if (!aiKey()) return aiSheet();
-  BON.busy = true; render();
+  BON.busy = true; BON.busyAt = Date.now(); BON.err = ''; BON.status = ''; render();
   try {
     const text = await aiAsk(BON.photos.map(p => p.b64), AI_PROMPT, 2500);
     if (!text || /^\W*NICHT_LESBAR/i.test(text)) throw new Error('Auf dem Foto konnte ich keinen Bon lesen. Fotografiere ihn bitte flach, mit Licht von vorn und ganz im Bild.');
@@ -357,8 +374,8 @@ async function bonReadPhotos() {
     const parsed = parseReceipt(text);
     if (!parsed.items.length) throw new Error('Ich habe keine Positionen erkannt. Versuch es mit einem schärferen, näheren Foto.');
     BON.parsed = parsed;
-  } catch (e) { feedbackText(esc(e.message), true); }
-  BON.busy = false; render();
+  } catch (e) { BON.err = e.message; feedbackText(esc(e.message), true); }
+  BON.busy = false; BON.status = ''; render();
 }
 // Einrichtung: Anbieter wählen, Schlüssel eintragen, testen, entfernen
 let AI_SEL = null;
