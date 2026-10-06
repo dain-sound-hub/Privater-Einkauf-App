@@ -1,5 +1,5 @@
 // Kassenbon: Text aus dem Bon lesen (Laden, Datum, Positionen), Produkten zuordnen, Einkaufsgewohnheiten lernen, Spartipps.
-// Wird vor app.js geladen und nutzt dessen Funktionen erst beim Aufruf. Der Bon-Text verlässt das Gerät nie.
+// Wird vor app.js geladen und nutzt dessen Funktionen erst beim Aufruf. Bon-Text bleibt auf dem Gerät; nur beim optionalen Foto-Lesen geht das Foto an Anthropic (eigener Schlüssel).
 
 /* ---------- Bon lesen ---------- */
 const BON_STORES = [[/\brewe\b/i, 'rewe'], [/netto\s*marken|\bnetto\b/i, 'netto'], [/\bdm[\s-]*drogerie|\bdm\b/i, 'dm'], [/\blidl\b/i, 'lidl'], [/\baldi\b/i, 'aldi'], [/\bkaufland\b/i, 'kaufland'], [/\bpenny\b/i, 'penny'], [/\bedeka\b/i, 'edeka'], [/\bselgros\b/i, 'selgros'], [/\bmetro\b/i, 'metro'], [/handelshof/i, 'handelshof'], [/rossmann/i, 'rossmann'], [/media\s*markt/i, 'mediamarkt']];
@@ -7,7 +7,7 @@ const BON_NAMES = { kaufland: 'Kaufland', penny: 'Penny', edeka: 'EDEKA', rossma
 const bonStoreName = id => (STORES.find(s => s.id === id) || {}).short || BON_NAMES[id] || id;
 const SKIP_RX = /^(?:betrag|zwischensumme|mwst|ust|steuer|netto-?warenwert|nettowert|brutto|incl|inkl|davon|bar|ec|girocard|maestro|visa|mastercard|karte|kartenzahlung|contactless|zahlung|r(?:ü|ue)ckgeld|zur(?:ü|ue)ck|gegeben|geg|bonus|payback|punkte|filiale|kasse|bediener|kassierer|beleg|bon|tel|telefon|datum|uhrzeit|trace|terminal|genehmigung|vielen dank|danke|www|http|tse|seriennummer|kundenbeleg|ihr einkauf|ersparnis|anzahl|artikel|eur|uid|ust-?id|steuernr|plz)\b/i;
 const TOTAL_RX = /^\W*(summe|gesamt(?:betrag)?|total|zu zahlen|zahlbetrag)\b.*?(-?\d{1,5}[.,]\d{2})\s*(?:€|eur)?\s*$/i;
-const LINE_RX = /^(.*?)\s+(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?\s*(?:[A-Za-z*]{1,2}|\d)?$/;
+const LINE_RX = /^(.*?)\s+(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?(?:\s*(?:[A-Za-z]|\d))?(?:\s*\*)?\s*$/;
 const QTY_RX = /^(\d+)\s*(?:x|×|\*|stk\.?\s*x)\s*(\d{1,4}[.,]\d{2})(?:\s*(?:€|eur))?(?:\s+(\d{1,4}[.,]\d{2}))?\s*[A-Za-z*]?$/i;
 const WEIGHT_RX = /^(\d+[.,]\d{1,3})\s*kg\s*(?:x|×)\s*(\d{1,4}[.,]\d{2})/i;
 const num = s => parseFloat(String(s).replace(',', '.'));
@@ -130,7 +130,7 @@ function tipsBlock() {
 }
 
 /* ---------- Bildschirm „Bon einlesen" ---------- */
-let BON = { text: '', parsed: null, done: null, assign: null, res: [] };
+let BON = { text: '', parsed: null, done: null, assign: null, res: [], photos: [], busy: false, lowRead: 0 };
 const BON_SAMPLE = `REWE Markt GmbH
 Florenzer Str. 24-28
 50765 Köln
@@ -151,11 +151,17 @@ function bonView() {
   const b = BON.parsed, d = BON.done;
   const back = `<button class="btn sm" onclick="go('list')">← Zur Liste</button>`;
   if (d) return `${back}<div class="card help"><h3>✓ Bon gespeichert</h3><ul>${d.lines.map(l => `<li>${l}</li>`).join('')}</ul><div class="row"><button class="btn pri sm" onclick="BON.done=null;go('list')">Zur Liste</button><button class="btn sm" onclick="BON.done=null;render()">Weiteren Bon einlesen</button></div></div>`;
-  if (!b) return `${back}<div class="card help"><h3>🧾 Kassenbon einlesen</h3>
-    <ol><li>Bon mit <b>Google Lens</b> fotografieren (Google-App → Kamera-Symbol).</li><li>Auf <b>Text kopieren</b> tippen.</li><li>Hier einfügen und <b>Auslesen</b> tippen.</li></ol>
-    <div class="mute">Der Text bleibt auf deinem Handy. Die App erkennt Laden, Datum und Produkte, markiert Unbekanntes und lernt, wo du was kaufst.</div></div>
-    <textarea id="bt" rows="9" maxlength="20000" placeholder="Bon-Text hier einfügen …" style="width:100%;border-radius:16px;padding:12px;font:inherit;background:var(--card);color:var(--ink);border:2px solid var(--line)">${esc(BON.text)}</textarea>
-    <div class="row" style="margin-top:10px"><button class="btn pri" onclick="bonRead()">Auslesen</button><button class="btn" onclick="BON.text=BON_SAMPLE;render()">Beispiel ausprobieren</button></div>`;
+  if (!b) return `${back}<div class="card help"><h3>📷 Kassenbon fotografieren</h3>
+    <div class="small">Bon flach hinlegen, Licht von vorn, ganzer Bon im Bild. Ist er zu lang: erst das obere, dann das untere Stück fotografieren (bis ${MAX_PHOTOS} Fotos).</div>
+    ${BON.photos.length ? `<div class="row" style="flex-wrap:wrap;gap:10px;margin-top:10px">${BON.photos.map((p, i) => `<div style="position:relative"><img src="${p.url}" alt="Foto ${i + 1}" style="height:110px;border-radius:10px;display:block"><button class="ico" onclick="bonDropPhoto(${i})" aria-label="Foto ${i + 1} entfernen" style="position:absolute;top:2px;right:2px">✕</button><div class="tag ${p.warn ? 't-warn' : 't-ok'}" style="margin-top:4px">${p.warn ? '⚠ ' + esc(p.warn) : '✓ gut lesbar'}</div></div>`).join('')}</div>` : ''}
+    <input id="bp1" type="file" accept="image/*" capture="environment" hidden onchange="bonAddPhotos(this.files);this.value=''">
+    <input id="bp2" type="file" accept="image/*" multiple hidden onchange="bonAddPhotos(this.files);this.value=''">
+    <div class="row" style="margin-top:10px"><button class="btn ${BON.photos.length ? '' : 'pri'}" onclick="$('#bp1').click()" ${BON.busy ? 'disabled' : ''}>📷 ${BON.photos.length ? 'Weiteres Foto' : 'Foto machen'}</button><button class="btn" onclick="$('#bp2').click()" ${BON.busy ? 'disabled' : ''}>🖼️ Aus Galerie</button></div>
+    ${BON.photos.length ? `<button class="btn pri" style="margin-top:10px;width:100%" onclick="bonReadPhotos()" ${BON.busy ? 'disabled' : ''}>${BON.busy ? '⏳ Lese den Bon … (ca. 10 Sekunden)' : 'Bon auslesen'}</button>` : ''}
+    <div class="mute small" style="margin-top:10px">${aiKey() ? '✓ Foto-Lesen ist eingerichtet. ' : 'Einmalig nötig: '}<button class="lnk" onclick="aiSheet()">${aiKey() ? 'Einstellungen' : 'Foto-Lesen einrichten'}</button></div></div>
+    <details class="card tight"${BON.text ? ' open' : ''}><summary class="mute">Oder Bon-Text einfügen (z. B. aus Google Lens)</summary>
+    <textarea id="bt" rows="8" maxlength="20000" placeholder="Bon-Text hier einfügen …" style="width:100%;border-radius:16px;padding:12px;font:inherit;background:var(--card);color:var(--ink);border:2px solid var(--line);margin-top:8px">${esc(BON.text)}</textarea>
+    <div class="row" style="margin-top:10px"><button class="btn pri" onclick="bonRead()">Auslesen</button><button class="btn" onclick="BON.text=BON_SAMPLE;render()">Beispiel ausprobieren</button></div></details>`;
   const items = b.items.filter(i => i.kind === 'item' || i.kind === 'pfand');
   const sum = bonSum(b.items), diff = b.total != null ? +(sum - b.total).toFixed(2) : null;
   const sumLine = b.total == null ? 'Summe auf dem Bon nicht gefunden.' : Math.abs(diff) < 0.015 ? `Summe laut Bon ${eur(b.total)} ✓ stimmt mit den Positionen überein.` : `Summe laut Bon ${eur(b.total)}, Positionen ${eur(sum)} (Differenz ${eur(Math.abs(diff))}). Prüfe, ob eine Zeile fehlt oder doppelt ist.`;
@@ -168,6 +174,7 @@ function bonView() {
       ${plan ? `<div class="mute small">${plan}</div>` : ''}</div><b>${eur(netPrice(it))}</b></div>`;
   };
   return `${back}<div class="card"><h3>🧾 Bon gelesen</h3><div class="fgrid" style="margin-top:8px"><label class="f">Laden<select id="bs" onchange="BON.parsed.store=this.value">${b.store ? '' : '<option value="">– bitte wählen –</option>'}${stores.map(s => `<option value="${s.id}" ${s.id === b.store ? 'selected' : ''}>${esc(s.short || s.name)}</option>`).join('')}</select></label><label class="f">Datum<input id="bd" type="date" value="${b.date || ''}" onchange="BON.parsed.date=this.value"></label></div><div class="small" style="margin-top:8px">${esc(sumLine)}</div></div>
+    ${bonCheck(b, diff)}
     <h2>Positionen (${items.length})</h2><div class="card tight">${items.map((it) => row(it, b.items.indexOf(it))).join('') || '<div class="empty">Keine Positionen erkannt. Prüfe den Text.</div>'}</div>
     ${b.skipped.length ? `<details class="card tight"><summary class="mute">${b.skipped.length} Zeilen ignoriert (Adresse, Zahlung, Steuer …)</summary><div class="mute small" style="padding:6px 0">${b.skipped.map(esc).join('<br>')}</div></details>` : ''}
     <label class="mute" style="display:flex;gap:8px;align-items:center;margin:10px 4px"><input type="checkbox" id="bclean" checked style="width:20px;height:20px"> Gekaufte Produkte von der Einkaufsliste nehmen</label>
@@ -184,10 +191,19 @@ function bonPlanNote(it, p, store) {
   }
   return txt;
 }
+function bonCheck(b, diff) { // prüft nach dem Foto-Lesen, ob wirklich alles gelesen wurde
+  if (!BON.photos.length) return '';
+  const why = [];
+  if (b.total == null) why.push('Die Summe wurde nicht gefunden.'); else if (Math.abs(diff) >= 0.015) why.push(`Die Positionen ergeben ${eur(bonSum(b.items))}, auf dem Bon steht ${eur(b.total)}. Vermutlich fehlt eine Zeile.`);
+  if (BON.lowRead) why.push(`${BON.lowRead} Stelle(n) waren nicht lesbar (mit [?] markiert).`);
+  if (!b.date) why.push('Das Datum wurde nicht gefunden.');
+  if (!why.length) return '<div class="card" style="border-color:var(--ok,#2e9e5b)"><b>✓ Alles gelesen:</b> Die Summe stimmt mit den Positionen überein.</div>';
+  return `<div class="card help"><b>⚠ Nicht sicher, ob alles gelesen wurde</b><ul class="small">${why.map(w => '<li>' + esc(w) + '</li>').join('')}</ul><div class="row"><button class="btn sm pri" onclick="bonMorePhoto()">📷 Weiteres Foto</button><button class="btn sm" onclick="BON.parsed=null;render()">Fotos ändern</button></div></div>`;
+}
 function bonRead() {
   const t = $('#bt') ? $('#bt').value : BON.text; BON.text = t;
   if (!t.trim()) return feedbackText('Füge zuerst den Bon-Text ein.', true);
-  const parsed = parseReceipt(t); BON.parsed = parsed;
+  BON.lowRead = 0; BON.photos = []; const parsed = parseReceipt(t); BON.parsed = parsed;
   if (!parsed.items.length) feedbackText('Ich konnte keine Positionen erkennen. Prüfe, ob der ganze Text eingefügt wurde.', true);
   render();
 }
@@ -239,5 +255,130 @@ function bonSave() {
   const unk = b.items.filter(i => i.kind === 'item' && i.include && !i.pid).length; if (unk) lines.push(`❓ ${unk} Positionen ohne Produkt gespeichert. Du kannst sie später zuordnen.`);
   [...seen].forEach(pid => { const st = stammladen(pid), was = before[pid]; if (st && (!was || was.store !== st.store)) lines.push(`📍 ${esc(PROD(pid).name)}: Du kaufst das meist bei <b>${esc(bonStoreName(st.store))}</b> (${st.n} von ${st.of} Käufen).`); });
   const newTips = savingTips().filter(t => !oldTip.has(t.p.id)); newTips.slice(0, 2).forEach(t => lines.push(`💡 ${esc(t.p.name)}: ${esc(tipText(t))}`));
-  save(); BON = { text: '', parsed: null, done: { lines }, assign: null, res: [] }; render();
+  save(); BON = { text: '', parsed: null, done: { lines }, assign: null, res: [], photos: [], busy: false, lowRead: 0 }; render();
 }
+
+/* ---------- Foto lesen: Bon fotografieren, KI schreibt den Text ab, der Bon-Leser oben macht den Rest ---------- */
+// Optional und nur mit deinem eigenen Schlüssel (liegt nur auf diesem Gerät, nie im Export und nie auf GitHub).
+// Zwei Anbieter: Google Gemini (kostenlos, ohne Karte) oder Anthropic Claude (Karte nötig).
+const AI_KEY_STORE = 'einkauf.ai.key', AI_PROV_STORE = 'einkauf.ai.prov', AI_MODEL_STORE = 'einkauf.ai.model', MAX_PHOTOS = 4;
+const AI_URL = 'https://api.anthropic.com/v1/messages', AI_MODEL = 'claude-haiku-4-5-20251001', GEM_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+const lsSet = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); return true; } catch (e) { return false; } };
+const aiKey = () => lsGet(AI_KEY_STORE), aiProv = () => lsGet(AI_PROV_STORE) || 'gemini';
+const AI_PROMPT = 'The images show ONE German supermarket receipt. Several images are consecutive parts of the same receipt from top to bottom: where they overlap, write the overlapping lines only once. ' +
+  'Transcribe the receipt line by line exactly as printed: one output line per printed line, in the same order, with product names, quantity lines such as "5 Stk x 1,09", deposit (Pfand) lines, prices with decimal comma and the tax letter after the price, the SUMME/total line and the date line. ' +
+  'Do not translate, correct, merge, summarize or invent anything. Write [?] where a part is unreadable. ' +
+  'If the image is not a receipt or is mostly unreadable, answer exactly: NICHT_LESBAR. Output only the transcription, without any comment.';
+// Schärfe und Helligkeit auf einem kleinen Graubild prüfen (Schwellen an echten Bon-Fotos kalibriert)
+function bonQuality(g, w, h) {
+  const n = w * h; let sum = 0, sq = 0, strong = 0;
+  for (let i = 0; i < n; i++) { sum += g[i]; sq += g[i] * g[i]; }
+  const mean = sum / n, std = Math.sqrt(Math.max(0, sq / n - mean * mean));
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { const i = y * w + x; if (Math.abs(g[i + 1] - g[i - 1]) + Math.abs(g[i + w] - g[i - w]) > 60) strong++; }
+  const strongPct = 100 * strong / n;
+  return { mean, std, strongPct, warn: mean < 55 ? 'zu dunkel' : strongPct < 0.8 ? 'unscharf oder kontrastarm' : '' };
+}
+async function bonLoadPhoto(file) {
+  if (!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '')) throw new Error('Das ist kein Bild.');
+  if (file.size > 30e6) throw new Error('Das Bild ist zu groß (über 30 MB).');
+  let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { throw new Error('Das Bild lässt sich nicht öffnen. Mach es bitte als normales Foto (JPG).'); }
+  const sc = Math.min(1, 1800 / Math.max(bmp.width, bmp.height)), w = Math.max(1, Math.round(bmp.width * sc)), h = Math.max(1, Math.round(bmp.height * sc));
+  const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  const sw = 600, sh = Math.max(1, Math.round(h * sw / w)), s = document.createElement('canvas'); s.width = sw; s.height = sh;
+  const sg = s.getContext('2d', { willReadFrequently: true }); sg.drawImage(bmp, 0, 0, sw, sh); if (bmp.close) bmp.close();
+  const px = sg.getImageData(0, 0, sw, sh).data, gray = new Uint8ClampedArray(sw * sh);
+  for (let i = 0; i < gray.length; i++) gray[i] = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2];
+  const q = bonQuality(gray, sw, sh), url = c.toDataURL('image/jpeg', 0.85);
+  return { url, b64: url.slice(url.indexOf(',') + 1), warn: q.warn };
+}
+async function bonAddPhotos(files) {
+  const list = [...(files || [])]; if (!list.length) return;
+  for (const f of list) {
+    if (BON.photos.length >= MAX_PHOTOS) { feedbackText(`Mehr als ${MAX_PHOTOS} Fotos pro Bon gehen nicht.`, true); break; }
+    try { BON.photos.push(await bonLoadPhoto(f)); } catch (e) { feedbackText(esc(e.message), true); }
+  }
+  BON.parsed = null; render();
+  const bad = BON.photos.filter(p => p.warn).length; if (bad) feedbackText('⚠ Das Foto sieht ' + esc(BON.photos.find(p => p.warn).warn) + ' aus. Besser neu aufnehmen, sonst liest die KI vielleicht falsch.', true);
+}
+const bonDropPhoto = i => { BON.photos.splice(i, 1); render(); };
+function bonMorePhoto() { BON.parsed = null; render(); scrollTo(0, 0); feedbackText('Mach ein Foto vom fehlenden Teil (z. B. dem unteren Ende) und tippe wieder auf „Bon auslesen“.'); }
+function aiFail(status, msg) { // verständliche Fehlermeldung, gleich für beide Anbieter
+  msg = msg || '';
+  if (status === 401 || status === 403 || (status === 400 && /api key|api_key/i.test(msg))) return new Error('Der Schlüssel wird abgelehnt. Prüfe ihn unter Mehr → Foto-Lesen.');
+  if (status === 400 && /credit|balance/i.test(msg)) return new Error('Dein Guthaben ist aufgebraucht. Bitte aufladen.');
+  if (status === 429) return new Error('Das Tageslimit oder die Anfragen pro Minute sind erreicht. Etwas später nochmal.');
+  if (status === 404) return new Error('Das Lese-Modell gibt es nicht mehr. Bitte unter Mehr → Foto-Lesen neu speichern.');
+  if (status >= 500) return new Error('Der Lese-Dienst ist gerade überlastet. Gleich nochmal versuchen.');
+  return new Error('Das Auslesen hat nicht geklappt (Fehler ' + status + ').');
+}
+async function aiFetch(url, headers, body) {
+  if (navigator.onLine === false) throw new Error('Kein Internet. Zum Auslesen brauchst du kurz Netz.');
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 90000);
+  let r; try { r = await fetch(url, { method: body ? 'POST' : 'GET', signal: ctl.signal, headers: { 'content-type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined }); }
+  catch (e) { throw new Error(e.name === 'AbortError' ? 'Das Auslesen hat zu lange gedauert. Bitte nochmal versuchen.' : 'Keine Verbindung zum Lese-Dienst. Internet prüfen.'); }
+  finally { clearTimeout(timer); }
+  let j = null; try { j = await r.json(); } catch (e) { }
+  if (!r.ok) throw aiFail(r.status, (j && j.error && j.error.message) || '');
+  return j || {};
+}
+async function geminiModel(key) { // nimmt das neueste „Flash“-Modell, das dein Schlüssel nutzen darf (Namen ändern sich bei Google öfter)
+  const saved = lsGet(AI_MODEL_STORE); if (saved) return saved;
+  const j = await aiFetch(GEM_URL + '/models?pageSize=200', { 'x-goog-api-key': key });
+  const list = (j.models || []).filter(m => /^models\/gemini-[\d.]+-flash$/.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.slice(7)).sort((a, b) => parseFloat(b.match(/[\d.]+/)[0]) - parseFloat(a.match(/[\d.]+/)[0]));
+  if (!list.length) throw new Error('Für diesen Schlüssel habe ich kein passendes Lese-Modell gefunden.');
+  lsSet(AI_MODEL_STORE, list[0]); return list[0];
+}
+async function aiAsk(images, text, maxTokens) { // images: Liste base64-JPEG; gibt den Antworttext zurück
+  const key = aiKey(); if (!key) throw new Error('Foto-Lesen ist noch nicht eingerichtet.');
+  if (aiProv() === 'anthropic') {
+    const j = await aiFetch(AI_URL, { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      { model: AI_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: [...images.map(d => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: d } })), { type: 'text', text }] }] });
+    return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+  }
+  const model = await geminiModel(key);
+  try {
+    const j = await aiFetch(GEM_URL + '/models/' + model + ':generateContent', { 'x-goog-api-key': key },
+      { contents: [{ role: 'user', parts: [...images.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })), { text }] }], generationConfig: { temperature: 0, maxOutputTokens: Math.max(maxTokens, 4000) } });
+    const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('\n').trim();
+    if (!out && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Google hat das Bild abgelehnt. Mach bitte ein neues Foto.');
+    return out;
+  } catch (e) { if (/Modell gibt es nicht/.test(e.message)) lsSet(AI_MODEL_STORE, ''); throw e; }
+}
+async function bonReadPhotos() {
+  if (BON.busy) return;
+  if (!BON.photos.length) return feedbackText('Mach zuerst ein Foto vom Bon.', true);
+  if (!aiKey()) return aiSheet();
+  BON.busy = true; render();
+  try {
+    const text = await aiAsk(BON.photos.map(p => p.b64), AI_PROMPT, 2500);
+    if (!text || /^\W*NICHT_LESBAR/i.test(text)) throw new Error('Auf dem Foto konnte ich keinen Bon lesen. Fotografiere ihn bitte flach, mit Licht von vorn und ganz im Bild.');
+    BON.text = text; BON.lowRead = (text.match(/\[\?\]/g) || []).length;
+    const parsed = parseReceipt(text);
+    if (!parsed.items.length) throw new Error('Ich habe keine Positionen erkannt. Versuch es mit einem schärferen, näheren Foto.');
+    BON.parsed = parsed;
+  } catch (e) { feedbackText(esc(e.message), true); }
+  BON.busy = false; render();
+}
+// Einrichtung: Anbieter wählen, Schlüssel eintragen, testen, entfernen
+let AI_SEL = null;
+function aiSheet(prov) {
+  const p = AI_SEL = prov || (aiKey() ? aiProv() : 'gemini'), g = p === 'gemini';
+  $('#sheetbox').innerHTML = `<div class="row sp"><h3>📷 Foto-Lesen einrichten</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
+    <div class="row" style="margin:8px 0"><button class="btn sm ${g ? 'pri' : ''}" onclick="aiSheet('gemini')">Google Gemini · kostenlos</button><button class="btn sm ${g ? '' : 'pri'}" onclick="aiSheet('anthropic')">Claude · Karte nötig</button></div>
+    ${g ? `<ol class="small" style="padding-left:20px;margin:8px 0"><li>Im Browser <b>aistudio.google.com/apikey</b> öffnen und mit einem Google-Konto anmelden (machst du selbst, ab 18).</li><li>Auf <b>„Create API key“</b> tippen und den Schlüssel kopieren. Er beginnt mit „AIza“.</li><li>Hier einfügen. Kostet nichts und braucht keine Karte.</li></ol>
+      <div class="mute small">In Deutschland gelten für die Gratis-Nutzung die Datenschutz-Regeln der Bezahl-Variante: Google nutzt deine Fotos nicht zum Training. Es gibt ein Tageslimit, das für Bons reicht.</div>`
+    : `<ol class="small" style="padding-left:20px;margin:8px 0"><li><b>console.anthropic.com</b> öffnen, Konto anlegen (machst du selbst).</li><li>Unter „Billing“ Guthaben aufladen (nur Visa/Mastercard, kein PayPal). Ein Bon kostet etwa 1 Cent.</li><li>Ausgabenlimit setzen, unter „API Keys“ einen Schlüssel erzeugen und hier einfügen („sk-ant-…“).</li></ol>`}
+    <input id="aik" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${g ? 'AIza…' : 'sk-ant-…'}" value="" style="width:100%;margin-top:8px" aria-label="API-Schlüssel">
+    <div class="mute small" style="margin:6px 0">Der Schlüssel bleibt nur auf diesem Gerät (nicht im Export, nicht auf GitHub). Beim Auslesen geht das Foto an ${g ? 'Google' : 'Anthropic'}. Die App speichert es nicht.</div>
+    <div class="row"><button class="btn pri sm" onclick="aiSave()">Speichern &amp; testen</button>${aiKey() ? '<button class="btn sm" onclick="aiRemove()">Schlüssel entfernen</button>' : ''}</div><div id="aimsg" class="small" style="margin-top:8px" role="status"></div>`;
+  $('#sheet').hidden = false; setTimeout(() => { const e = $('#aik'); if (e) e.focus(); }, 50);
+}
+async function aiSave() {
+  const k = ($('#aik').value || '').trim(), g = AI_SEL !== 'anthropic', msg = t => { const m = $('#aimsg'); if (m) m.innerHTML = t; };
+  if (g ? !/^AIza[\w-]{20,}$/.test(k) : !/^sk-ant-[\w-]{20,}$/.test(k)) return msg(`⚠ Das sieht nicht wie ein Schlüssel aus. Er beginnt mit „${g ? 'AIza' : 'sk-ant-'}“.`);
+  const old = [aiKey(), lsGet(AI_PROV_STORE), lsGet(AI_MODEL_STORE)]; lsSet(AI_KEY_STORE, k); lsSet(AI_PROV_STORE, g ? 'gemini' : 'anthropic'); lsSet(AI_MODEL_STORE, ''); msg('⏳ Teste Verbindung …');
+  try { await aiAsk([], 'Antworte nur mit OK.', 8); msg('✓ Verbunden. Du kannst jetzt Bons fotografieren.'); render(); }
+  catch (e) { lsSet(AI_KEY_STORE, old[0]); lsSet(AI_PROV_STORE, old[1]); lsSet(AI_MODEL_STORE, old[2]); msg('⚠ ' + esc(e.message)); }
+}
+function aiRemove() { lsSet(AI_KEY_STORE, ''); lsSet(AI_MODEL_STORE, ''); closeSheet(); render(); feedbackText('Schlüssel entfernt.'); }
