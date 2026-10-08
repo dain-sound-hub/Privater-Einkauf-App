@@ -160,7 +160,7 @@ function enrich(o) {
   const gourmet = !!(p && p.meat && (GOURMET_RX.test(o.name) || (up && up.base === 'kg' && up.v > 22))); // Edelstück (Steak, Filet …) oder über 22 €/kg: nur Zusatzinfo
   return { ...o, p, store, up, pct, kind, dubious, bulk, state, daysLeft: Math.round((to - TODAY) / 864e5), excluded, gourmet };
 }
-const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|decke|kissen|korb|gefäß|deko|holz|spielzeug|plüsch|figur|kerze|schuh|haustier|hund|katze|futter/i;
+const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|decke|kissen|korb|gefäß|deko|holz|spielzeug|plüsch|figur|kerze|schuh|haustier|hund|katze|futter|whiskas|dreamies|felix|knusper|pick|salat|pasta|nudel|wrap|sandwich|\bcup\b|soup|suppe|maggi|pastete|wiener|hot ?dog|aspik|sülze|nugget|cordon|spezialität|ofenschale|menü|menu|backwelt|\bteller\b|frikadelle|gebacken|gegart|aufschnitt|panier|high protein|hälse|feinkost|fertig/i;
 const GOURMET_RX = /steak|filet|entrec|tafelspitz|roastbeef|wagyu|angus|dry.?aged|karree|carr[ée]|lendenbraten|chateaubriand|t-bone|porterhouse|ribeye|rib-eye|medaillon|lachsschinken|keulenbraten|hirsch|wild|gans|gänse/i;
 const OFFERS_ALL = () => CACHE || (CACHE = [...SRC.offers, ...S.manual].map(enrich).filter(o => o.state !== 'expired' && !o.excluded));
 const rank = (a, b) => (a.up && b.up && a.up.base === b.up.base) ? a.up.v - b.up.v : (!!b.up - !!a.up) || a.price - b.price;
