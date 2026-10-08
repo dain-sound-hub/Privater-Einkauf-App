@@ -169,6 +169,12 @@ function shortCheckEnd() { // alles Gewählte im Wagen oder gelöscht: Kurzeinka
   if (shortOn() && !S.list.some(i => !i.done && !S.short.later.includes(i.id))) { S.short = { on: false, view: 'short', later: [], known: [] }; toast('⚡ Kurzliste erledigt. Alles steht wieder in der Hauptliste.'); } // erst wenn alles aus der Kurzliste erledigt ist
 }
 
+/* ---------- Löschen: erst nachfragen, danach mit Rückgängig ---------- */
+function askDel(id) {
+  const it = byId(id), sb = $('#sheetbox'), sh = $('#sheet'); if (!it || !sb || !sh) return;
+  sb.innerHTML = `<h3 style="margin:0 0 4px">„${esc(it.name)}“ entfernen?</h3><div class="mute" style="margin-bottom:14px">Der Artikel verschwindet von deiner Liste.</div><div class="row" style="gap:10px"><button class="btn" style="flex:1" onclick="closeSheet()">Abbrechen</button><button class="btn pri" style="flex:1" onclick="closeSheet();delUndo('${id}')">Ja, entfernen</button></div>`;
+  sh.hidden = false;
+}
 /* ---------- Löschen mit Rückgängig ---------- */
 function delUndo(id) {
   const i = S.list.findIndex(x => x.id === id); if (i < 0) return;
