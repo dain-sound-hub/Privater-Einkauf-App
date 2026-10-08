@@ -111,6 +111,7 @@ details.later summary{cursor:pointer;font-weight:700;padding:10px 0}
 .sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center}.sheet[hidden]{display:none}
 .sheetbox{background:var(--card);width:min(640px,100%);max-height:80vh;overflow:auto;border-radius:24px 24px 0 0;padding:16px 16px calc(22px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.35);animation:up .22s ease-out}@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
 .sheetbox h4{margin:14px 0 4px;color:var(--mute);text-transform:uppercase;letter-spacing:.6px;font-size:12px}.cmp td{vertical-align:top}.cmp tr.win td{background:var(--acc2)}.cmp td:first-child{white-space:nowrap;font-weight:600}
+.bqs{display:block;width:100%;text-align:left;margin:10px 0 0;padding:10px 14px;border-radius:16px;border:2px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;line-height:1.35}.bqs:empty{display:none}
 .nstat{font-size:13px;margin:0 0 10px;padding:9px 12px;background:var(--card);border-radius:14px;border:1px solid var(--line);box-shadow:var(--sh1)}
 .sug{display:flex;flex-direction:column;gap:4px;padding:2px 2px 6px}.sug[hidden]{display:none}.sugrow{display:flex;align-items:center;gap:10px;border:0;background:var(--bg);border-radius:14px;padding:8px 12px;text-align:left;color:var(--ink);transition:background .12s,transform .12s;width:100%}.sugrow:hover,.sugrow:active{background:var(--acc2);transform:translateX(3px)}.sugrow b{display:block;font-weight:700}.sugrow small{display:block;color:var(--mute);font-size:12px}.sugrow .em{font-size:22px}.sugrow .plus{color:var(--acc-d);font-weight:800;font-size:22px}.dock.sugon #fb{display:none}
 .chip.main{border-color:var(--acc);font-weight:600}.chip.on{background:var(--acc);color:#fff;border-color:var(--acc)}
@@ -132,7 +133,7 @@ summary{min-height:42px;display:flex;align-items:center}.sugrow{min-height:48px}
   <div class="top"><h1>🛒 Intelligente Einkaufsliste</h1><button class="rbtn" id="rbtn" onclick="startResearch()">Angebote suchen</button></div>
   <div class="meta"><span id="sub"></span><span id="rstat" class="rstat"></span></div>
 </div></header>
-<div class="wrap"><main id="view"></main></div>
+<div class="wrap"><div id="bqs"></div><main id="view"></main></div>
 <div class="dock" id="dock"><div id="sug" class="sug" hidden></div>
   <div id="fb" class="fb" role="status" aria-live="polite" hidden></div>
   <div class="dockrow"><input id="ni" placeholder="Was brauchst du? z. B. 2 Milch" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" oninput="suggest()" onkeydown="if(event.key==='Enter')addItem();else if(event.key==='Escape')hideSug()"><button class="btn" id="micb" onclick="mic()" title="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen">+</button></div></div>

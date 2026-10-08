@@ -751,11 +751,11 @@ function render() {
   const pl = $('#pl'); if (pl) pl.innerHTML = PRODUCTS.filter(p => !p.custom).map(p => `<option value="${esc(p.name)}">`).join('');
   $('#view').innerHTML = V[cur](); UI.flash = null;
   $('#sub').textContent = TODAY.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-  rstat(); scrollTo(0, sy);
+  rstat(); bqStrip(); scrollTo(0, sy);
 }
 function go(k) { cur = k; location.hash = k; render(); scrollTo(0, 0); }
 repairRefs();
-loadOffers().then(render); render();
+loadOffers().then(render); render(); bonQueueInit();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => { }); // Offline-Speicher
   navigator.serviceWorker.addEventListener('message', e => { if (e.data === 'update') feedbackText('🔄 Neue Version der App geladen. <button class="lnk" onclick="location.reload()">Jetzt neu laden</button>'); });
@@ -764,6 +764,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 // Beim Zurückkehren in die App (z. B. am nächsten Tag oder im Laden): Datum aktualisieren, Angebote neu laden, wenn der Stand älter als 3 Stunden ist
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
+  bqRun();
   const n = d0(new Date()); if (+n !== +TODAY) { TODAY = n; CACHE = null; }
   if (MODE !== 'server' && Date.now() - LAST_LOAD > 3 * 3600e3) loadOffers().then(render); else render();
 });
