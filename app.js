@@ -367,8 +367,8 @@ V.list = () => {
   const bon = `<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>`;
   // Liste zuerst. Ist sie leer, kommen Anleitung und Schnell-Hinzufügen gleich darunter.
   return open.length
-    ? `${head}${groupsHtml}${plusBtn()}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${bon}${topSummary()}`
-    : `${head}${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe auf <b>+</b>, um etwas einzutragen, oder wähle ein Hauptprodukt.')}${plusBtn()}${wagen}${bon}${topSummary()}`;
+    ? `${head}${groupsHtml}${plusBtn()}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${topSummary()}`
+    : `${head}${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe auf <b>+</b>, um etwas einzutragen, oder wähle ein Hauptprodukt.')}${plusBtn()}${wagen}${topSummary()}`;
 };
 function offersFiltered() {
   const q = UI.q.toLowerCase().trim(); return OFFERS_ALL().filter(o => !q || (o.name + ' ' + (o.desc || '') + ' ' + o.store.short + ' ' + (o.p ? o.p.name : '')).toLowerCase().includes(q));
@@ -843,7 +843,7 @@ function render() {
   const pl = $('#pl'); if (pl) pl.innerHTML = PRODUCTS.filter(p => !p.custom).map(p => `<option value="${esc(p.name)}">`).join('');
   $('#view').innerHTML = V[cur](); UI.flash = null;
   $('#sub').textContent = TODAY.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-  rstat(); bqStrip(); applyTheme(); scrollTo(0, sy);
+  rstat(); bqStrip(); applyTheme(); bonFabSync(); scrollTo(0, sy);
 }
 function go(k) { cur = k; try { history.replaceState(history.state, '', '#' + k); } catch (e) { location.hash = k; } dockClose(); render(); scrollTo(0, 0); }
 repairRefs();

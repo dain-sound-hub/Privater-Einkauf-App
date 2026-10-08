@@ -202,3 +202,6 @@ function backInit() {
   });
 }
 backInit();
+
+/* ---------- Kassenbon-Knopf: schwebt rechts über der Menüleiste, nur bei Liste und Route ---------- */
+function bonFabSync() { const f = document.getElementById('bonfab'); if (f) f.hidden = !(cur === 'list' || cur === 'route'); }

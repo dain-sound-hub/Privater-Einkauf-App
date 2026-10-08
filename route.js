@@ -122,7 +122,7 @@ function routeView() {
   return `<div class="lhead"><b>🧭 Einkaufsroute</b><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min${shortOn() && S.short.view !== 'all' ? ' · ⚡ Kurzliste' : ''}</span></div>${shortSeg()}
   ${cards}
   <div class="mute small" style="text-align:center;margin:2px 0 10px">🏠 Danach nach Hause · ca. 3 Min · in jedem Laden: Obst &amp; Gemüse zuerst, Schweres zuletzt</div>
-  ${plusBtn()}<div class="row" style="justify-content:center"><button class="btn sm" onclick="go('bon')">🧾 Kassenbon</button></div>
+  
   <details class="card tight" style="margin-top:12px"><summary class="mute">Einstellungen &amp; Hinweise</summary>
     ${plan.lidlPossible || mode !== 'auto' ? SEG(mode, [['auto', 'Lidl: Automatisch'], ['ja', 'Lidl: Ja'], ['nein', 'Lidl: Nein']], 'setLidl') + `<div class="mute small" style="margin:-6px 4px 8px">${mode === 'auto' ? 'Lidl wird nur eingeplant, wenn du dort mindestens 1,50 € sparst.' : mode === 'ja' ? 'Lidl wird eingeplant, sobald es dort etwas Günstigeres für leichte Artikel gibt.' : 'Lidl wird nicht eingeplant.'}</div>` : ''}
     <div class="mute small" style="padding:4px 0 8px">Reihenfolge: Leichtes zuerst, Schweres und Sperriges (Wasser, Klopapier, Küchentücher, Waschmittel) zuletzt. Ob ein Artikel als „schwer“ gilt, änderst du beim Artikel nach dem Antippen.</div></details>`;
