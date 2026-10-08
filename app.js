@@ -17,7 +17,7 @@ function sanitize(x) {
   const set = (o.set && typeof o.set === 'object') ? o.set : {};
   return {
     hideHelp: !!o.hideHelp,
-    list: arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: String(i.name ?? '').slice(0, 80), qty: String(i.qty ?? '').slice(0, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}), ...(STORES.some(s => s.id === i.store) ? { store: i.store } : {}), ...(Number.isFinite(+i.pos) && i.pos !== null ? { pos: +i.pos } : {}) })).filter(i => i.name.trim()),
+    list: arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: String(i.name ?? '').slice(0, 80), qty: String(i.qty ?? '').slice(0, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}), ...(STORES.some(s => s.id === i.store) ? { store: i.store } : {}), ...(Number.isFinite(+i.pos) && i.pos !== null ? { pos: +i.pos } : {}), ...(Number.isFinite(+i.t) && +i.t > 0 ? { t: +i.t } : {}) })).filter(i => i.name.trim()),
     bons: arr(o.bons).filter(b => b && typeof b === 'object' && dateOk(b.date) && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: b.date, store: String(b.store).slice(0, 20), total: Number.isFinite(+b.total) ? +b.total : null, items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: Number.isFinite(+i.p) ? +i.p : 0, pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null) })) })),
     aliases: Object.fromEntries(Object.entries(o.aliases && typeof o.aliases === 'object' && !Array.isArray(o.aliases) ? o.aliases : {}).filter(([k, v]) => k.length <= 60 && idOk(v)).slice(0, 400)),
     lastBackup: dateOk(o.lastBackup) ? o.lastBackup : '', short: { on: !!(o.short && o.short.on), view: o.short && o.short.view === 'all' ? 'all' : 'short', later: arr(o.short && o.short.later).filter(idOk), known: arr(o.short && o.short.known).filter(idOk) }, rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
@@ -341,13 +341,12 @@ function cDetail(c) {
     <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Beobachtet' : 'Beobachten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="delUndo('${id}')">✕ Entfernen</button></div></div>`;
 }
 V.list = () => {
-  const rows = S.list.map(rowInfo);
-  const open = rows.filter(r => !r.it.done && !hiddenShort(r.it)), done = rows.filter(r => r.it.done), later = rows.filter(r => !r.it.done && hiddenShort(r.it)).length;
-  const groups = {};
-  open.forEach(r => { (groups[r.key] = groups[r.key] || []).push(r); });
-  const order = Object.keys(groups).sort((a, b) => (a === '_none') - (b === '_none') || 'ABCD'.indexOf(STORE(a).tier) - 'ABCD'.indexOf(STORE(b).tier));
-  order.forEach(k => groups[k].sort(aisleCmp)); // Reihenfolge wie im Laden
-  const row = r => cRow({ it: r.it, p: r.p, b: r.b, info: r.info, dec: r.dec });
+  const rows = S.list.map(rowInfo), byId2 = Object.fromEntries(rows.map(x => [x.it.id, x]));
+  const plan = planRoute(); // Läden und Reihenfolge wie in der Route (Leichtes zuerst, Schweres zuletzt, Gänge wie im Laden)
+  const groups = {}, order = [], open = [];
+  plan.stops.forEach(s => { const g = s.items.map(x => ({ ...byId2[x.it.id], b: x.offer, note: x.note })); groups[s.store.id] = g; order.push(s.store.id); open.push(...g); });
+  const done = rows.filter(x => x.it.done), later = rows.filter(x => !x.it.done && hiddenShort(x.it)).length;
+  const row = r => cRow({ it: r.it, p: r.p, b: r.b, info: r.info, dec: r.dec, note: r.note });
   const qa = quickAdd();
   SUGG = Object.entries(S.buys).filter(([k, n]) => n >= 2 && (k.startsWith('n:') || !watched(k)) && !(k.startsWith('n:') && S.custom.some(c => c.name.toLowerCase() === k.slice(2)))).slice(0, 3);
   const help = S.hideHelp ? '' : `<div class="card help"><h3>👋 So funktioniert's</h3><ol>
@@ -480,14 +479,14 @@ V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow
 
 /* ================= Aktionen ================= */
 function toast(t) { feedbackText(esc(t)); } // alle Meldungen erscheinen in der festen Leiste über dem Menü
-function addP(id) { const p = PROD(id); if (!p) return; let fav = null; if (!onList(id)) { S.list.push({ id: uid(), pid: id, name: p.name, qty: '', urgent: false, done: false }); fav = noteAdd(id); } save(); render(); toast(p.name + ' auf der Liste' + (fav ? ' · ⭐ neu in deinen Hauptprodukten' : '')); }
+function addP(id) { const p = PROD(id); if (!p) return; let fav = null; if (!onList(id)) { S.list.push({ id: uid(), pid: id, name: p.name, qty: '', urgent: false, done: false, t: Date.now() }); fav = noteAdd(id); } save(); render(); toast(p.name + ' auf der Liste' + (fav ? ' · ⭐ neu in deinen Hauptprodukten' : '')); }
 // Angebot ohne bekanntes Produkt (z. B. Whisky, Feinkost) direkt auf die Liste setzen: es wird als eigenes Produkt angelegt
 function addOfferItem(id) {
   const o = OFFERS_ALL().find(x => String(x.id) === String(id)); if (!o) return;
   if (o.p) return addP(o.p.id);
   const name = o.name.length > 48 ? o.name.slice(0, 48).replace(/\s+\S*$/, '') : o.name;
   const c = mkCustom(name);
-  if (!S.list.some(i => !i.done && i.pid === c.id)) { S.list.push({ id: uid(), pid: c.id, name, qty: '', urgent: false, done: false }); noteAdd(c.id); }
+  if (!S.list.some(i => !i.done && i.pid === c.id)) { S.list.push({ id: uid(), pid: c.id, name, qty: '', urgent: false, done: false, t: Date.now() }); noteAdd(c.id); }
   CACHE = null; save(); render(); toast(name + ' steht auf deiner Liste');
 }
 // ---- Vorschläge beim Tippen (gegen Tippfehler) ----
@@ -618,7 +617,7 @@ function addMany(txt) {
     const g0 = !a.pid && a.name.length >= 3 ? guessFor(a.name) : null; // Meintest-du-Prüfung bevor das Wort als neues Produkt angelegt wird
     if (!a.pid && a.name.length >= 3) a.pid = mkCustom(a.name).id; // frei eingetippte Artikel bekommen ein eigenes Produkt, damit Angebote gefunden werden
     if (S.list.some(i => !i.done && i.name.toLowerCase() === a.name.toLowerCase())) { dup.push(a.name); return; }
-    const id = uid(); S.list.push({ id, pid: a.pid, name: a.name, qty: a.qty, urgent: false, done: false });
+    const id = uid(); S.list.push({ id, pid: a.pid, name: a.name, qty: a.qty, urgent: false, done: false, t: Date.now() });
     const p = a.pid ? PROD(a.pid) : null;
     const known = !!(p && !p.custom), g = known ? null : g0; if (g) GUESSES[id] = g;
     added.push({ id, name: a.name, qty: a.qty, known, guess: g });
@@ -701,7 +700,7 @@ function laterToList(id) {
   const l = S.later.find(x => x.id === id); if (!l) return;
   S.later = S.later.filter(x => x.id !== id);
   const ex = S.list.find(i => !i.done && i.pid === l.pid);
-  if (ex) { if (l.qty) ex.qty = l.qty; } else { S.list.push({ id: uid(), pid: l.pid, name: l.name, qty: l.qty, urgent: false, done: false }); noteAdd(l.pid); }
+  if (ex) { if (l.qty) ex.qty = l.qty; } else { S.list.push({ id: uid(), pid: l.pid, name: l.name, qty: l.qty, urgent: false, done: false, t: Date.now() }); noteAdd(l.pid); }
   save(); render(); toast(ex ? `${l.name}: Menge auf der Liste angepasst` : `${l.name} steht auf deiner Liste`);
 }
 const laterDel = id => { S.later = S.later.filter(x => x.id !== id); save(); render(); };
@@ -846,7 +845,7 @@ function render() {
   $('#sub').textContent = TODAY.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
   rstat(); bqStrip(); applyTheme(); scrollTo(0, sy);
 }
-function go(k) { cur = k; location.hash = k; dockClose(); render(); scrollTo(0, 0); }
+function go(k) { cur = k; try { history.replaceState(history.state, '', '#' + k); } catch (e) { location.hash = k; } dockClose(); render(); scrollTo(0, 0); }
 repairRefs();
 loadOffers().then(render); render(); bonQueueInit();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

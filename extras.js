@@ -26,7 +26,8 @@ let TT_T = 0;
 function miniToast(t) { const el = $('#tt'); if (!el) return; el.textContent = t; el.classList.add('show'); clearTimeout(TT_T); TT_T = setTimeout(() => el.classList.remove('show'), 2200); }
 function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); const f = $('#navfab'); if (f) f.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
 const iaRow = () => '';
-const plusBtn = () => '<div class="fabrow"><button class="fab" onclick="iaOpen()" aria-label="Artikel hinzufügen">+</button></div>';
+const plusBtn = () => '<div class="fabrow"><button class="plus2" onclick="iaOpen()" aria-label="Artikel hinzufügen" title="Artikel hinzufügen">+</button></div>';
+function planKeys(all) { const m = {}; planRoute(all).stops.forEach(s => s.items.forEach(x => { m[x.it.id] = s.store.id; })); return m; } // in welchem Laden steht der Artikel (wie in der Route)
 function listHead(title, sub) {
   const short = shortOn() ? '' : (S.list.filter(i => !i.done).length >= 2 ? '<button class="klnk" onclick="shortOpen()" aria-label="Kurzeinkauf starten" title="Kurzeinkauf: nur einen Teil der Liste zeigen">⚡ Kurzeinkauf</button>' : '');
   return `<div class="lhead"><b>${title}</b><span class="lact">${short}</span><span class="sub">${sub}</span></div>`;
@@ -45,7 +46,7 @@ function dragStart(e) {
 }
 function dragBegin() {
   const it = byId(DRAG.id), row = document.getElementById('it-' + DRAG.id); if (!it || !row) return dragReset();
-  DRAG.on = true; DRAG.over = null; DRAG.idx = -1; DRAG.from = rowInfo(it).key;
+  DRAG.on = true; DRAG.over = null; DRAG.idx = -1; DRAG.from = planKeys()[DRAG.id] || rowInfo(it).key;
   try { if (DRAG.trusted && navigator.vibrate) navigator.vibrate(25); } catch (e) { }
   document.body.classList.add('dragmode');
   const r = row.getBoundingClientRect(), g = row.cloneNode(true); // die Karte hebt ab und folgt dem Finger
@@ -147,7 +148,7 @@ function shortView(v) { if (!shortOn()) return; S.short.view = v === 'all' ? 'al
 function shortOpen() { UI.shortSel = new Set(); shortSheet(); }
 function shortSheet() {
   const old = document.querySelector('#sheetbox .sbox'), sc = old ? old.scrollTop : 0;
-  const rows = S.list.filter(i => !i.done).map(rowInfo), sel = UI.shortSel || new Set();
+  const pk = planKeys(true), rows = S.list.filter(i => !i.done).map(i => ({ ...rowInfo(i), key: pk[i.id] || '_none' })), sel = UI.shortSel || new Set();
   const keys = [...new Set(rows.map(r => r.key))].filter(k => k !== '_none');
   $('#sheetbox').innerHTML = `<div class="row sp"><h3>⚡ Kurzeinkauf</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
     <div class="mute small">Was brauchst du jetzt? Der Rest wartet in der Hauptliste, bis du fertig bist.</div>
@@ -157,7 +158,7 @@ function shortSheet() {
   $('#sheet').hidden = false; const nb = document.querySelector('#sheetbox .sbox'); if (nb) nb.scrollTop = sc;
 }
 function shortTog(id) { const s = UI.shortSel = UI.shortSel || new Set(); s.has(id) ? s.delete(id) : s.add(id); shortSheet(); }
-function shortStore(k) { const s = UI.shortSel = UI.shortSel || new Set(); S.list.filter(i => !i.done && rowInfo(i).key === k).forEach(i => s.add(i.id)); shortSheet(); }
+function shortStore(k) { const s = UI.shortSel = UI.shortSel || new Set(); const pk = planKeys(true); S.list.filter(i => !i.done && pk[i.id] === k).forEach(i => s.add(i.id)); shortSheet(); }
 function shortStart() {
   const sel = UI.shortSel || new Set(); if (!sel.size) return feedbackText('Wähle zuerst aus, was du jetzt brauchst.', true);
   S.short = { on: true, view: 'short', later: S.list.filter(i => !i.done && !sel.has(i.id)).map(i => i.id), known: S.list.map(i => i.id) }; save(); closeSheet(); render();
@@ -175,3 +176,29 @@ function delUndo(id) {
   feedbackText('„' + esc(it.name) + '“ entfernt. <button class="lnk" onclick="undoDel()">Rückgängig</button>');
 }
 function undoDel() { const u = UI.undo; if (!u) return; UI.undo = null; S.list.splice(Math.min(u.i, S.list.length), 0, u.it); save(); render(); feedbackText('✓ Wieder da.'); }
+
+/* ---------- Zurück-Taste (Android): erst Fenster zu, dann ein Menü zurück, dann zur Liste, dann beenden ---------- */
+let BACK_T = 0;
+function backAction() { // true = etwas wurde zurückgenommen
+  if (DRAG.on) { dragReset(); return true; }
+  const sh = $('#sheet'); if (sh && !sh.hidden) { closeSheet(); return true; }
+  const dk = $('#dock'); if (dk && dk.classList.contains('open')) { dockClose(); return true; }
+  if (cur === 'bon') {
+    if (BON.detail) { BON.detail = null; render(); return true; }
+    if (BON.parsed) { if (BON.cur) bonClose(); else { BON.parsed = null; render(); } return true; }
+    if (BON.addTo) { BON.addTo = null; BON.photos = []; render(); return true; }
+    if (BON.done) { BON.done = null; render(); return true; }
+  }
+  if (cur === 'offers' && UI.store && UI.store !== 'all') { UI.store = 'all'; render(); return true; }
+  if (cur !== 'list') { go('list'); return true; }
+  return false;
+}
+function backInit() {
+  try { history.replaceState({ einkauf: 0 }, '', location.href); history.pushState({ einkauf: 1 }, '', location.href); } catch (err) { return; }
+  window.addEventListener('popstate', () => {
+    if (backAction()) { history.pushState({ einkauf: 1 }, '', location.href); return; }
+    if (Date.now() - BACK_T < 2500) { history.back(); return; } // zweites Mal kurz hintereinander: App verlassen
+    BACK_T = Date.now(); miniToast('Noch einmal „Zurück“ zum Beenden'); history.pushState({ einkauf: 1 }, '', location.href);
+  });
+}
+backInit();

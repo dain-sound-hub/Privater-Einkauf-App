@@ -152,7 +152,7 @@ Datum: 06.10.2026 11:24`;
 function bonView() {
   const b = BON.parsed, d = BON.done;
   const back = `<button class="btn sm" onclick="go('list')">← Zur Liste</button>`;
-  if (d) return `${back}<div class="card help"><h3>✓ Bon gespeichert</h3><ul>${d.lines.map(l => `<li>${l}</li>`).join('')}</ul><div class="row"><button class="btn pri sm" onclick="BON.done=null;go('list')">Zur Liste</button><button class="btn sm" onclick="BON.done=null;render()">Weiteren Bon einlesen</button></div></div>`;
+  if (d) return bonDoneView(d, back);
   if (BON.detail && !b) return bonDetailView();
   if (!b) return `${back}<div class="card help"><h3>📷 Kassenbon ablegen</h3>
     <div class="small">Bon flach hinlegen, Licht von vorn, ganzer Bon im Bild. Ist er zu lang: erst das obere, dann das untere Stück (bis ${MAX_PHOTOS} Fotos). Dann auf <b>Ablegen</b> tippen. Gelesen wird im Hintergrund, du kannst gleich weitermachen.</div>
@@ -183,7 +183,6 @@ function bonView() {
     ${bonCheck(b, diff)}${bonPhotosView()}
     <h2>Positionen (${items.length})</h2><div class="card tight">${items.map((it) => row(it, b.items.indexOf(it))).join('') || '<div class="empty">Keine Positionen erkannt. Prüfe den Text.</div>'}</div>
     ${b.skipped.length ? `<details class="card tight"><summary class="mute">${b.skipped.length} Zeilen ignoriert (Adresse, Zahlung, Steuer …)</summary><div class="mute small" style="padding:6px 0">${b.skipped.map(esc).join('<br>')}</div></details>` : ''}
-    <label class="mute" style="display:flex;gap:8px;align-items:center;margin:10px 4px"><input type="checkbox" id="bclean" checked style="width:20px;height:20px"> Gekaufte Produkte von der Einkaufsliste nehmen</label>
     <div class="row"><button class="btn pri" onclick="bonSave()">Speichern</button><button class="btn" onclick="bonClose()">${BON.cur ? '← Zur Bon-Liste' : 'Zurück zum Text'}</button></div>`;
 }
 // Vergleich mit dem Tipp der App: Laden und, wenn möglich, Preis
@@ -242,7 +241,6 @@ function bonSave() {
   const qid = BON.cur;
   S.bons.unshift(rec); S.bons = bonsSorted().slice(0, 60);
   const lines = [], spont = [], favNew = [], fixed = [];
-  const clean = $('#bclean') ? $('#bclean').checked : true;
   const seen = new Set();
   items.forEach(i => {
     if (!i.pid) return;
@@ -252,20 +250,21 @@ function bonSave() {
     if (seen.has(p.id)) return; seen.add(p.id);
     if (!S.list.some(l => l.pid === p.id)) spont.push(p.name);
     const f = noteAdd(p.id); if (f) favNew.push(f);
-    if (clean) { const n0 = S.list.length; S.list = S.list.filter(l => !(l.pid === p.id && !l.done)); if (S.list.length < n0) fixed.push(p.name); }
   });
   S.hist = S.hist.slice(-400);
   TIPS = null;
   const total = items.reduce((s, i) => s + netPrice(i), 0);
   lines.push(`<b>${items.length} Positionen</b> bei <b>${esc(bonStoreName(store))}</b> am ${esc(fmtD(date))}, zusammen ${eur(total)}.`);
-  if (fixed.length) lines.push(`Von der Liste genommen: ${fixed.map(esc).join(', ')}.`);
+  // Artikel, die noch offen auf der Liste stehen und auf dem Bon sind (und schon vor dem Bon-Datum auf der Liste standen): nachfragen
+  const cand = [];
+  S.list.filter(l => !l.done).forEach(l => { if (l.t && isoDay(new Date(l.t)) > date) return; const hit = items.find(i => (l.pid && i.pid === l.pid) || (!l.pid && bonNorm(i.name) === bonNorm(l.name))); if (hit) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: hit.name }); });
   if (spont.length) lines.push(`🛍️ Spontan gekauft (stand nicht auf der Liste): ${spont.slice(0, 8).map(esc).join(', ')}. Was öfter vorkommt, wird automatisch zum Hauptprodukt.`);
   if (favNew.length) lines.push(`⭐ Neu in deinen Hauptprodukten: ${favNew.map(esc).join(', ')}.`);
   const unk = b.items.filter(i => i.kind === 'item' && i.include && !i.pid).length; if (unk) lines.push(`❓ ${unk} Positionen ohne Produkt gespeichert. Du kannst sie später zuordnen.`);
   [...seen].forEach(pid => { const st = stammladen(pid), was = before[pid]; if (st && (!was || was.store !== st.store)) lines.push(`📍 ${esc(PROD(pid).name)}: Du kaufst das meist bei <b>${esc(bonStoreName(st.store))}</b> (${st.n} von ${st.of} Käufen).`); });
   const newTips = savingTips().filter(t => !oldTip.has(t.p.id)); newTips.slice(0, 2).forEach(t => lines.push(`💡 ${esc(t.p.name)}: ${esc(tipText(t))}`));
   if (qid) { bqSaved(qid, rec, total); lines.push('🗑️ Das Papier kannst du jetzt wegwerfen. Das Foto bleibt noch hier gespeichert.'); }
-  save(); BON = { text: '', parsed: null, done: { lines }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' }; render();
+  save(); BON = { text: '', parsed: null, done: { lines, ask: cand }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' }; render();
 }
 
 /* ---------- Foto lesen: Bon fotografieren, KI schreibt den Text ab, der Bon-Leser oben macht den Rest ---------- */
@@ -614,3 +613,11 @@ async function bqAiMatch(m) { // fragt die KI (nur Namen, keine Preise, kein Fot
     m.aiDone = true; await bqSaveMeta(m); bqChanged();
   } catch (e) { /* Vorschlag ist nur ein Zusatz: bei Fehler bleibt es beim manuellen Zuordnen */ }
 }
+
+function bonDoneView(d, back) {
+  const ask = d.ask || [];
+  const askCard = ask.length ? `<div class="card"><h3>🛒 Schon gekauft?</h3><div class="mute small" style="margin:4px 0 8px">Diese Artikel stehen noch offen auf deiner Liste und waren auf dem Bon:</div>${ask.map(x => `<div class="item"><div class="grow"><div class="nm" style="cursor:default">${esc(x.name)}${x.qty ? ` <span class="mute">${esc(qtyLabel(x.qty))}</span>` : ''}</div><div class="mute small">auf dem Bon: ${esc(x.bon)}</div></div><button class="btn sm pri" onclick="bonAsk('${x.id}',true)">✓ Gekauft</button><button class="btn sm" onclick="bonAsk('${x.id}',false)">Bleibt</button></div>`).join('')}<div class="row" style="margin-top:8px"><button class="btn pri sm" onclick="bonAskAll(true)">Alle ✓ gekauft</button><button class="btn sm" onclick="bonAskAll(false)">Alle bleiben</button></div></div>` : '';
+  return `${back}<div class="card help"><h3>✓ Bon gespeichert</h3><ul>${d.lines.map(l => `<li>${l}</li>`).join('')}</ul><div class="row"><button class="btn pri sm" onclick="BON.done=null;go('list')">Zur Liste</button><button class="btn sm" onclick="BON.done=null;render()">Weiteren Bon einlesen</button></div></div>${askCard}`;
+}
+function bonAsk(id, yes) { if (!BON.done) return; if (yes) { S.list = S.list.filter(i => i.id !== id); shortCheckEnd(); save(); } BON.done.ask = (BON.done.ask || []).filter(x => x.id !== id); render(); }
+function bonAskAll(yes) { if (!BON.done) return; (BON.done.ask || []).slice().forEach(x => { if (yes) S.list = S.list.filter(i => i.id !== x.id); }); BON.done.ask = []; if (yes) { shortCheckEnd(); save(); } render(); }
