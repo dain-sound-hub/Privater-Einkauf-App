@@ -1,7 +1,8 @@
 // Offline-Speicher: Die App und die zuletzt geladenen Angebote funktionieren auch ohne Internet (z. B. im Laden).
 // Die App startet sofort aus dem Speicher (auch bei schwachem Netz) und aktualisiert sich im Hintergrund.
-const V = 'einkauf-v26', SHELL = ['./', 'index.html', 'app.js', 'route.js', 'receipt.js', 'PatrickHand.ttf', 'Bangers.ttf', 'data.js', 'offers.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
-self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
+const V = 'einkauf-v27', SHELL = ['./', 'index.html', 'app.js', 'route.js', 'receipt.js', 'PatrickHand.ttf', 'Bangers.ttf', 'data.js', 'offers.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+// 'reload': nie eine alte Kopie vom Hosting-Zwischenspeicher holen, sonst mischen sich alte und neue Dateien
+self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => Promise.all(SHELL.map(u => fetch(new Request(u, { cache: 'reload' })).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return c.put(u, r); })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 const put = (key, res) => { if (res && res.ok) { const c = res.clone(); caches.open(V).then(ca => ca.put(key, c)); } return res; };
 const timeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
@@ -16,7 +17,7 @@ self.addEventListener('fetch', e => {
     }
     // App-Dateien: sofort aus dem Speicher, im Hintergrund aktualisieren
     e.respondWith(caches.match(r, { ignoreSearch: true }).then(hit => {
-      const net = fetch(r).then(async res => { // gibt es eine neuere Version? Dann der App Bescheid sagen
+      const net = fetch(u.href, { cache: 'no-cache' }).then(async res => { // 'no-cache': beim Hosting nachfragen, ob es etwas Neueres gibt // gibt es eine neuere Version? Dann der App Bescheid sagen
         if (hit && res.ok && /\.(js|html)$|\/$/.test(u.pathname)) { try { const [x, y] = await Promise.all([hit.clone().text(), res.clone().text()]); if (x !== y) self.clients.matchAll().then(cs => cs.forEach(c => c.postMessage('update'))); } catch (err) { } }
         return put(r, res);
       }).catch(() => null);
