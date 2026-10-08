@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#d62f3f">
+<meta name="theme-color" content="#14664c">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://dm.emea.cms.aldi.cx https://content-media.bonial.biz https://images.unsplash.com; connect-src 'self' https://api.anthropic.com https://generativelanguage.googleapis.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://dm.emea.cms.aldi.cx https://content-media.bonial.biz; connect-src 'self' https://api.anthropic.com https://generativelanguage.googleapis.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -28,15 +28,15 @@ button,input,select{font:inherit}button{cursor:pointer}
 :focus-visible{outline:3px solid var(--glow);outline-offset:2px}
 
 /* Kopfbereich */
-header{background:linear-gradient(135deg,rgba(200,40,55,.78),rgba(238,84,42,.55) 55%,rgba(255,150,30,.4)),url("https://images.unsplash.com/photo-1566385101042-1a0aa0c1268c?auto=format&fit=crop&w=1000&q=60") center 40%/cover,#d62f3f;color:#fff;padding:0 0 8px;border-radius:0 0 24px 24px;box-shadow:0 10px 26px rgba(214,47,63,.3),0 2px 0 rgba(255,255,255,.25) inset;position:relative;overflow:hidden;overflow:clip}
-.awning{height:12px;margin-bottom:5px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='30' viewBox='0 0 56 30'%3E%3Crect width='28' height='16' fill='%23d62f3f'/%3E%3Ccircle cx='14' cy='16' r='14' fill='%23d62f3f'/%3E%3Crect x='28' width='28' height='16' fill='%23fff8e8'/%3E%3Ccircle cx='42' cy='16' r='14' fill='%23fff8e8'/%3E%3C/svg%3E") repeat-x;background-size:30px auto;filter:drop-shadow(0 3px 2px rgba(0,0,0,.3))}
+header{background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' stroke='%23ffffff' stroke-opacity='.15' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 9h9l7 29h29l6-21H15'/%3E%3Ccircle cx='24' cy='51' r='4.5'/%3E%3Ccircle cx='44' cy='51' r='4.5'/%3E%3Cpath d='M22 24h30M24 31h26'/%3E%3C/svg%3E") no-repeat right 14px bottom -8px/100px,linear-gradient(160deg,var(--hd1),var(--hd2));color:var(--hdink);padding:0 0 8px;border-radius:0 0 24px 24px;box-shadow:0 10px 24px rgba(10,60,44,.28),0 2px 0 rgba(255,255,255,.18) inset;position:relative;overflow:hidden;overflow:clip}
+.awning{height:12px;margin-bottom:5px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='30' viewBox='0 0 56 30'%3E%3Crect width='28' height='16' fill='%2338a883'/%3E%3Ccircle cx='14' cy='16' r='14' fill='%2338a883'/%3E%3Crect x='28' width='28' height='16' fill='%23fff8e8'/%3E%3Ccircle cx='42' cy='16' r='14' fill='%23fff8e8'/%3E%3C/svg%3E") repeat-x;background-size:30px auto;filter:drop-shadow(0 3px 2px rgba(0,0,0,.25))}
 header .top{display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative}
-header h1{font-size:clamp(16px,4.8vw,19px);line-height:1.15;margin:0;letter-spacing:-.3px;text-shadow:0 2px 6px rgba(0,0,0,.5)}
-.meta{margin-top:3px;font-size:12.5px;text-shadow:0 1px 4px rgba(0,0,0,.5);position:relative;display:flex;flex-wrap:wrap;gap:2px 8px}
+header h1{font-family:var(--comic);font-weight:400;letter-spacing:1px;text-transform:uppercase;font-size:clamp(20px,6vw,25px);line-height:1.05;margin:0;text-shadow:0 2px 0 rgba(0,0,0,.18)}
+.meta{margin-top:3px;font-size:12.5px;color:rgba(255,247,230,.88);position:relative;display:flex;flex-wrap:wrap;gap:2px 8px}
 .rstat{display:inline}.rstat .bar{display:block;margin-top:5px}
 .bar{height:6px;border-radius:6px;background:rgba(255,255,255,.35);overflow:hidden;min-width:200px}.bar i{display:block;height:100%;background:#fff;width:0;transition:width .3s;border-radius:6px}
-header::after{content:"";position:absolute;right:-60px;top:-80px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.28),transparent 65%);pointer-events:none}
-.rbtn{background:linear-gradient(#fff,#fff0cf);color:#c2300f;border:0;border-radius:999px;padding:8px 15px;font-size:14px;font-weight:800;box-shadow:0 6px 0 rgba(0,0,0,.14),0 10px 20px rgba(0,0,0,.18),var(--hi);white-space:nowrap;transition:transform .12s,box-shadow .12s}
+header::after{content:"";position:absolute;right:-60px;top:-90px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.1),transparent 65%);pointer-events:none}
+.rbtn{background:linear-gradient(#fffdf6,#f5ebd0);color:#12604a;border:0;border-radius:999px;padding:8px 15px;font-size:14px;font-weight:800;box-shadow:0 6px 0 rgba(0,0,0,.14),0 10px 20px rgba(0,0,0,.18),var(--hi);white-space:nowrap;transition:transform .12s,box-shadow .12s}
 .rbtn:hover{transform:translateY(-2px);box-shadow:0 8px 0 rgba(0,0,0,.14),0 14px 26px rgba(0,0,0,.22)}.rbtn:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(0,0,0,.14),0 4px 10px rgba(0,0,0,.18)}.rbtn[disabled]{opacity:.85;transform:none}
 main{padding-top:10px}
 
@@ -268,6 +268,11 @@ nav.bottom .navfab.open{transform:translateX(-50%) rotate(45deg);background:line
 /* Kassenbon-Knopf rechts über der Menüleiste */
 .bonfab{position:fixed;right:14px;bottom:calc(92px + env(safe-area-inset-bottom));width:50px;height:50px;border-radius:50%;z-index:9;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 72%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:var(--sh1);font-size:24px;line-height:1;padding:0;opacity:.88;transition:opacity .15s,transform .15s}
 .bonfab[hidden]{display:none}.bonfab:active{opacity:1;transform:scale(.93)}
+/* Kopfbereich: ruhiges Grün statt Rot (Rot bleibt für Rabatte) */
+:root{--hd1:#1f7a5c;--hd2:#12604a;--hdink:#fff7e6}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--hd1:#17503e;--hd2:#0e3b2e}}
+:root[data-theme="dark"]{--hd1:#17503e;--hd2:#0e3b2e}
+.plus2::before{width:13px;height:1.5px}.plus2::after{width:1.5px;height:13px}
 </style>
 </head>
 <body>
