@@ -53,6 +53,7 @@ const STORE = id => STORES.find(s => s.id === id) || { id, name: id, short: id, 
 const PROD = id => PRODUCTS.find(p => p.id === id);
 const RXC = {}; const rx = p => RXC[p.id] || (RXC[p.id] = mkRx(p.kw));
 const regCustom = c => { if (!PRODUCTS.some(p => p.id === c.id)) PRODUCTS.push({ id: c.id, cat: 'Eigene Produkte', name: c.name, kw: '(?<![a-zäöüß])' + c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (c.name.length <= 3 ? '(?![a-zäöüß])' : ''), base: null, custom: 1, q: [translit(c.name)] }); };
+(() => { const old = S.custom.filter(c => /^(frisch)?fleisch$/i.test(c.name.trim())); if (!old.length || !PROD('fleisch')) return; const ids = new Set(old.map(c => c.id)); S.list.forEach(i => { if (ids.has(i.pid)) i.pid = 'fleisch'; }); S.custom = S.custom.filter(c => !ids.has(c.id)); save(); })();
 S.custom.forEach(regCustom);
 // Verweise auf Produkte, die es nicht (mehr) gibt (z. B. nach dem Einspielen einer unvollständigen Sicherung), reparieren statt abstürzen
 function repairRefs() {
@@ -140,7 +141,7 @@ function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
   const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; if (COMPOUND_CATS.has(q.cat) && /^-[A-Za-zÄÖÜäöü]/.test(src.slice(m.index + m[0].length))) continue; if (m[0].length > len) { p = q; len = m[0].length; } } }
+  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { if (q.group) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; if (COMPOUND_CATS.has(q.cat) && /^-[A-Za-zÄÖÜäöü]/.test(src.slice(m.index + m[0].length))) continue; if (m[0].length > len) { p = q; len = m[0].length; } } }
   // Eigene Produkte: Treffer der Suchseite (z. B. „Gummibärchen" findet „Goldbären") nutzen, wenn der Name nicht passt
   if (!p && o.found) p = PRODUCTS.find(q => q.custom && q.q && o.found.some(f => f.toLowerCase() === q.q[0]) && customOk(o, q)) || null;
   let store = STORE(o.store), up = unitPrice(o, p);
@@ -155,19 +156,25 @@ function enrich(o) {
   const state = to < TODAY ? 'expired' : from > TODAY ? 'next' : 'now';
   const qty = up && p && p.base !== 'st' && up.v > 0 ? o.price / up.v : null, bulk = qty != null && qty > 3; // z. B. 12 x 1 l
   const excluded = !(p && p.id === 'gemhack') && EXCLUDE_RX.test(full);
-  return { ...o, p, store, up, pct, kind, dubious, bulk, state, daysLeft: Math.round((to - TODAY) / 864e5), excluded };
+  const gourmet = !!(p && p.meat && (GOURMET_RX.test(o.name) || (up && up.base === 'kg' && up.v > 22))); // Edelstück (Steak, Filet …) oder über 22 €/kg: nur Zusatzinfo
+  return { ...o, p, store, up, pct, kind, dubious, bulk, state, daysLeft: Math.round((to - TODAY) / 864e5), excluded, gourmet };
 }
+const GOURMET_RX = /steak|filet|entrec|tafelspitz|roastbeef|wagyu|angus|dry.?aged|karree|carr[ée]|lendenbraten|chateaubriand|t-bone|porterhouse|ribeye|rib-eye|medaillon|lachsschinken|keulenbraten|hirsch|wild|gans|gänse/i;
 const OFFERS_ALL = () => CACHE || (CACHE = [...SRC.offers, ...S.manual].map(enrich).filter(o => o.state !== 'expired' && !o.excluded));
 const rank = (a, b) => (a.up && b.up && a.up.base === b.up.base) ? a.up.v - b.up.v : (!!b.up - !!a.up) || a.price - b.price;
 const isNear = o => o.store.tier === 'A';
 function productInfo(p) {
   if (!p) return { p, now: [], next: [], nearBest: null, best: null, nextBest: null };
-  const offs = OFFERS_ALL().filter(o => o.p && o.p.id === p.id);
-  const byBulk = (x, y) => (x.bulk - y.bulk) || rank(x, y);
-  const now = offs.filter(o => o.state === 'now').sort(byBulk), next = offs.filter(o => o.state === 'next').sort(rank);
+  const ids = p.group ? new Set(p.group) : null;
+  let offs = OFFERS_ALL().filter(o => o.p && (ids ? ids.has(o.p.id) : o.p.id === p.id));
+  const gourmet = p.group ? offs.filter(o => o.gourmet && o.state === 'now').sort(rank) : []; // „Fleisch“: Edelstücke nur als Zusatzinfo
+  if (p.group) offs = offs.filter(o => !o.gourmet);
+  const pc = x => x.dubious || x.pct == null ? 0 : Math.round(x.pct * 20); // Ersparnis in 5-%-Stufen
+  const byBulk = p.meat ? (x, y) => (!!x.gourmet - !!y.gourmet) || (x.bulk - y.bulk) || (p.group ? pc(y) - pc(x) : 0) || rank(x, y) : (x, y) => (x.bulk - y.bulk) || rank(x, y);
+  const now = offs.filter(o => o.state === 'now').sort(byBulk), next = offs.filter(o => o.state === 'next').sort(p.meat ? byBulk : rank);
   const nearBest = now.find(isNear) || null;
   // Großmarkt (Tier D) ist nur eine Option unter „Wege" und nie der Standard-Vorschlag der Liste
-  return { p, now, next, nearBest, best: now.find(o => o.store.tier !== 'D') || null, nextBest: next.find(o => o.store.tier !== 'D') || null };
+  return { p, now, next, gourmet, nearBest, best: now.find(o => o.store.tier !== 'D') || null, nextBest: next.find(o => o.store.tier !== 'D') || null };
 }
 function decision(info, item) {
   const { p, nearBest, best, nextBest } = info, b = nearBest || best;
@@ -179,7 +186,7 @@ function decision(info, item) {
   return { tag: ends ? 'Heute kaufen' : 'Diese Woche', cls: 't-ok', why: (ends ? 'Angebot endet bald. ' : '') + (p.perish ? 'Schnell verderblich, nicht auf Vorrat kaufen.' : 'Kein Zeitdruck.') };
 }
 const watched = id => S.watch.includes(id);
-const onList = id => S.list.some(i => i.pid === id && !i.done);
+const onList = id => S.list.some(i => !i.done && (i.pid === id || ((PROD(i.pid) || {}).group || []).includes(id)));
 
 /* ================= Darstellung ================= */
 const unitLbl = b => b === 'st' ? 'Stück' : b;
@@ -332,6 +339,7 @@ function cDetail(c) {
     ? `<b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b>${b.up ? ` · ${eur(b.up.v)}/${unitLbl(b.up.base)}` : ''}${b.pct != null ? ` <span class="pct ${b.dubious ? 'dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}${p ? ` <button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}${dec && dec.cls ? ` <span class="tag ${dec.cls}">${dec.tag}</span>` : ''}<div class="mute">${esc(b.name.slice(0, 44))}${b.desc ? ' · ' + esc(b.desc.slice(0, 40)) : ''}</div>`
     : `<span class="mute">${esc(c.note || (pf ? prefNote(pf) : 'Kein aktuelles Angebot bekannt. Normal im City-Center kaufen.'))}</span>`}${c.note && b ? `<div class="mute">${esc(c.note)}</div>` : ''}</div></div>
     ${dec ? `<div class="small" style="margin-top:6px">${esc(dec.why)}</div>` : !p ? '<div class="small mute" style="margin-top:6px">Noch kein Produkt zugeordnet. Mit 👁 wird es beobachtet und bei der nächsten Suche gefunden.</div>' : ''}
+    ${info && info.gourmet && info.gourmet.length ? `<div class="small mute" style="margin-top:6px">🥩 Edelstück im Angebot: ${esc(info.gourmet[0].name.slice(0, 32))} ${eur(info.gourmet[0].price)} bei ${esc(info.gourmet[0].store.short)}${info.gourmet[0].pct != null && !info.gourmet[0].dubious ? ' (−' + Math.round(info.gourmet[0].pct * 100) + ' %)' : ''}</div>` : ''}
     ${tip ? `<div class="small nxt">💡 ${esc(tipText(tip))}</div>` : ''}
     ${!it.done ? nextLine(info ? nextHint(info) : null, `<button class="lnk" onclick="rememberItem('${id}')">📌 für nächste Woche merken</button>`) : ''}
     ${info && info.now.length ? `<table style="margin-top:6px">${info.now.slice(0, 5).map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
