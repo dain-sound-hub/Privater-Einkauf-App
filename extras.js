@@ -27,7 +27,7 @@ function miniToast(t) { const el = $('#tt'); if (!el) return; el.textContent = t
 function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); UI.recent = []; ['heard', 'recent'].forEach(i => { const x = $('#' + i); if (x) { x.hidden = true; x.innerHTML = ''; } }); const f = $('#navfab'); if (f) f.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
 const iaRow = () => '';
 const plusBtn = () => '<div class="fabrow"><button class="plus2" onclick="iaOpen()" aria-label="Artikel hinzufügen" title="Artikel hinzufügen">+</button></div>';
-function planKeys(all) { const m = {}; planRoute(all).stops.forEach(s => s.items.forEach(x => { m[x.it.id] = s.store.id; })); return m; } // in welchem Laden steht der Artikel (wie in der Route)
+function planKeys(all) { const pl = planRoute(all), m = {}; pl.stops.forEach(s => s.items.forEach(x => { m[x.it.id] = s.store.id; })); pl.favs.forEach(x => { m[x.it.id] = 'fav'; }); return m; } // in welchem Laden steht der Artikel (wie in der Route)
 function listHead(title, sub) {
   const short = shortOn() ? '' : (S.list.filter(i => !i.done).length >= 2 ? '<button class="klnk" onclick="shortOpen()" aria-label="Kurzeinkauf starten" title="Kurzeinkauf: nur einen Teil der Liste zeigen">⚡ Kurzeinkauf</button>' : '');
   return `<div class="lhead"><b>${title}</b><span class="lact">${short}</span><span class="sub">${sub}</span></div>`;
@@ -53,7 +53,7 @@ function dragBegin() {
   g.id = 'dghost'; g.removeAttribute('data-id'); g.removeAttribute('onclick'); g.style.width = r.width + 'px'; document.body.appendChild(g);
   row.classList.add('dragging');
   const dz = document.createElement('div'); dz.id = 'dz';
-  dz.innerHTML = `<div class="dzh">In einen Laden ziehen und loslassen:</div><div class="dzs">${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<div class="dzc" data-store="${s}" style="--sc:${storeColor(s)}">${esc(STORE(s).short)}</div>`).join('')}<div class="dzc" data-store="auto">Automatisch</div></div>`;
+  dz.innerHTML = `<div class="dzh">In einen Laden ziehen und loslassen:</div><div class="dzs">${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<div class="dzc" data-store="${s}" style="--sc:${storeColor(s)}">${esc(STORE(s).short)}</div>`).join('')}<div class="dzc" data-store="fav" style="--sc:#e8a317">★ Im Blick</div><div class="dzc" data-store="auto">Automatisch</div></div>`;
   document.body.appendChild(dz);
   dragPos(DRAG.cx, DRAG.cy); DRAG.scroller = setInterval(dragScroll, 16);
 }
@@ -103,20 +103,20 @@ const dragDone = () => { if (!S.set.noDragTip) { S.set.noDragTip = true; } };
 function moveItem(id, store) { // in einen anderen Laden (nur heute); „auto“ hebt die Verschiebung auf
   const it = byId(id); if (!it) return;
   UI.undoMove = { prev: [{ id, store: it.store, pos: it.pos, fav: it.fav }] }; UI.open.delete(id);
-  if (store === 'auto') delete it.store; else if (STORES.some(s => s.id === store)) { it.store = store; delete it.pos; delete it.fav; } else return;
+  if (store === 'fav') { if (it.fav) return; it.fav = true; delete it.store; delete it.pos; } else if (store === 'auto') { delete it.store; delete it.fav; } else if (STORES.some(s => s.id === store)) { it.store = store; delete it.pos; delete it.fav; } else return;
   dragDone(); save(); render();
-  feedbackText(store === 'auto' ? `„${esc(it.name)}“ wird wieder automatisch einsortiert. <button class="lnk" onclick="undoMove()">Rückgängig</button>` : `„${esc(it.name)}“ kaufst du heute bei <b>${esc(STORE(store).short)}</b>. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
+  feedbackText(store === 'fav' ? `„${esc(it.name)}“ ist jetzt <b>★ Im Blick</b>, ganz oben ohne Laden. <button class="lnk" onclick="undoMove()">Rückgängig</button>` : store === 'auto' ? `„${esc(it.name)}“ wird wieder automatisch einsortiert. <button class="lnk" onclick="undoMove()">Rückgängig</button>` : `„${esc(it.name)}“ kaufst du heute bei <b>${esc(STORE(store).short)}</b>. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
 }
 function reorderItem(id, key, idx) { // innerhalb desselben Ladens an eine andere Stelle
   const it = byId(id); if (!it) return;
   const ids = [...document.querySelectorAll('#view .card[data-store="' + key + '"] .crow[data-id]')].map(n => n.dataset.id).filter(x => x !== id);
-  UI.undoMove = { prev: [id, ...ids].map(x => ({ id: x, store: (byId(x) || {}).store, pos: (byId(x) || {}).pos })) };
+  UI.undoMove = { prev: [id, ...ids].map(x => ({ id: x, store: (byId(x) || {}).store, pos: (byId(x) || {}).pos, fav: (byId(x) || {}).fav })) };
   UI.open.delete(id); ids.splice(Math.min(idx, ids.length), 0, id); ids.forEach((x, k) => { const t = byId(x); if (t) t.pos = k + 1; });
   dragDone(); save(); render(); feedbackText(`„${esc(it.name)}“ verschoben. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
 }
 function undoMove() {
   const u = UI.undoMove; if (!u) return; UI.undoMove = null;
-  u.prev.forEach(p => { UI.open.delete(p.id); const t = byId(p.id); if (!t) return; if (p.store) t.store = p.store; else delete t.store; if (p.pos != null) t.pos = p.pos; else delete t.pos; if (p.fav) t.fav = true; });
+  u.prev.forEach(p => { UI.open.delete(p.id); const t = byId(p.id); if (!t) return; if (p.store) t.store = p.store; else delete t.store; if (p.pos != null) t.pos = p.pos; else delete t.pos; if (p.fav) t.fav = true; else delete t.fav; });
   save(); render(); feedbackText('✓ Rückgängig gemacht.');
 }
 document.addEventListener('touchstart', dragStart, { passive: true });

@@ -86,7 +86,7 @@ function planRoute(all) { // all = auch Artikel, die in der Kurzliste-Ansicht au
     centerIds.sort((a, b) => hv(a) - hv(b) || byStore[b].length - byStore[a].length);
   }
   const mk = id => { const items = byStore[id].slice().sort(aisleCmp); return { store: STORE(id), kind: id === 'lidl' ? 'lidl' : 'center', items, heavyCount: items.filter(x => x.heavy).length }; };
-  const favs = rows.filter(r => r.it.fav && r.storeId).map(r => ({ ...r, recName: STORE(r.storeId).short }));
+  const favs = rows.filter(r => r.it.fav && r.storeId).map(r => ({ ...r, recName: STORE(r.storeId).short })).sort(aisleCmp);
   Object.keys(byStore).forEach(id => { byStore[id] = byStore[id].filter(r => !r.it.fav); });
   centerIds = centerIds.filter(id => byStore[id] && byStore[id].length);
   const stops = [];
@@ -112,7 +112,7 @@ function routeView() {
   const plan = planRoute(), mode = S.set.lidl || 'auto';
   const row = x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route' });
   const last = plan.stops.length - 1;
-  const favCard = plan.favs.length ? `<div class="card tight stop favc"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">★</span><h3>Im Blick</h3></div><span class="tag">ohne Laden</span></div><div class="mute small" style="margin:0 0 4px">Du entscheidest unterwegs, wo du es kaufst.</div>${plan.favs.map(x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route', rec: x.recName })).join('')}</div>` : '';
+  const favCard = plan.favs.length ? `<div class="card tight stop favc" data-store="fav" style="--sc:#e8a317"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">★</span><h3>Im Blick</h3></div><span class="tag">ohne Laden</span></div><div class="mute small" style="margin:0 0 4px">Du entscheidest unterwegs, wo du es kaufst.</div>${plan.favs.map(x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route', rec: x.recName })).join('')}</div>` : '';
   const cards = plan.stops.map((s, i) => {
     let hint;
     if (s.kind === 'lidl') hint = `${s.store.walk} Min zu Fuß · nur Leichtes, passt in den Rucksack${plan.lidlSave > 0 ? ` · spart ca. ${eur(plan.lidlSave)}` : ''}`;

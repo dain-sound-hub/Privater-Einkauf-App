@@ -372,7 +372,7 @@ V.list = () => {
   const kurz = shortSeg();
   const dragTip = (!S.set.noDragTip && open.length >= 2) ? `<div class="banner info row sp nowrap"><span>💡 <b>Tipp:</b> Artikel kurz gedrückt halten und in einen anderen Laden ziehen.</span><button class="ico" onclick="S.set.noDragTip=true;save();render()" aria-label="Tipp schließen">✕</button></div>` : '';
   const head = listHead('🛒 Meine Liste', open.length ? `${open.length} Artikel offen · Reihenfolge wie im Laden` : 'noch leer') + kurz + dragTip;
-  const favHtml = favs.length ? `<h2 class="sh">★ Im Blick <span class="mute small">· du entscheidest, wo</span></h2><div class="card tight favc">${favs.map(row).join('')}</div>` : '';
+  const favHtml = favs.length ? `<h2 class="sh" data-store="fav" style="--sc:#e8a317">★ Im Blick <span class="mute small">· du entscheidest, wo</span></h2><div class="card tight favc" data-store="fav" style="--sc:#e8a317">${favs.map(row).join('')}</div>` : '';
   const groupsHtml = favHtml + order.map(k => `<h2 class="sh" data-store="${k}" style="--sc:${storeColor(k)}">${groupHead(k)}</h2><div class="card tight main" data-store="${k}">${groups[k].map(row).join('')}</div>`).join('');
   const wagen = done.length ? `<h2 class="sh">✓ Erledigt</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Fertig (${done.length})</button><div class="mute small" style="text-align:center;margin-top:4px">Räumt das Erledigte weg. Die App lernt daraus, was du oft kaufst.</div>` : '';
   const live = !SRC.live ? `<div class="banner">Noch keine echten Angebote geladen. Tippe oben auf <b>Angebote suchen</b>.</div>` : '';
