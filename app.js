@@ -602,7 +602,7 @@ function jumpToItem(id) { go('list'); setTimeout(() => { const e = document.getE
 function showFeedback(added, dup, favNew = []) {
   if (!added.length && !dup.length) return;
   const dk = document.getElementById('dock');
-  if (dk && dk.classList.contains('open') && added.length && !dup.length && !added.some(x => x.guess)) { miniToast('✓ ' + added.slice(0, 3).map(x => (x.qty ? x.qty + ' ' : '') + x.name).join(', ') + (added.length > 3 ? ' + ' + (added.length - 3) + ' weitere' : '') + ' eingetragen'); const f = $('#fb'); if (f) f.hidden = true; return; }
+  if (dk && dk.classList.contains('open') && added.length && !dup.length && !added.some(x => x.guess)) { const names = added.slice(0, 3).map(x => (x.qty ? x.qty + ' ' : '') + x.name), more = added.length > 3 ? ' + ' + (added.length - 3) + ' weitere' : ''; miniToast('✓ Gespeichert: ' + names.join(', ') + more); UI.recent = [...names, ...(UI.recent || [])].slice(0, 4); const rc = $('#recent'); if (rc) { rc.hidden = false; rc.textContent = '✓ Zuletzt gespeichert: ' + UI.recent.join(' · '); } const f = $('#fb'); if (f) f.hidden = true; return; }
   const shown = added.slice(0, 3), restN = added.length - shown.length;
   const items = shown.map(x => `${x.qty ? esc(qtyLabel(x.qty)) + ' ' : ''}<b>${esc(x.name)}</b>${x.known ? '' : ' <i>(neu)</i>'}`).join(' · ') + (restN > 0 ? ` · +${restN} weitere` : '');
   const first = added[0], gx = added.find(x => x.guess);
@@ -625,7 +625,13 @@ function addMany(txt) {
   });
   UI.flash = new Set(added.map(x => x.id)); save(); hideSug(); render(); showFeedback(added, dup, favNew); return added.length;
 }
-function addItem() { const el = $('#ni'); if (!el || !el.value.trim()) return; addMany(el.value); el.value = ''; el.focus(); }
+let HEARD_T = 0;
+function heardSet(t) { // „Verstanden: …“ bleibt sichtbar, der Text steht noch kurz im Feld
+  const el = $('#ni'), h = $('#heard'); if (!t) return;
+  if (el) { el.value = t; el.classList.add('sent'); clearTimeout(HEARD_T); HEARD_T = setTimeout(() => { if (el.classList.contains('sent')) { el.value = ''; el.classList.remove('sent'); } }, 5000); }
+  if (h) { h.hidden = false; h.innerHTML = '🎤 Verstanden: <b>„' + esc(t) + '“</b>'; }
+}
+function addItem() { const el = $('#ni'); if (!el) return; if (el.classList.contains('sent')) { el.value = ''; el.classList.remove('sent'); return; } if (!el.value.trim()) return; addMany(el.value); el.value = ''; el.focus(); }
 let MIC = false, REC = null, MIC_STOP = false, MIC_IDLE = 0;
 function micUi() {
   const b = $('#micb'); if (b) { b.textContent = MIC ? '⏹' : '🎤'; b.classList.toggle('danger', MIC); }
@@ -641,8 +647,8 @@ function startRec(SR) {
   REC = new SR(); REC.lang = 'de-DE'; REC.interimResults = true; REC.continuous = true;
   REC.onresult = e => {
     MIC_IDLE = 0; let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) addMany(r[0].transcript); else interim += r[0].transcript; }
-    const el = $('#ni'); if (el) el.value = interim; // du siehst live, was erkannt wird
+    for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) { heardSet(r[0].transcript.trim()); addMany(r[0].transcript); } else interim += r[0].transcript; }
+    const el = $('#ni'); if (el && interim) { el.classList.remove('sent'); el.value = interim; } // du siehst live, was erkannt wird
   };
   REC.onerror = e => {
     if (e.error === 'no-speech' || e.error === 'aborted') return;
@@ -810,7 +816,7 @@ function rstat() {
   const when = SRC.fetched ? new Date(SRC.fetched).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
   if (R.running) s.innerHTML = `Suche: ${esc(R.current || '…')} (${R.done}/${R.total}) · ${R.found} Angebote<div class="bar"><i style="width:${R.total ? Math.round(R.done / R.total * 100) : 0}%"></i></div>`;
   else if (R.error) s.textContent = '⚠ ' + R.error;
-  else if (SRC.live) s.textContent = `Stand: ${when} · ${SRC.offers.length} Angebote${SRC.offline ? ' · gespeichert (offline)' : MODE === 'static' ? ' · wird täglich automatisch aktualisiert' : ''}`;
+  else if (SRC.live) s.textContent = `Stand: ${when}${SRC.offline ? ' · gespeichert (offline)' : ''}`;
   else s.textContent = location.protocol === 'file:' ? 'Datei-Modus: für die Suche bitte start.bat öffnen.' : 'Noch keine Angebote geladen.';
 }
 async function startResearch() {
@@ -834,6 +840,7 @@ async function startResearch() {
 /* ================= Shell ================= */
 const TABS = [['list', '🛒', 'Liste'], ['route', '🧭', 'Route'], ['offers', '🏷️', 'Angebote'], ['watch', '👁', 'Favoriten'], ['pro', '📰', 'Prospekte'], ['more', '⚙️', 'Mehr']];
 let cur = (location.hash || '#list').slice(1);
+const NAV = []; // zuletzt besuchte Seiten, für die Zurück-Taste
 function render() {
   TIPS = null; shortSync();
   if (!V[cur]) cur = 'list';
@@ -842,10 +849,9 @@ function render() {
   $('#tabs').innerHTML = TABS.map(([k, i, l], n) => (n === 3 ? '<span class="fabslot"></span>' : '') + `<button class="${k === cur ? 'on' : ''}" onclick="go('${k}')"><span>${i}${k === 'list' && nOpen ? `<b class="bdg">${nOpen}</b>` : ''}</span>${l}</button>`).join('');
   const pl = $('#pl'); if (pl) pl.innerHTML = PRODUCTS.filter(p => !p.custom).map(p => `<option value="${esc(p.name)}">`).join('');
   $('#view').innerHTML = V[cur](); UI.flash = null;
-  $('#sub').textContent = TODAY.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
   rstat(); bqStrip(); applyTheme(); bonFabSync(); scrollTo(0, sy);
 }
-function go(k) { cur = k; try { history.replaceState(history.state, '', '#' + k); } catch (e) { location.hash = k; } dockClose(); render(); scrollTo(0, 0); }
+function go(k, back) { if (!back && k !== cur && cur !== 'bon') { if (NAV[NAV.length - 1] !== cur) NAV.push(cur); if (NAV.length > 20) NAV.shift(); } cur = k; try { history.replaceState(history.state, '', '#' + k); } catch (e) { location.hash = k; } dockClose(); render(); scrollTo(0, 0); }
 repairRefs();
 loadOffers().then(render); render(); bonQueueInit();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

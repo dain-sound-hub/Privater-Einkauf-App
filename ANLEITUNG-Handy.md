@@ -14,7 +14,7 @@
 ## Schritt 2: Dateien hochladen
 1. Auf der neuen Seite den Link **uploading an existing file** anklicken.
 2. Aus dem Ordner „Privater Einkauf App" diese Dateien und den Ordner `.github` hineinziehen:
-   - `index.html`, `app.js`, `route.js`, `receipt.js`, `extras.js`, `PatrickHand.ttf`, `Bangers.ttf`, `data.js`, `offers.js`, `offers.json`
+   - `index.html`, `app.js`, `route.js`, `receipt.js`, `extras.js`, `PatrickHand.ttf`, `header.jpg`, `Bangers.ttf`, `data.js`, `offers.js`, `offers.json`
    - `sw.js`, `manifest.webmanifest`
    - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`
    - `research-core.js`, `refresh-offers.js`

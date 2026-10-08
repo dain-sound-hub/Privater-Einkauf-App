@@ -23,8 +23,8 @@ function iaOpen() { // Plus: Eingabefenster auf oder zu
   d.classList.add('open'); const f = $('#navfab'); if (f) f.classList.add('open'); const x = $('#ni'); if (x) x.focus();
 }
 let TT_T = 0;
-function miniToast(t) { const el = $('#tt'); if (!el) return; el.textContent = t; el.classList.add('show'); clearTimeout(TT_T); TT_T = setTimeout(() => el.classList.remove('show'), 2200); }
-function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); const f = $('#navfab'); if (f) f.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
+function miniToast(t) { const el = $('#tt'); if (!el) return; el.textContent = t; el.classList.add('show'); clearTimeout(TT_T); TT_T = setTimeout(() => el.classList.remove('show'), 4500); }
+function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); UI.recent = []; ['heard', 'recent'].forEach(i => { const x = $('#' + i); if (x) { x.hidden = true; x.innerHTML = ''; } }); const f = $('#navfab'); if (f) f.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
 const iaRow = () => '';
 const plusBtn = () => '<div class="fabrow"><button class="plus2" onclick="iaOpen()" aria-label="Artikel hinzufügen" title="Artikel hinzufügen">+</button></div>';
 function planKeys(all) { const m = {}; planRoute(all).stops.forEach(s => s.items.forEach(x => { m[x.it.id] = s.store.id; })); return m; } // in welchem Laden steht der Artikel (wie in der Route)
@@ -190,7 +190,9 @@ function backAction() { // true = etwas wurde zurückgenommen
     if (BON.done) { BON.done = null; render(); return true; }
   }
   if (cur === 'offers' && UI.store && UI.store !== 'all') { UI.store = 'all'; render(); return true; }
-  if (cur !== 'list') { go('list'); return true; }
+  while (NAV.length && NAV[NAV.length - 1] === cur) NAV.pop();
+  if (NAV.length) { go(NAV.pop(), true); return true; } // zurück zu der Seite, auf der du vorher warst
+  if (cur !== 'list') { go('list', true); return true; }
   return false;
 }
 function backInit() {
