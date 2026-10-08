@@ -71,7 +71,7 @@ function planRoute() {
     put(r, id);
     centerIds.sort((a, b) => hv(a) - hv(b) || byStore[b].length - byStore[a].length);
   }
-  const mk = id => { const items = byStore[id].slice().sort((a, b) => (a.heavy - b.heavy)); return { store: STORE(id), kind: id === 'lidl' ? 'lidl' : 'center', items, heavyCount: items.filter(x => x.heavy).length }; };
+  const mk = id => { const items = byStore[id].slice().sort((a, b) => aisleOf(a.it, a.p) - aisleOf(b.it, b.p) || a.it.name.localeCompare(b.it.name, 'de')); return { store: STORE(id), kind: id === 'lidl' ? 'lidl' : 'center', items, heavyCount: items.filter(x => x.heavy).length }; };
   const stops = [];
   if (byStore.lidl && byStore.lidl.length) stops.push(mk('lidl'));
   centerIds.forEach(id => byStore[id] && byStore[id].length && stops.push(mk(id)));
@@ -93,32 +93,23 @@ function routeView() {
   const open = S.list.filter(i => !i.done);
   if (!open.length) return empty('🧭', 'Noch keine Route. Trag auf der Liste ein, was du brauchst.<br>Die App sagt dir dann, in welchem Laden du was kaufst und in welcher Reihenfolge.') + `<div style="text-align:center"><button class="btn pri" onclick="go('list')">Zur Liste</button></div>`;
   const plan = planRoute(), mode = S.set.lidl || 'auto';
-  const stepLine = (s, i) => `<li><b>${esc(s.store.short)}</b>${s.kind === 'lidl' ? ' (Spaziergang)' : ''}: ${s.items.map(x => esc(x.it.name)).join(', ')}</li>`;
-  const row = x => {
-    const o = x.offer, id = x.it.id;
-    return `<div class="item"><button class="chk" onclick="tick('${id}');" aria-label="abhaken"></button>${thumb(o && o.img, iconFor(x.p, x.it.name), 'sm')}
-    <div class="grow"><div class="nm" style="cursor:default">${esc(x.it.name)}${x.it.qty ? ` <span class="mute">${esc(qtyLabel(x.it.qty))}</span>` : ''}${x.heavy ? ' <span class="tag t-warn">🏋️ schwer</span>' : ''}</div>
-    <div class="row small" style="margin-top:2px">${o ? `<b>${eur(o.price)}</b>${o.up ? `<span class="mute">${eur(o.up.v)}/${unitLbl(o.up.base)}</span>` : ''}${o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}">−${Math.round(o.pct * 100)} %</span>` : ''}` : `<span class="mute">${esc(x.note || 'normal kaufen')}</span>`}${o && x.note ? `<span class="mute">· ${esc(x.note)}</span>` : ''}</div>
-    ${o ? `<div class="mute clamp">${esc(o.name.slice(0, 44))}${o.desc ? ' · ' + esc(o.desc.slice(0, 40)) : ''}</div>` : ''}</div></div>`;
-  };
+  const row = x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route' });
   const last = plan.stops.length - 1;
   const cards = plan.stops.map((s, i) => {
     let hint;
     if (s.kind === 'lidl') hint = `${s.store.walk} Min zu Fuß · nur Leichtes, passt in den Rucksack${plan.lidlSave > 0 ? ` · spart ca. ${eur(plan.lidlSave)}` : ''}`;
     else {
-      hint = i === 0 ? '3 Min von zu Hause, im City-Center' : plan.stops[i - 1].kind === 'lidl' ? 'zurück im City-Center (ca. 18 Min vom Lidl)' : 'im City-Center, ca. 2 Min weiter';
-      if (s.heavyCount) hint += i === last ? ' · Schweres zuletzt, danach direkt nach Hause' : ' · enthält Schweres (im Angebot, danach nur ca. 2 Min bis zum nächsten Laden)';
+      hint = i === 0 ? '3 Min von zu Hause' : plan.stops[i - 1].kind === 'lidl' ? 'zurück im City-Center' : 'ca. 2 Min weiter';
+      if (s.heavyCount) hint += i === last ? ' · Schweres zuletzt, danach nach Hause' : ' · enthält Schweres';
     }
-    return `<div class="card stop"><div class="row sp nowrap"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.name)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
-      <div class="mute" style="margin:4px 0 2px">${esc(hint)}</div>${s.items.map(row).join('')}</div>`;
+    return `<div class="card tight stop"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.name)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
+      <div class="mute small" style="margin:0 0 4px">${esc(hint)}</div>${s.items.map(row).join('')}</div>`;
   }).join('');
-  return `<div class="card help"><h3>🧭 Deine Einkaufsroute</h3>
-    <div class="mute" style="margin:2px 0 8px">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min Laufweg (ohne Einkaufszeit, geschätzt)</div>
-    <ol>${plan.stops.map(stepLine).join('')}<li>Danach nach Hause 🏠</li></ol>
-    <div class="row"><button class="btn sm" onclick="copyRoute()">Route kopieren</button><button class="btn sm" onclick="go('list')">Liste ändern</button></div></div>
-  ${plan.lidlPossible || mode !== 'auto' ? SEG(mode, [['auto', 'Lidl: Automatisch'], ['ja', 'Lidl: Ja'], ['nein', 'Lidl: Nein']], 'setLidl') + `<div class="mute" style="margin:-6px 4px 12px">${mode === 'auto' ? 'Lidl wird nur eingeplant, wenn du dort mindestens 1,50 € sparst.' : mode === 'ja' ? 'Lidl wird eingeplant, sobald es dort etwas Günstigeres für leichte Artikel gibt.' : 'Lidl wird nicht eingeplant.'}</div>` : ''}
-  <div class="mute" style="margin:4px 4px 10px">Reihenfolge: Leichtes zuerst, Schweres und Sperriges (Wasser, Klopapier, Küchentücher, Waschmittel) zuletzt. Ob ein Artikel als „schwer" gilt, kannst du in der Liste beim Artikel ändern.</div>
+  return `<div class="lhead"><b>🧭 Einkaufsroute</b><span>${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min</span></div>
   ${cards}
-  <div class="card" style="text-align:center">🏠 <b>Fertig, nach Hause</b> <span class="mute">· ca. 3 Min</span></div>
-  <div style="text-align:center;margin:8px 0"><button class="btn" onclick="go('bon')">🧾 Danach: Kassenbon einlesen</button></div>`;
+  <div class="mute small" style="text-align:center;margin:2px 0 10px">🏠 Danach nach Hause · ca. 3 Min · in jedem Laden: Obst &amp; Gemüse zuerst, Schweres zuletzt</div>
+  <div class="row" style="justify-content:center;gap:8px"><button class="btn sm" onclick="copyRoute()">Route kopieren</button><button class="btn sm" onclick="go('list')">← Zur Liste</button><button class="btn sm" onclick="go('bon')">🧾 Kassenbon</button></div>
+  <details class="card tight" style="margin-top:12px"><summary class="mute">Einstellungen &amp; Hinweise</summary>
+    ${plan.lidlPossible || mode !== 'auto' ? SEG(mode, [['auto', 'Lidl: Automatisch'], ['ja', 'Lidl: Ja'], ['nein', 'Lidl: Nein']], 'setLidl') + `<div class="mute small" style="margin:-6px 4px 8px">${mode === 'auto' ? 'Lidl wird nur eingeplant, wenn du dort mindestens 1,50 € sparst.' : mode === 'ja' ? 'Lidl wird eingeplant, sobald es dort etwas Günstigeres für leichte Artikel gibt.' : 'Lidl wird nicht eingeplant.'}</div>` : ''}
+    <div class="mute small" style="padding:4px 0 8px">Reihenfolge: Leichtes zuerst, Schweres und Sperriges (Wasser, Klopapier, Küchentücher, Waschmittel) zuletzt. Ob ein Artikel als „schwer“ gilt, änderst du beim Artikel nach dem Antippen.</div></details>`;
 }

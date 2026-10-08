@@ -5,7 +5,7 @@ window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Et
 const APP_VERSION = '1.0 · 06.10.2026';
 /* ================= State ================= */
 const LS = 'einkauf.v2';
-const DEF = { hideHelp: false, list: [], later: [], prefs: {}, adds: {}, addDay: {}, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
+const DEF = { hideHelp: false, list: [], later: [], prefs: {}, adds: {}, addDay: {}, rec: {}, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
 let S;
 // Gespeicherten Stand prüfen und reparieren: eine beschädigte Sicherung oder ein Fehler darf die App nie lahmlegen
 function sanitize(x) {
@@ -20,7 +20,7 @@ function sanitize(x) {
     list: arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: String(i.name ?? '').slice(0, 80), qty: String(i.qty ?? '').slice(0, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}) })).filter(i => i.name.trim()),
     bons: arr(o.bons).filter(b => b && typeof b === 'object' && dateOk(b.date) && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: b.date, store: String(b.store).slice(0, 20), total: Number.isFinite(+b.total) ? +b.total : null, items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: Number.isFinite(+i.p) ? +i.p : 0, pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null) })) })),
     aliases: Object.fromEntries(Object.entries(o.aliases && typeof o.aliases === 'object' && !Array.isArray(o.aliases) ? o.aliases : {}).filter(([k, v]) => k.length <= 60 && idOk(v)).slice(0, 400)),
-    lastBackup: dateOk(o.lastBackup) ? o.lastBackup : '',
+    lastBackup: dateOk(o.lastBackup) ? o.lastBackup : '', rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
     adds: Object.fromEntries(Object.entries(o.adds && typeof o.adds === 'object' && !Array.isArray(o.adds) ? o.adds : {}).filter(([k, n]) => idOk(k) && Number.isFinite(+n) && +n >= 0).map(([k, n]) => [k, Math.min(+n, 9999)])),
     addDay: Object.fromEntries(Object.entries(o.addDay && typeof o.addDay === 'object' && !Array.isArray(o.addDay) ? o.addDay : {}).filter(([k, v]) => idOk(k) && dateOk(v))),
     prefs: Object.fromEntries(Object.entries(o.prefs && typeof o.prefs === 'object' && !Array.isArray(o.prefs) ? o.prefs : {}).filter(([k, v]) => idOk(k) && STORES.some(s => s.id === v))),
@@ -119,10 +119,12 @@ function refPrice(p) {
   if (h.length >= 2) return { v: h[Math.floor(h.length / 2)], note: 'dein Mittelwert aus ' + h.length + ' Einträgen' };
   return p.ref ? { v: p.ref, note: p.refNote || 'historische Referenz' } : null;
 }
+const HEAD_CATS = new Set(['Obst & Gemüse', 'Milchprodukte', 'Öle & Grundnahrung', 'Getränke']);
 function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
+  const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { const m = rx(q).exec(text); if (m && m[0].length > len) { p = q; len = m[0].length; } } }
+  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { const m = rx(q).exec(HEAD_CATS.has(q.cat) ? head : text); if (m && m[0].length > len) { p = q; len = m[0].length; } } }
   // Eigene Produkte: Treffer der Suchseite (z. B. „Gummibärchen" findet „Goldbären") nutzen, wenn der Name nicht passt
   if (!p && o.found) p = PRODUCTS.find(q => q.custom && q.q && o.found.some(f => f.toLowerCase() === q.q[0])) || null;
   let store = STORE(o.store), up = unitPrice(o, p);
@@ -232,11 +234,13 @@ const freq = p => Math.max(S.adds[p.id] || 0, S.buys[p.id] || 0);
 function noteAdd(pid) { // zählt höchstens einmal pro Tag und Produkt; ab 3 Tagen wird es automatisch ein Favorit
   const p = pid ? PROD(pid) : null; if (!p) return null;
   const day = isoDay(TODAY);
-  if (S.addDay[pid] !== day) { S.addDay[pid] = day; S.adds[pid] = (S.adds[pid] || 0) + 1; }
+  if (S.addDay[pid] !== day) { S.addDay[pid] = day; S.adds[pid] = (S.adds[pid] || 0) + 1; noteRec(pid, day); }
   if (freq(p) >= 3 && !watched(pid)) { S.watch.push(pid); return p.name; }
   return null;
 }
-const mainProducts = () => PRODUCTS.filter(p => freq(p) >= 2).sort((a, b) => freq(b) - freq(a) || a.name.localeCompare(b.name, 'de'));
+function noteRec(pid, day) { const r = (S.rec = S.rec || {})[pid] = S.rec[pid] || []; if (r[r.length - 1] !== day) r.push(day); if (r.length > 8) r.shift(); } // die letzten Kauf-/Eintragstage
+const recScore = p => { const d = (S.rec && S.rec[p.id]) || []; let s = 0; d.forEach(x => { s += Math.pow(0.5, Math.max(0, (+TODAY - +d0(x)) / 864e5) / 30); }); return s + Math.max(0, freq(p) - d.length) * 0.25; }; // jüngere Tage zählen mehr (Halbwertszeit 30 Tage)
+const mainProducts = () => PRODUCTS.filter(p => freq(p) >= 2).sort((a, b) => recScore(b) - recScore(a) || a.name.localeCompare(b.name, 'de'));
 const chipHtml = p => {
   const on = onList(p.id), i = productInfo(p), b = i.nearBest || i.best;
   return `<button class="chip ${on ? 'on' : ''} ${freq(p) >= 2 ? 'main' : ''}" onclick="toggleP('${p.id}')" aria-pressed="${on}">${on ? '✓' : iconFor(p)} ${esc(p.name.split(' /')[0])}${!on && b && b.pct != null && !b.dubious ? ` <b style="color:var(--acc)">−${Math.round(b.pct * 100)}%</b>` : ''}</button>`;
@@ -246,68 +250,100 @@ function quickAdd() {
   const due = laterDue(), main = mainProducts(), open = UI.qa;
   const others = PRODUCTS.filter(p => !main.includes(p) && watched(p.id));
   const rest = PRODUCTS.filter(p => !main.includes(p) && !others.includes(p) && !p.custom);
-  const shown = open ? main : main.slice(0, 12);
-  const fill = open ? [] : others.slice(0, Math.max(0, 6 - shown.length)); // solange die App noch lernt: deine Standard-Favoriten
+  const shown = open ? main : main.slice(0, 18);
+  const fill = open ? [] : others.slice(0, Math.max(0, 10 - shown.length)); // solange die App noch lernt: deine Standard-Favoriten
   const dueChips = due.map(x => `<button class="chip due" onclick="laterToList('${x.id}')" title="Von dir gemerkt, jetzt günstiger">📌 ${esc(x.name)}</button>`).join('');
   const toggle = `<button class="chip arrow" onclick="toggleQa()" aria-expanded="${open}">${open ? '▴ Weniger' : '▾ Mehr'}</button>`;
-  const title = main.length ? '⭐ Deine Hauptprodukte · antippen = brauche ich' : 'Schnell hinzufügen · Favoriten';
-  if (!shown.length && !fill.length && !due.length && !open) return `<div class="row sp" style="margin:2px 4px"><span class="mute">Schnell hinzufügen</span>${toggle}</div>`;
-  let h = `<div class="row sp" style="margin:2px 4px"><span class="mute">${title}${due.length ? ' · 📌 jetzt günstiger' : ''}</span>${toggle}</div><div class="chips">${dueChips}${shown.map(chipHtml).join('')}${fill.map(chipHtml).join('')}</div>`;
-  if (!main.length) h += `<div class="mute" style="margin:0 4px 6px">Nach ein paar Einkäufen erkennt die App selbst, was du immer wieder brauchst, und zeigt es hier ganz oben.</div>`;
+  const title = main.length ? '⭐ Deine Hauptprodukte' : 'Schnell hinzufügen';
+  if (!shown.length && !fill.length && !due.length && !open) return `<div class="qa"><div class="row sp qh"><span class="mute">Schnell hinzufügen</span>${toggle}</div></div>`;
+  let h = `<div class="qa"><div class="row sp qh"><span class="mute">${title}${due.length ? ' · 📌 jetzt günstiger' : ''}</span>${toggle}</div><div class="chips">${dueChips}${shown.map(chipHtml).join('')}${fill.map(chipHtml).join('')}</div>`;
   if (open) {
     const cats = [...new Set(rest.map(p => p.cat))];
-    h += (others.length ? `<div class="mute" style="margin:8px 4px 0">Weitere Favoriten</div><div class="chips">${others.map(chipHtml).join('')}</div>` : '') +
-      `<div class="mute" style="margin:8px 4px 0">Ab 2 Einkaufstagen mit einem Produkt wird es ein Hauptprodukt, ab 3 ein dauerhafter Favorit.</div>` +
-      cats.map(c => `<div class="mute" style="margin:8px 4px 0">${ICON[c] || ''} ${c}</div><div class="chips">${rest.filter(p => p.cat === c).map(chipHtml).join('')}</div>`).join('');
+    h += (others.length ? `<div class="mute qh" style="margin-top:8px">Weitere Favoriten</div><div class="chips">${others.map(chipHtml).join('')}</div>` : '') +
+      `<div class="mute small qh" style="margin-top:8px">Die App lernt mit: Was du in letzter Zeit oft brauchst, steht vorne. Ab 2 Einkaufstagen wird ein Produkt zum Hauptprodukt, ab 3 zum Favoriten.</div>` +
+      cats.map(c => `<div class="mute qh" style="margin-top:8px">${ICON[c] || ''} ${c}</div><div class="chips">${rest.filter(p => p.cat === c).map(chipHtml).join('')}</div>`).join('');
   }
-  return h;
+  return h + '</div>';
 }
 function toggleQa() { const v = $('#ni') ? $('#ni').value : ''; UI.qa = !UI.qa; render(); if (v && $('#ni')) $('#ni').value = v; }
 let SUGG = [];
 const groupHead = k => {
-  if (k === '_none') return '📍 Kein aktuelles Angebot <span class="tag">normal im City-Center kaufen</span>';
+  if (k === '_none') return '📍 Ohne Angebot <span class="tag">normal im City-Center kaufen</span>';
   const st = STORE(k);
-  return { A: `🏠 ${esc(st.name)} <span class="tag t-ok">Haupteinkauf · City-Center</span>`, B: `🚶 ${esc(st.name)} <span class="tag t-warn">Spaziergang mit Rucksack · optional</span>`, C: `🚗 ${esc(st.name)} <span class="tag t-warn">Sonderfahrt · optional</span>`, D: `🏪 ${esc(st.name)} <span class="tag t-stock">optional</span>` }[st.tier];
+  return { A: `🏠 ${esc(st.short)}`, B: `🚶 ${esc(st.short)} <span class="tag t-warn">Spaziergang · optional</span>`, C: `🚗 ${esc(st.short)} <span class="tag t-warn">Sonderfahrt · optional</span>`, D: `🏪 ${esc(st.short)} <span class="tag t-stock">optional</span>` }[st.tier];
 };
+// Reihenfolge im Laden: Obst & Gemüse zuerst, dann Brot, Fleisch, Kühlregal, Tiefkühl, Vorräte, Getränke, Drogerie und Haushalt. Schweres zuletzt.
+const AISLE = { 'Obst & Gemüse': 1, 'Backwaren': 2, 'Fleisch': 3, 'Milchprodukte': 4, 'Tiefkühl': 5, 'Öle & Grundnahrung': 6, 'Eigene Produkte': 7, 'Getränke': 8, 'Drogerie & Gesundheit': 9, 'Haushalt & Wäsche': 10 };
+const AISLE_GUESS = [
+  [/obst|gemüse|salat|tomate|gurke|paprika|banane|apfel|äpfel|birne|zitrone|orange|kartoffel|zwiebel|karotte|möhre|pilz|champignon|beere|traube|melone|avocado|knoblauch|kräuter|petersilie|ingwer|zucchini|brokkoli|spinat/i, 1],
+  [/brot|brötchen|toast|baguette|kuchen|croissant|semmel|laugen|bagel/i, 2],
+  [/fleisch|hack|hähnchen|hühn|steak|schnitzel|filet|lachs|fisch|garnele|wurst|schinken|speck|salami|gulasch/i, 3],
+  [/milch|joghurt|quark|käse|butter|sahne|(^|\s)eier?(\s|$)|margarine|skyr|kefir|frischkäse|pudding/i, 4],
+  [/tiefkühl|tk-|pizza|(^|\s)eis(\s|$)|pommes|eiscreme/i, 5],
+  [/nudel|reis|mehl|zucker|öl(\s|$)|essig|soße|sauce|konserve|dose|müsli|haferflocken|cornflakes|kaffee|tee(\s|$)|salz|gewürz|honig|marmelade|nutella|schokolade|chips|nüsse|kekse|süß|linsen|bohnen|suppe|ketchup|senf|mayo/i, 6],
+  [/wasser|saft|cola|limo|bier|wein|sprudel|getränk|sekt|schorle/i, 8],
+  [/zahn|shampoo|duschgel|deo(\s|$)|seife|creme|vitamin|tablette|pflaster|rasier|tampon|binden|windel|b12|magnesium/i, 9],
+  [/waschmittel|weichspüler|spülmittel|reiniger|müllbeutel|küchen(rolle|tuch|tücher)|toilettenpapier|klopapier|servietten|alufolie|backpapier|batterie|glühbirne|schwamm/i, 10]
+];
+function aisleOf(it, p) {
+  let a = p && p.cat !== 'Eigene Produkte' ? AISLE[p.cat] : null;
+  if (!a) { const g = AISLE_GUESS.find(([r]) => r.test(it.name)); a = g ? g[1] : 7; }
+  return (itemHeavy(it, p) ? 50 : 0) + a; // Schweres (Wasser, Klopapier, Waschmittel) zuletzt
+}
+const aisleCmp = (a, b) => aisleOf(a.it, a.p) - aisleOf(b.it, b.p) || a.it.name.localeCompare(b.it.name, 'de');
+
+// Kompakte Zeile: Haken, Symbol, Name, Preis. Antippen klappt die Einzelheiten auf (gilt für Liste und Route).
+function cRow(c) {
+  const it = c.it, id = it.id, p = c.p, b = c.b, open = UI.open.has(id), heavy = c.heavy !== undefined ? c.heavy : itemHeavy(it, p), route = c.ctx === 'route';
+  const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
+  return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" onclick="toggleOpen('${id}')">
+    <button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button>
+    <span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>
+    <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${route && heavy ? ' <span title="schwer">🏋️</span>' : ''}</span>
+    <span class="pr">${right}</span><button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button></div>${open ? cDetail(c) : ''}`;
+}
+function cDetail(c) {
+  const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
+  const tip = !it.done && p ? tipFor(p.id) : null;
+  return `<div class="cdet"><div class="row nowrap" style="gap:10px">${thumb(b && b.img, iconFor(p, it.name), 'sm')}<div class="grow small">${b
+    ? `<b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b>${b.up ? ` · ${eur(b.up.v)}/${unitLbl(b.up.base)}` : ''}${b.pct != null ? ` <span class="pct ${b.dubious ? 'dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}${p ? ` <button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}${dec && dec.cls ? ` <span class="tag ${dec.cls}">${dec.tag}</span>` : ''}<div class="mute">${esc(b.name.slice(0, 44))}${b.desc ? ' · ' + esc(b.desc.slice(0, 40)) : ''}</div>`
+    : `<span class="mute">${esc(c.note || (pf ? prefNote(pf) : 'Kein aktuelles Angebot bekannt. Normal im City-Center kaufen.'))}</span>`}${c.note && b ? `<div class="mute">${esc(c.note)}</div>` : ''}</div></div>
+    ${dec ? `<div class="small" style="margin-top:6px">${esc(dec.why)}</div>` : !p ? '<div class="small mute" style="margin-top:6px">Noch kein Produkt zugeordnet. Mit 👁 wird es beobachtet und bei der nächsten Suche gefunden.</div>' : ''}
+    ${tip ? `<div class="small nxt">💡 ${esc(tipText(tip))}</div>` : ''}
+    ${!it.done ? nextLine(info ? nextHint(info) : null, `<button class="lnk" onclick="rememberItem('${id}')">📌 für nächste Woche merken</button>`) : ''}
+    ${info && info.now.length ? `<table style="margin-top:6px">${info.now.slice(0, 5).map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
+    <div class="row" style="margin-top:8px"><label class="mute"><input type="checkbox" ${it.urgent ? 'checked' : ''} onchange="urgent('${id}')" style="width:auto"> dringend</label><label class="mute"><input type="checkbox" ${itemHeavy(it, p) ? 'checked' : ''} onchange="toggleHeavy('${id}')" style="width:auto"> schwer/sperrig (zuletzt)</label></div>
+    ${it.pid ? `<div class="mute" style="margin-top:8px">Wo kaufst du das normalerweise?</div><div class="chips">${['dm', 'rewe', 'netto', 'aldi', 'lidl'].map(s => `<button class="chip ${(S.prefs[it.pid] || (pf || {}).id) === s ? 'on' : ''}" onclick="setPref('${it.pid}','${s}')">${STORE(s).short}</button>`).join('')}<button class="chip" onclick="setPref('${it.pid}','')">Egal</button></div>` : ''}
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Beobachtet' : 'Beobachten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="del('${id}')">✕ Entfernen</button></div></div>`;
+}
 V.list = () => {
   const rows = S.list.map((it, i) => { const p = it.pid ? PROD(it.pid) : null, info = p ? productInfo(p) : null; return { it, i, p, info, dec: info ? decision(info, it) : null, b: info && (info.nearBest || info.best) }; });
   const open = rows.filter(r => !r.it.done), done = rows.filter(r => r.it.done);
   const groups = {};
   open.forEach(r => { const k = r.b ? r.b.store.id : (prefOf(r.p, r.it.name) || { id: '_none' }).id; (groups[k] = groups[k] || []).push(r); });
   const order = Object.keys(groups).sort((a, b) => (a === '_none') - (b === '_none') || 'ABCD'.indexOf(STORE(a).tier) - 'ABCD'.indexOf(STORE(b).tier));
-  const row = r => {
-    const id = r.it.id, o = UI.open.has(id);
-    return `<div class="item ${r.it.done ? 'done' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}"><button class="chk ${r.it.done ? 'on' : ''}" onclick="tick('${id}')" aria-label="abhaken">${r.it.done ? '✓' : ''}</button>
-    ${thumb(r.b && r.b.img, iconFor(r.p, r.it.name), 'sm')}
-    <div class="grow"><div class="nm" onclick="toggleOpen('${id}')">${esc(r.it.name)}${r.it.qty ? ` <span class="mute">${esc(qtyLabel(r.it.qty))}</span>` : ''}${r.it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}</div>
-    ${r.b && !r.it.done ? `<div class="row small" style="margin-top:2px"><b>${eur(r.b.price)}</b>${r.p ? `<button class="info" onclick="compare('${r.p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}<span class="mute">${esc(r.b.store.short)}${r.b.up ? ' · ' + eur(r.b.up.v) + '/' + unitLbl(r.b.up.base) : ''}</span>${r.b.pct != null ? `<span class="pct ${r.b.dubious ? 'dub' : ''}">−${Math.round(r.b.pct * 100)} %</span>` : ''}${r.dec && r.dec.cls ? `<span class="tag ${r.dec.cls}">${r.dec.tag}</span>` : ''}</div>${r.b.desc ? `<div class="mute clamp">${esc(r.b.name.slice(0, 40))} · ${esc(r.b.desc.slice(0, 40))}</div>` : ''}` : ''}
-    ${!r.b && !r.it.done && prefOf(r.p, r.it.name) ? `<div class="mute small" style="margin-top:2px">${esc(prefNote(prefOf(r.p, r.it.name)))}</div>` : ''}
-    ${!r.it.done && r.p && tipFor(r.p.id) ? `<div class="small nxt">💡 ${esc(tipText(tipFor(r.p.id)))}</div>` : ''}
-    ${!r.it.done ? nextLine(r.info ? nextHint(r.info) : null, `<button class="lnk" onclick="rememberItem('${id}')">📌 für nächste Woche merken</button>`) : ''}
-    ${o ? `<div class="detail">${r.dec ? `<div>${esc(r.dec.why)}</div>` : '<div>Noch kein Produkt zugeordnet. Mit 👁 wird es beobachtet und bei der nächsten Suche gefunden.</div>'}
-      ${r.info && r.info.now.length ? `<table style="margin-top:6px">${r.info.now.slice(0, 5).map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
-      <div class="row" style="margin-top:6px"><label class="mute"><input type="checkbox" ${r.it.urgent ? 'checked' : ''} onchange="urgent('${id}')" style="width:auto"> dringend (nicht auf nächste Woche warten)</label><label class="mute"><input type="checkbox" ${itemHeavy(r.it, r.p) ? 'checked' : ''} onchange="toggleHeavy('${id}')" style="width:auto"> schwer/sperrig (zuletzt kaufen)</label><button class="btn sm" onclick="rememberItem('${id}')">📌 Für nächste Woche merken</button></div>${r.it.pid ? `<div class="mute" style="margin-top:8px">Wo kaufst du das normalerweise?</div><div class="chips">${['dm', 'rewe', 'netto', 'aldi', 'lidl'].map(s => `<button class="chip ${(S.prefs[r.it.pid] || (prefOf(r.p, r.it.name) || {}).id) === s ? 'on' : ''}" onclick="setPref('${r.it.pid}','${s}')">${STORE(s).short}</button>`).join('')}<button class="chip" onclick="setPref('${r.it.pid}','')">Egal</button></div>` : ''}</div>` : ''}</div>
-    <button class="ico ${r.p && watched(r.p.id) ? 'on' : ''}" title="Beobachten" onclick="eye('${id}')">👁</button><button class="ico" onclick="del('${id}')" title="Entfernen">✕</button></div>`;
-  };
+  order.forEach(k => groups[k].sort(aisleCmp)); // Reihenfolge wie im Laden
+  const row = r => cRow({ it: r.it, p: r.p, b: r.b, info: r.info, dec: r.dec });
   const qa = quickAdd();
   SUGG = Object.entries(S.buys).filter(([k, n]) => n >= 2 && (k.startsWith('n:') || !watched(k)) && !(k.startsWith('n:') && S.custom.some(c => c.name.toLowerCase() === k.slice(2)))).slice(0, 3);
   const help = S.hideHelp ? '' : `<div class="card help"><h3>👋 So funktioniert's</h3><ol>
-    <li><b>Liste schreiben oder sprechen:</b> oben eintippen oder 🎤 einsprechen, z. B. „Milch, Butter und 2 Paprika".</li>
+    <li><b>Liste schreiben oder sprechen:</b> unten eintippen oder 🎤 einsprechen, z. B. „Milch, Butter und 2 Paprika".</li>
     <li><b>Angebote suchen:</b> holt die aktuellen Angebote. Die App sagt dir pro Produkt, wo es am besten ist. Dein <b>City-Center Chorweiler</b> steht immer an erster Stelle.</li>
-    <li><b>👁 Beobachten:</b> Produkte, die du regelmäßig brauchst. Die App prüft sie bei jeder Suche, auch wenn sie gerade nicht auf der Liste stehen.</li>
-    <li><b>Einkauf abschließen:</b> Hake ab, was im Wagen ist. Die App merkt sich, was du oft kaufst, und schlägt es dir zum Beobachten vor.</li></ol>
+    <li><b>Produkt antippen:</b> zeigt Preis, Laden und weitere Möglichkeiten.</li>
+    <li><b>Einkauf abschließen:</b> Hake ab, was im Wagen ist. Die App merkt sich, was du oft kaufst.</li></ol>
     <button class="btn sm" onclick="S.hideHelp=true;save();render()">Verstanden</button></div>`;
   const bkDays = S.lastBackup ? Math.round((TODAY - d0(S.lastBackup)) / 864e5) : 999;
   const backupBanner = (S.bons.length + Object.keys(S.adds).length >= 5 && bkDays > 30 && !UI.hideBk) ? `<div class="banner info row sp"><span>💾 Deine Daten liegen nur auf diesem Gerät. ${S.lastBackup ? 'Letzte Sicherung vor ' + bkDays + ' Tagen.' : 'Noch keine Sicherung.'}</span><span class="row" style="gap:6px"><button class="btn sm" onclick="exp()">Jetzt sichern</button><button class="ico" onclick="UI.hideBk=true;render()" aria-label="Später">✕</button></span></div>` : '';
-  return `${help}${backupBanner}  ${open.length ? `<button class="btn pri" style="width:100%;margin:0 0 12px" onclick="go('route')">🧭 Einkaufsroute ansehen (${open.length} Artikel)</button>` : ''}
-  ${qa}
-  ${SUGG.map(([k, n], i) => `<div class="banner info row sp"><span>Du kaufst <b>${esc(k.startsWith('n:') ? k.slice(2) : (PROD(k)?.name || k))}</b> oft (${n}×). Beobachten?</span><button class="btn sm" onclick="watchKey(${i})">👁 Ja</button></div>`).join('')}
-  ${laterBlock()}
-  ${!SRC.live ? `<div class="banner">Noch keine echten Angebote geladen. Tippe oben auf <b>Angebote suchen</b>.</div>` : ''}
-  ${open.length ? order.map(k => `<h2>${groupHead(k)}</h2><div class="card tight">${groups[k].map(row).join('')}</div>`).join('') : (done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe oben ein, was du brauchst.'))}
-  ${done.length ? `<h2>🧺 Im Wagen</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Einkauf abschließen (${done.length})</button>` : ''}
-  <div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>
-  ${topSummary()}`;
+  const sugg = SUGG.map(([k, n], i) => `<div class="banner info row sp"><span>Du kaufst <b>${esc(k.startsWith('n:') ? k.slice(2) : (PROD(k)?.name || k))}</b> oft (${n}×). Beobachten?</span><button class="btn sm" onclick="watchKey(${i})">👁 Ja</button></div>`).join('');
+  const main = open.length
+    ? `<div class="lhead"><b>🛒 Meine Liste</b><span>${open.length} ${open.length === 1 ? 'Artikel' : 'Artikel'} offen · Reihenfolge wie im Laden</span></div>` + order.map(k => `<h2 class="sh">${groupHead(k)}</h2><div class="card tight main">${groups[k].map(row).join('')}</div>`).join('')
+    : (done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe unten ein, was du brauchst, oder wähle ein Hauptprodukt.'));
+  const wagen = done.length ? `<h2 class="sh">🧺 Im Wagen</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Einkauf abschließen (${done.length})</button>` : '';
+  const live = !SRC.live ? `<div class="banner">Noch keine echten Angebote geladen. Tippe oben auf <b>Angebote suchen</b>.</div>` : '';
+  // Liste zuerst. Ist sie leer, kommen Anleitung und Schnell-Hinzufügen nach oben, sonst darunter.
+  return open.length
+    ? `${main}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>${topSummary()}`
+    : `${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${main}${wagen}<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>${topSummary()}`;
 };
 function offersFiltered() {
   const q = UI.q.toLowerCase().trim(); return OFFERS_ALL().filter(o => !q || (o.name + ' ' + (o.desc || '') + ' ' + o.store.short + ' ' + (o.p ? o.p.name : '')).toLowerCase().includes(q));
@@ -389,6 +425,7 @@ V.pro = () => {
     ['A', 'B', 'D'].map(t => `<h3 style="margin:14px 4px 6px"><i class="dot t${t}"></i> ${TIER_LABEL[t]}</h3>` + STORES.filter(s => s.tier === t && s.links.length).map(card).join('')).join('');
 };
 V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow">Bon fotografieren: Die App liest ihn, lernt, wo du was kaufst, und findet Spartipps.<div class="mute"><button class="lnk" onclick="bonList()">${S.bons.length} Bons gespeichert, ansehen</button> · 📷 Foto-Lesen: ${aiKey() ? '✓ eingerichtet' : 'noch nicht eingerichtet'} <button class="lnk" onclick="aiSheet()">${aiKey() ? 'ändern' : 'einrichten'}</button></div></div><button class="btn pri sm" onclick="go('bon')">📷 Bon</button></div>
+  <h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
   <h2>Datenstand</h2><div class="card"><div>${SRC.live ? `Letzte Suche: <b>${new Date(SRC.fetched).toLocaleString('de-DE')}</b><br><span class="mute">${SRC.offers.length} Angebote · ${esc(SRC.source)}</span>` : 'Noch keine Suche. Tippe oben auf „Angebote suchen".'}</div>
   <div class="mute" style="margin-top:8px">Wichtig: Die Angebote sind Händler-weit. Ob genau deine Filiale in Chorweiler mitmacht, wird nicht geprüft. <b>ALDI SÜD</b> kommt direkt von der ALDI-Webseite: ${SRC.aldi && SRC.aldi.ok ? '✓ ' + SRC.aldi.count + ' Produkte geladen' : '⚠ aktuell nicht geladen' + (SRC.aldi && SRC.aldi.error ? ' (' + esc(SRC.aldi.error) + ')' : '') + ', bitte Prospekt-Link bei Läden nutzen'}. Abgedeckt sind REWE, Netto, Lidl, METRO, ALDI und teilweise dm. Penny ist bewusst nicht dabei.</div></div>
   <h2>Läden</h2>${['A', 'B', 'D'].map(t => `<div class="card"><h3><i class="dot t${t}"></i>${TIER_LABEL[t]}</h3>${STORES.filter(s => s.tier === t).map(s => `<details style="margin-top:8px"><summary><b>${esc(s.short)}</b> <span class="mute">${t === 'A' ? '3 Min zu Fuß' : t === 'B' ? s.walk + ' Min zu Fuß' : s.car ? 'ca. ' + s.car + ' Min Auto' : ''}</span></summary><div class="mute" style="padding:6px 0">${esc(s.addr)}<br>Öffnungszeiten: ${esc(s.hours)}${s.transit ? '<br>' + esc(s.transit) : ''}${s.note ? '<br>' + esc(s.note) : ''}</div><div class="row">${s.links.map(l => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join(' · ')}</div></details>`).join('')}</div>`).join('')}
@@ -400,7 +437,7 @@ V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow
   <label class="f">gültig bis<input id="mv" type="date"></label></div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="addOffer()">Speichern</button><span class="mute">Merkt sich den Preis auch als dein Referenzpreis.</span></div>
   ${S.manual.map((o, i) => `<div class="item"><div class="grow">${esc(o.name)} · ${eur(o.price)} · ${esc(STORE(o.store).short)}</div><button class="ico" onclick="delOffer(${i})">✕</button></div>`).join('')}</div>
   <h2>Einstellungen</h2><div class="card"><div class="fgrid"><label class="f">Wert deiner Zeit (€/Std.)<input type="number" id="sh" value="${S.set.hourly}"></label><label class="f">Vorrat ab … % Ersparnis<input type="number" id="sp" value="${S.set.stockPct}"></label><label class="f">Max. Autofahrt (Min)<input type="number" id="sc" value="${S.set.carMax}"></label><label class="f">Spartipp ab … % günstiger<input type="number" id="st" value="${S.set.tipPct}"></label></div><button class="btn" style="margin-top:10px" onclick="saveSet()">Speichern</button></div>
-  <h2>Sicherung</h2><div class="card row"><button class="btn" onclick="exp()">Exportieren</button><button class="btn" onclick="$('#imp').click()">Importieren</button><input id="imp" type="file" accept=".json" hidden onchange="imp(this)"><button class="btn danger" onclick="if(confirm('Alle Daten dieser App löschen?')){localStorage.removeItem(LS);location.reload()}">Alles löschen</button></div>`;
+  <h2>Zurücksetzen</h2><div class="card row"><button class="btn danger" onclick="if(confirm('Alle Daten dieser App löschen? Mach vorher eine Sicherung.')){localStorage.removeItem(LS);location.reload()}">Alles löschen</button></div>`;
 
 /* ================= Aktionen ================= */
 function toast(t) { feedbackText(esc(t)); } // alle Meldungen erscheinen in der festen Leiste über dem Menü
@@ -687,7 +724,7 @@ function eye(id) { const i = byId(id); if (!i) return; if (!i.pid) { const c = m
 function watchP(id, noRender) { S.watch = watched(id) ? S.watch.filter(x => x !== id) : [...S.watch, id]; save(); if (!noRender) { render(); } }
 function addCustom() { const v = $('#wn').value.trim(); if (!v) return; const c = mkCustom(v); if (!watched(c.id)) S.watch.push(c.id); save(); render(); toast('„' + v + '" wird beobachtet. Tippe oben auf „Angebote suchen".'); }
 function watchKey(i) { const k = SUGG[i][0]; if (k.startsWith('n:')) { const c = mkCustom(k.slice(2)); if (!watched(c.id)) S.watch.push(c.id); } else if (!watched(k)) S.watch.push(k); S.buys[k] = 0; save(); render(); }
-function finish() { S.list.filter(i => i.done).forEach(i => { const k = i.pid || 'n:' + i.name.toLowerCase(); S.buys[k] = (S.buys[k] || 0) + 1; }); S.list = S.list.filter(i => !i.done);
+function finish() { S.list.filter(i => i.done).forEach(i => { const k = i.pid || 'n:' + i.name.toLowerCase(); S.buys[k] = (S.buys[k] || 0) + 1; if (i.pid) noteRec(i.pid, isoDay(TODAY)); }); S.list = S.list.filter(i => !i.done);
   const auto = [];
   Object.entries(S.buys).forEach(([k, n]) => { // was du oft kaufst, wird automatisch dauerhaft beobachtet
     if (n < 3) return; let id = k;
@@ -703,8 +740,23 @@ function addOffer() {
 }
 const delOffer = i => { S.manual.splice(i, 1); CACHE = null; save(); render(); };
 function saveSet() { S.set = { ...S.set, hourly: +$('#sh').value || 15, stockPct: +$('#sp').value || 20, carMax: +$('#sc').value || 25, tipPct: +$('#st').value || 20 }; save(); render(); toast('Gespeichert'); }
-function exp() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' })); a.download = 'einkauf-daten.json'; a.click(); S.lastBackup = isoDay(TODAY); save(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
-function imp(el) { const f = el.files[0]; if (f) f.text().then(t => { try { S = sanitize(JSON.parse(t)); S.custom.forEach(regCustom); repairRefs(); CACHE = null; save(); render(); } catch (e) { alert('Ungültige Datei'); } }); }
+async function exp() { // alle Daten in eine Datei: teilen (z. B. an ein anderes Handy) oder herunterladen
+  const name = 'einkauf-daten-' + isoDay(TODAY) + '.json', json = JSON.stringify({ app: 'intelligente-einkaufsliste', exportiert: new Date().toISOString(), daten: S }, null, 1);
+  const file = new File([json], name, { type: 'application/json' });
+  const done = () => { S.lastBackup = isoDay(TODAY); save(); render(); feedbackText('✓ Daten exportiert: ' + esc(name)); };
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Einkaufsliste Sicherung' }); return done(); } } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); done();
+}
+function imp(el) {
+  const f = el.files[0]; el.value = ''; if (!f) return;
+  f.text().then(t => {
+    let j; try { j = JSON.parse(t); } catch (e) { return alert('Das ist keine gültige Sicherungsdatei.'); }
+    const n = sanitize(j && j.app === 'intelligente-einkaufsliste' && j.daten ? j.daten : j);
+    if (!n.list.length && !n.bons.length && !Object.keys(n.adds).length && !n.custom.length) return alert('In dieser Datei habe ich keine Einkaufsdaten gefunden.');
+    if (!confirm(`Diese Daten übernehmen?\n\n${n.list.length} Artikel auf der Liste\n${n.bons.length} gespeicherte Bons\n${n.watch.length} beobachtete Produkte\n\nDas ersetzt die Daten auf diesem Gerät.`)) return;
+    S = n; S.custom.forEach(regCustom); repairRefs(); CACHE = null; save(); render(); feedbackText('✓ Daten importiert.');
+  }).catch(() => alert('Die Datei konnte nicht gelesen werden.'));
+}
 const setOff = k => { UI.offers = k; UI.more = false; render(); };
 const setWege = k => { UI.wege = k; render(); };
 

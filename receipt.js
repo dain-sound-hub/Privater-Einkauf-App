@@ -6,7 +6,7 @@ const BON_STORES = [[/\brewe\b/i, 'rewe'], [/netto\s*marken|\bnetto\b/i, 'netto'
 const BON_NAMES = { kaufland: 'Kaufland', penny: 'Penny', edeka: 'EDEKA', rossmann: 'Rossmann', mediamarkt: 'MediaMarkt', unbekannt: 'Unbekannt' };
 const bonStoreName = id => (STORES.find(s => s.id === id) || {}).short || BON_NAMES[id] || id;
 const SKIP_RX = /^(?:betrag|zwischensumme|mwst|ust|steuer|netto-?warenwert|nettowert|brutto|incl|inkl|davon|bar|ec|girocard|maestro|visa|mastercard|karte|kartenzahlung|contactless|zahlung|r(?:ü|ue)ckgeld|zur(?:ü|ue)ck|gegeben|geg|bonus|payback|punkte|filiale|kasse|bediener|kassierer|beleg|bon|tel|telefon|datum|uhrzeit|trace|terminal|genehmigung|vielen dank|danke|www|http|tse|seriennummer|kundenbeleg|ihr einkauf|ersparnis|anzahl|artikel|eur|uid|ust-?id|steuernr|plz)\b/i;
-const TOTAL_RX = /^\W*(summe|gesamt(?:betrag)?|total|zu zahlen|zahlbetrag)\b.*?(-?\d{1,5}[.,]\d{2})\s*(?:€|eur)?\s*$/i;
+const TOTAL_RX = /^\W*(summe|gesamt(?:betrag)?|total|zu zahlen|zahlbetrag)\b.*?(-?\d{1,5}[.,]\d{2})\s*(?:€|eur)?\W*$/i;
 const LINE_RX = /^(.*?)\s+(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?(?:\s*(?:[A-Za-z]|\d))?(?:\s*\*)?\s*$/;
 const QTY_RX = /^(\d+)\s*(?:x|×|\*|stk\.?\s*x)\s*(\d{1,4}[.,]\d{2})(?:\s*(?:€|eur))?(?:\s+(\d{1,4}[.,]\d{2}))?\s*[A-Za-z*]?$/i;
 const WEIGHT_RX = /^(\d+[.,]\d{1,3})\s*kg\s*(?:x|×)\s*(\d{1,4}[.,]\d{2})/i;
@@ -15,7 +15,7 @@ function detectStore(t) { const h = BON_STORES.find(([rx]) => rx.test(t)); retur
 function detectDate(lines) {
   const cand = [...lines.filter(l => /datum|date/i.test(l)), ...lines];
   for (const l of cand) {
-    let m = l.match(/(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})\b/);
+    let m = l.match(/(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})\b/);
     if (m) { const y = m[3].length === 2 ? 2000 + +m[3] : +m[3], mo = +m[2], d = +m[1]; if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && y >= 2000 && y <= 2100) return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`; }
     m = l.match(/(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0];
   }
@@ -38,8 +38,9 @@ function classifyBon(name, price) {
   if (/pfand|leergut|einweg|mehrweg/i.test(name)) return 'pfand';
   return 'item';
 }
+const cleanTranscript = s => String(s || '').replace(/\r/g, '').replace(/```[a-z]*/gi, '').replace(/\*\*|__/g, '').replace(/\|/g, ' ').replace(/^[ \t]*[-•]\s+/gm, '');
 function parseReceipt(text) {
-  const lines = String(text || '').replace(/\r/g, '').split('\n').map(s => s.replace(/[ \t]+/g, ' ').trim().slice(0, 160)).filter(Boolean).slice(0, 400);
+  const lines = cleanTranscript(text).split('\n').map(s => s.replace(/[ \t]+/g, ' ').trim().slice(0, 160)).filter(Boolean).slice(0, 400);
   const out = { store: detectStore(lines.slice(0, 14).join('\n')) || detectStore(lines.join('\n')), date: detectDate(lines), total: null, items: [], skipped: [] };
   let pending = null, last = null;
   const push = (name, qty, price, unit) => { const it = { raw: name, name: cleanBonName(name), qty, price, unit: unit || null, kind: classifyBon(name, price), include: true, pid: null, how: '' }; it.pack = packOf(it.name); out.items.push(it); last = it; pending = null; };
@@ -82,6 +83,7 @@ function matchBonItem(it) {
     let best = null, len = 0;
     for (const p of PRODUCTS) { const m = rx(p).exec(it.name); if (m && m[0].length > len) { best = p; len = m[0].length; } }
     if (best) { it.pid = best.id; it.how = 'erkannt'; return it; }
+    const bm = brandMap(); for (const w of key.split(' ')) if (w.length >= 4 && bm[w] && PROD(bm[w])) { it.pid = bm[w]; it.how = 'Marke'; return it; }
   }
   const sg = key.length >= 3 ? suggestFor(key, 1)[0] : null;
   if (sg && sg.pid && sg.score >= 72) { it.pid = sg.pid; it.how = 'ähnlich'; }
@@ -174,7 +176,7 @@ function bonView() {
     const p = it.pid ? PROD(it.pid) : null, plan = p && it.kind === 'item' ? bonPlanNote(it, p, b.store) : '';
     return `<div class="item"><input type="checkbox" ${it.include ? 'checked' : ''} onchange="BON.parsed.items[${i}].include=this.checked;render()" aria-label="Zeile übernehmen" style="width:20px;height:20px;flex:none">
       <div class="grow"><div class="nm" style="cursor:default">${esc(it.name)}${it.qty > 1 ? ` <span class="mute">× ${it.qty}</span>` : ''}${it.pack ? ` <span class="mute">· ${esc(packLabel(it.pack.base, it.pack.amount))}</span>` : ''}</div>
-      ${it.kind === 'pfand' ? '<span class="tag">Pfand</span>' : p ? `<button class="tag t-ok" onclick="bonAssign(${i})">✓ ${esc(p.name)}${it.how === 'ähnlich' ? ' (ähnlich, bitte prüfen)' : ''}</button>` : `<button class="tag t-warn" onclick="bonAssign(${i})">❓ Produkt nicht erkannt · zuordnen</button>`}
+      ${it.kind === 'pfand' ? '<span class="tag">Pfand</span>' : p ? `<button class="tag t-ok" onclick="bonAssign(${i})">✓ ${esc(p.name)}${it.how === 'ähnlich' ? ' (ähnlich, bitte prüfen)' : it.how === 'KI' ? ' (Vorschlag der KI, bitte prüfen)' : it.how === 'Marke' ? ' (an der Marke erkannt)' : ''}</button>` : it.sugPid && PROD(it.sugPid) ? `<button class="tag t-warn" onclick="bonSetPid(${i},'${it.sugPid}')">💡 Vielleicht „${esc(PROD(it.sugPid).name)}“? Antippen zum Übernehmen</button> <button class="lnk" onclick="bonAssign(${i})">anders zuordnen</button>` : `<button class="tag t-warn" onclick="bonAssign(${i})">❓ Produkt nicht erkannt · zuordnen</button>${it.what ? `<div class="mute small">Vermutlich: ${esc(it.what)}</div>` : ''}`}
       ${plan ? `<div class="mute small">${plan}</div>` : ''}</div><b>${eur(netPrice(it))}</b></div>`;
   };
   return `${back}<div class="card"><h3>🧾 Bon gelesen</h3><div class="fgrid" style="margin-top:8px"><label class="f">Laden<select id="bs" onchange="BON.parsed.store=this.value">${b.store ? '' : '<option value="">– bitte wählen –</option>'}${stores.map(s => `<option value="${s.id}" ${s.id === b.store ? 'selected' : ''}>${esc(s.short || s.name)}</option>`).join('')}</select></label><label class="f">Datum<input id="bd" type="date" value="${b.date || ''}" onchange="BON.parsed.date=this.value"></label></div><div class="small" style="margin-top:8px">${esc(sumLine)}</div></div>
@@ -203,7 +205,7 @@ function bonCheck(b, diff) { // prüft nach dem Foto-Lesen, ob wirklich alles ge
   if (!b.date) why.push('Das Datum wurde nicht gefunden.');
   if (BON.dupWarn) why.push(BON.dupWarn);
   if (!why.length) return '<div class="card" style="border-color:var(--ok,#2e9e5b)"><b>✓ Alles gelesen:</b> Die Summe stimmt mit den Positionen überein.</div>';
-  return `<div class="card help"><b>⚠ Nicht sicher, ob alles gelesen wurde</b><ul class="small">${why.map(w => '<li>' + esc(w) + '</li>').join('')}</ul><div class="row"><button class="btn sm pri" onclick="bonAddTo('${BON.cur}')">📷 Foto ergänzen</button></div></div>`;
+  return `<div class="card help"><b>⚠ Nicht sicher, ob alles gelesen wurde</b><ul class="small">${why.map(w => '<li>' + esc(w) + '</li>').join('')}</ul><div class="row"><button class="btn sm pri" onclick="bqReread('${BON.cur}')">🔄 Nochmal lesen</button><button class="btn sm" onclick="bonAddTo('${BON.cur}')">📷 Foto ergänzen</button></div></div>`;
 }
 function bonRead() {
   const t = $('#bt') ? $('#bt').value : BON.text; BON.text = t;
@@ -340,16 +342,16 @@ async function geminiModels(key) { // Flash-Modelle, die dein Schlüssel nutzen 
   if (!list.length) throw new Error('Für diesen Schlüssel habe ich kein passendes Lese-Modell gefunden.');
   lsSet(AI_MODELS_STORE, JSON.stringify(list)); return list;
 }
-async function aiAsk(images, text, maxTokens) { // images: Liste base64-JPEG; gibt den Antworttext zurück
+async function aiAsk(images, text, maxTokens, avoid) { // images: Liste base64-JPEG; gibt den Antworttext zurück
   const key = aiKey(); if (!key) throw new Error('Foto-Lesen ist noch nicht eingerichtet.');
   if (aiProv() === 'anthropic') {
     const j = await aiFetch(AI_URL, { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
       { model: AI_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: [...images.map(d => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: d } })), { type: 'text', text }] }] });
     return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
   }
-  const models = await geminiModels(key), body = { contents: [{ role: 'user', parts: [...images.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })), { text }] }], generationConfig: { temperature: 0, maxOutputTokens: Math.max(maxTokens, 4000) } };
+  const models = await geminiModels(key), body = { contents: [{ role: 'user', parts: [...images.map(d => ({ inline_data: { mime_type: 'image/jpeg', data: d } })), { text }] }], generationConfig: { temperature: 0, maxOutputTokens: Math.max(maxTokens, 8192) } };
   // Reihenfolge: alle Modelle einmal, dann nach einer Pause die ersten beiden noch einmal (höchstens 8 Versuche)
-  const order = [...models, ...models.slice(0, 2)].slice(0, 8), diag = []; let last = null;
+  const ranked = [...models.filter(x => x !== avoid), ...models.filter(x => x === avoid)], order = [...ranked, ...ranked.slice(0, 2)].slice(0, 8), diag = []; let last = null;
   for (let i = 0; i < order.length; i++) {
     const model = order[i];
     if (i === models.length) { aiNote('Google ist ausgelastet. Kurze Pause, dann neuer Versuch …'); await sleepMs(8000); }
@@ -359,7 +361,8 @@ async function aiAsk(images, text, maxTokens) { // images: Liste base64-JPEG; gi
       const out = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('\n').trim();
       if (!out && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Google hat das Bild abgelehnt. Mach bitte ein neues Foto.');
       if (!out) { const e = new Error('Google hat keine Antwort geliefert.'); e.status = 500; throw e; }
-      return out;
+      if (j.candidates[0].finishReason === 'MAX_TOKENS') { const e = new Error('Die Abschrift wurde abgeschnitten.'); e.status = 500; throw e; }
+      aiAsk.meta = { model }; return out;
     } catch (e) {
       last = e; diag.push(model.replace('gemini-', '') + ': ' + (e.status || 'Zeit') + (e.raw ? ' ' + e.raw.slice(0, 70) : ''));
       if (e.status === 404) { lsSet(AI_MODELS_STORE, ''); continue; } // Modell gibt es nicht mehr: beim nächsten Mal neu suchen
@@ -460,10 +463,13 @@ async function bqRun(force) {
       let stop = false;
       try {
         const fotos = await bqFotosGet(m.id); if (!fotos.length) throw Object.assign(new Error('Das Foto fehlt.'), { fatal: true });
-        const text = await aiAsk(fotos, AI_PROMPT, 2500);
+        let text = await aiAsk(fotos, AI_PROMPT, 2500);
         if (!text || /^\W*NICHT_LESBAR/i.test(text)) throw Object.assign(new Error('Auf dem Foto war kein Bon lesbar. Neues Foto machen oder löschen.'), { fatal: true });
-        const parsed = parseReceipt(text);
+        let parsed = parseReceipt(text);
         if (!parsed.items.length) throw Object.assign(new Error('Keine Positionen erkannt. Schärferes, näheres Foto machen.'), { fatal: true });
+        if (parsed.total == null) { // unten fehlt etwas: mit einem anderen Modell noch einmal versuchen und das vollständigere nehmen
+          try { const t2 = await aiAsk(fotos, AI_PROMPT + ' Do not stop early: the transcription must include the last lines (SUMME/total, payment and date).', 2500, aiAsk.meta && aiAsk.meta.model), p2 = parseReceipt(t2); if (p2.total != null || p2.items.length > parsed.items.length) { text = t2; parsed = p2; } } catch (e) { /* erstes Ergebnis behalten */ }
+        }
         Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '', warn: '' }); bqDupCheck(m, parsed);
         if (!(typeof cur !== 'undefined' && cur === 'bon')) feedbackText(m.status === 'doppelt' ? '🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.' : '✓ Ein Bon wurde gelesen. Unter Mehr → 📷 Bon kannst du ihn prüfen.');
       } catch (e) {
@@ -471,6 +477,7 @@ async function bqRun(force) {
         else { m.status = 'wartet'; m.err = e.message; stop = true; if (/Schlüssel|Guthaben|eingerichtet/.test(e.message)) BQ.keyProblem = e.message; else BQ.cool = Date.now(); }
       }
       await bqSaveMeta(m); bqChanged();
+      if (m.status === 'gelesen') await bqAiMatch(m);
       if (stop) break;
     }
   } finally { BQ.running = false; bqChanged(); }
@@ -502,12 +509,13 @@ async function bqStorageInfo() {
 }
 async function bonOpen(id) {
   const m = BQ.list.find(x => x.id === id); if (!m || !m.text) return;
-  BON.text = m.text; BON.parsed = parseReceipt(m.text); BON.lowRead = m.lowRead || 0; BON.cur = id; BON.fromPhoto = true; BON.err = ''; BON.allowDup = !!m.allowDup; BON.dupWarn = m.warn || '';
+  BON.text = m.text; BON.parsed = parseReceipt(m.text); if (m.ai) bonApplyAi(BON.parsed.items, m.ai); BON.lowRead = m.lowRead || 0; BON.cur = id; BON.fromPhoto = true; BON.err = ''; BON.allowDup = !!m.allowDup; BON.dupWarn = m.warn || '';
   BON.curPhotos = await bqFotosGet(id); render(); scrollTo(0, 0);
 }
 function bonClose() { BON.parsed = null; BON.cur = null; BON.fromPhoto = false; BON.curPhotos = []; BON.text = ''; render(); }
 function bonAddTo(id) { BON.addTo = id; BON.parsed = null; BON.cur = null; BON.fromPhoto = false; BON.curPhotos = []; BON.photos = []; render(); scrollTo(0, 0); feedbackText('Mach ein Foto vom fehlenden Teil und tippe auf „Zum Bon hinzufügen“.'); }
-const bonPhotosView = () => BON.curPhotos.length ? `<details class="card tight"><summary class="mute">📄 Foto vom Bon ansehen (${BON.curPhotos.length})</summary><div style="margin-top:8px">${BON.curPhotos.map((d, i) => `<img src="data:image/jpeg;base64,${d}" alt="Bon-Foto ${i + 1}" style="width:100%;border-radius:10px;margin-bottom:8px">`).join('')}</div></details>` : '';
+const bonTextView = () => BON.fromPhoto && BON.text ? `<details class="card tight"><summary class="mute">🔎 Was die KI gelesen hat (Text)</summary><pre class="small" style="white-space:pre-wrap;margin:8px 0 0">${esc(BON.text)}</pre></details>` : '';
+const bonPhotosView = () => bonTextView() + (BON.curPhotos.length ? `<details class="card tight"><summary class="mute">📄 Foto vom Bon ansehen (${BON.curPhotos.length})</summary><div style="margin-top:8px">${BON.curPhotos.map((d, i) => `<img src="data:image/jpeg;base64,${d}" alt="Bon-Foto ${i + 1}" style="width:100%;border-radius:10px;margin-bottom:8px">`).join('')}</div></details>` : '');
 async function bqShow(id) {
   const f = await bqFotosGet(id);
   $('#sheetbox').innerHTML = `<div class="row sp"><h3>Foto vom Bon</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>${f.length ? f.map((d, i) => `<img src="data:image/jpeg;base64,${d}" alt="Bon-Foto ${i + 1}" style="width:100%;border-radius:10px;margin-top:8px">`).join('') : '<div class="mute">Das Foto ist nicht mehr gespeichert.</div>'}`;
@@ -565,3 +573,44 @@ function bqDupCheck(m, parsed) { // nach dem Lesen: ist das derselbe Bon wie ein
 }
 async function bqForce(id) { const m = BQ.list.find(x => x.id === id); if (!m || !m.text) return; m.status = 'gelesen'; m.allowDup = true; m.warn = ''; await bqSaveMeta(m); bonOpen(id); }
 function bonList() { go('bon'); setTimeout(() => { const e = document.getElementById('bonlist'); if (e) e.scrollIntoView(); }, 120); }
+async function bqReread(id) { const m = BQ.list.find(x => x.id === id); if (!m) return; const f = await bqFotosGet(id); if (!f.length) return feedbackText('Das Foto ist nicht mehr da. Mach ein neues Foto.', true); Object.assign(m, { status: 'wartet', text: '', warn: '', err: '', ai: null, aiDone: false }); await bqSaveMeta(m); bonClose(); feedbackText('Der Bon wird nochmal gelesen.'); BQ.cool = 0; bqRun(true); }
+
+/* ---------- Unbekannte Bon-Namen (Marken) erkennen: Marken-Wörterbuch aus den Angeboten + KI-Vorschlag ---------- */
+const BRAND_SKIP = new Set(['bio', 'frische', 'frisch', 'deutsche', 'deutscher', 'deutsches', 'premium', 'aktion', 'angebot', 'neu', 'original', 'classic', 'natur', 'fein', 'vegan', 'regional', 'gold', 'plus', 'extra', 'mini', 'maxi', 'super', 'mega', 'gutes']);
+let BRANDMAP = null, BRANDKEY = '';
+function brandMap() { // „Vittel → Stilles Wasser": lernt jeden Tag aus den Angeboten, welche Marke zu welchem Produkt gehört
+  const all = OFFERS_ALL(), key = String(SRC.fetched || '') + ':' + all.length + ':' + PRODUCTS.length; if (BRANDMAP && key === BRANDKEY) return BRANDMAP;
+  const cnt = {};
+  for (const o of all) {
+    if (!o.p) continue; const w = bonKey(o.name).split(' ')[0];
+    if (!w || w.length < 4 || BRAND_SKIP.has(w) || rx(o.p).test(w)) continue; // Produktwörter selbst sind keine Marke
+    const c = cnt[w] = cnt[w] || {}; c[o.p.id] = (c[o.p.id] || 0) + 1;
+  }
+  const map = {};
+  for (const [w, c] of Object.entries(cnt)) { const tot = Object.values(c).reduce((a, b) => a + b, 0), top = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; if (tot >= 2 && top[1] / tot >= 0.8) map[w] = top[0]; }
+  BRANDKEY = key; return BRANDMAP = map;
+}
+function bonApplyAi(items, ai) { // KI-Vorschläge auf noch unbekannte Zeilen anwenden: sicher = zuordnen, sonst nur vorschlagen
+  items.forEach(it => {
+    if (it.kind !== 'item' || it.pid) return; const a = ai[bonKey(it.name)]; if (!a) return;
+    const p = a.pid ? PROD(a.pid) : null;
+    if (p && a.c === 'high') { it.pid = p.id; it.how = 'KI'; } else if (p) it.sugPid = p.id;
+    if (a.w) it.what = a.w;
+  });
+}
+async function bqAiMatch(m) { // fragt die KI (nur Namen, keine Preise, kein Foto) nach den unbekannten Zeilen
+  if (m.aiDone || !m.text) return;
+  const parsed = parseReceipt(m.text), unk = [...new Set(parsed.items.filter(i => i.kind === 'item' && !i.pid).map(i => i.name))].slice(0, 25);
+  if (!unk.length) { m.aiDone = true; return; }
+  const prompt = `German supermarket receipt, store: ${bonStoreName(parsed.store || 'unbekannt')}. The names on the receipt are abbreviated and may be only a brand name. Our product list: ${PRODUCTS.filter(p => !p.custom).map(p => p.name).join('; ')}.\n` +
+    `For each receipt name decide which product from the list it is. If it is none of them, set "p" to null. Answer ONLY with a JSON array, no other text: [{"n":"<name exactly as given>","p":"<exact product name from the list or null>","c":"high|medium|low","w":"<what it is in German, max 5 words>"}].\nNames: ${JSON.stringify(unk)}`;
+  try {
+    const out = await aiAsk([], prompt, 1500), arr = JSON.parse((out.match(/\[[\s\S]*\]/) || ['[]'])[0]); m.ai = m.ai || {};
+    arr.forEach(r => {
+      if (!r || typeof r.n !== 'string') return;
+      const p = typeof r.p === 'string' ? PRODUCTS.find(x => x.name.toLowerCase() === r.p.toLowerCase()) : null;
+      m.ai[bonKey(r.n)] = { pid: p ? p.id : null, c: ['high', 'medium', 'low'].includes(r.c) ? r.c : 'low', w: String(r.w || '').slice(0, 40) };
+    });
+    m.aiDone = true; await bqSaveMeta(m); bqChanged();
+  } catch (e) { /* Vorschlag ist nur ein Zusatz: bei Fehler bleibt es beim manuellen Zuordnen */ }
+}
