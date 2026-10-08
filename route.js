@@ -85,7 +85,7 @@ function planRoute() {
     put(r, id);
     centerIds.sort((a, b) => hv(a) - hv(b) || byStore[b].length - byStore[a].length);
   }
-  const mk = id => { const items = byStore[id].slice().sort((a, b) => aisleOf(a.it, a.p) - aisleOf(b.it, b.p) || a.it.name.localeCompare(b.it.name, 'de')); return { store: STORE(id), kind: id === 'lidl' ? 'lidl' : 'center', items, heavyCount: items.filter(x => x.heavy).length }; };
+  const mk = id => { const items = byStore[id].slice().sort(aisleCmp); return { store: STORE(id), kind: id === 'lidl' ? 'lidl' : 'center', items, heavyCount: items.filter(x => x.heavy).length }; };
   const stops = [];
   if (byStore.lidl && byStore.lidl.length) stops.push(mk('lidl'));
   centerIds.forEach(id => byStore[id] && byStore[id].length && stops.push(mk(id)));
@@ -116,13 +116,13 @@ function routeView() {
       hint = i === 0 ? '3 Min von zu Hause' : plan.stops[i - 1].kind === 'lidl' ? 'zurück im City-Center' : 'ca. 2 Min weiter';
       if (s.heavyCount) hint += i === last ? ' · Schweres zuletzt, danach nach Hause' : ' · enthält Schweres';
     }
-    return `<div class="card tight stop" style="--sc:${storeColor(s.store.id)}"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.short)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
+    return `<div class="card tight stop" data-store="${s.store.id}" style="--sc:${storeColor(s.store.id)}"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.short)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
       <div class="mute small" style="margin:0 0 4px">${esc(hint)}</div>${s.items.map(row).join('')}</div>`;
   }).join('');
-  return `<div class="lhead"><b>🧭 Einkaufsroute</b><span class="lact"><button class="plus" onclick="iaOpen()" aria-label="Artikel hinzufügen">+</button></span><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min${shortOn() ? ' · ⚡ Kurzeinkauf' : ''}</span></div>${iaRow()}
+  return `<div class="lhead"><b>🧭 Einkaufsroute</b><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min${shortOn() && S.short.view !== 'all' ? ' · ⚡ Kurzliste' : ''}</span></div>${shortSeg()}
   ${cards}
   <div class="mute small" style="text-align:center;margin:2px 0 10px">🏠 Danach nach Hause · ca. 3 Min · in jedem Laden: Obst &amp; Gemüse zuerst, Schweres zuletzt</div>
-  <div class="row" style="justify-content:center;gap:8px"><button class="btn sm" onclick="copyRoute()">Route kopieren</button><button class="btn sm" onclick="go('list')">← Zur Liste</button><button class="btn sm" onclick="go('bon')">🧾 Kassenbon</button></div>
+  ${plusBtn()}<div class="row" style="justify-content:center;gap:8px"><button class="btn sm" onclick="copyRoute()">Route kopieren</button><button class="btn sm" onclick="go('list')">← Zur Liste</button><button class="btn sm" onclick="go('bon')">🧾 Kassenbon</button></div>
   <details class="card tight" style="margin-top:12px"><summary class="mute">Einstellungen &amp; Hinweise</summary>
     ${plan.lidlPossible || mode !== 'auto' ? SEG(mode, [['auto', 'Lidl: Automatisch'], ['ja', 'Lidl: Ja'], ['nein', 'Lidl: Nein']], 'setLidl') + `<div class="mute small" style="margin:-6px 4px 8px">${mode === 'auto' ? 'Lidl wird nur eingeplant, wenn du dort mindestens 1,50 € sparst.' : mode === 'ja' ? 'Lidl wird eingeplant, sobald es dort etwas Günstigeres für leichte Artikel gibt.' : 'Lidl wird nicht eingeplant.'}</div>` : ''}
     <div class="mute small" style="padding:4px 0 8px">Reihenfolge: Leichtes zuerst, Schweres und Sperriges (Wasser, Klopapier, Küchentücher, Waschmittel) zuletzt. Ob ein Artikel als „schwer“ gilt, änderst du beim Artikel nach dem Antippen.</div></details>`;

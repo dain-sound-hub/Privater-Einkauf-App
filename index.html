@@ -214,6 +214,34 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .crow{gap:5px}.crow .nm{font-size:19px;letter-spacing:.2px}.crow .chev{width:18px;margin-right:-4px}.crow .chk{width:32px;height:32px}.crow .rm{width:22px;margin-left:-3px}.crow .pr{font-size:13.5px}
 @media (pointer:coarse){.crow .chk{width:32px;height:32px}}
 .crow .rm{margin-left:0;margin-right:-1px}.crow .chk{margin-left:0}
+/* Eingabefenster (Plus), Kurzliste-Umschalter, Plus-Knopf unter der Liste */
+.dock:not(.open) .dockhead,.dock:not(.open) .dockrow,.dock:not(.open) .sug,.dock:not(.open) .dockhint{display:none!important}
+.dock:not(.open):not(:has(#fb:not([hidden]))){display:none}
+.dockhead{display:none;align-items:center;justify-content:space-between;padding:2px 4px 6px}.dock.open .dockhead{display:flex}
+.dockhead b{font-family:var(--comic);font-weight:400;font-size:20px;letter-spacing:1px;text-transform:uppercase}
+.dock.open{border:2px solid var(--acc);padding:8px 10px 10px;background:var(--paper)}
+.dockhint{font-size:12px;color:var(--mute);padding:4px 4px 0}
+.fabrow{display:flex;justify-content:center;margin:14px 0 6px}
+.fab{width:62px;height:62px;border-radius:50%;border:0;background:linear-gradient(var(--acc-l),var(--acc));color:#fff;font-size:40px;line-height:1;font-weight:700;padding:0 0 5px;box-shadow:0 8px 20px var(--glow),var(--hi)}.fab:active{transform:scale(.94)}
+.kseg{display:flex;gap:6px;margin:0 0 10px;align-items:center}
+.kseg button{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;padding:8px 12px;font-weight:700;font-size:14px;min-height:40px}.kseg button.on{background:var(--note);color:var(--note-ink);border-color:transparent;box-shadow:var(--sh1)}.kseg small{opacity:.7;margin-left:3px}
+.kseg .kend{margin-left:auto;border-color:transparent;background:none;color:var(--mute);padding:8px}
+.card.main::before{display:none}
+.crow .chev{font-size:20px;width:24px;margin-right:-4px}
+/* Verschieben: Karte folgt dem Finger */
+#dghost{position:fixed;z-index:61;pointer-events:none;margin:0;background:var(--paper);border-radius:14px;box-shadow:0 16px 34px rgba(0,0,0,.4);transform:rotate(1.4deg) scale(1.03);border:2px solid var(--acc);padding:0 8px;box-sizing:border-box}
+#dghost .rm,#dghost .chev{visibility:hidden}
+.crow.dragging{outline:2px dashed var(--mute);outline-offset:-2px;border-radius:10px;background:repeating-linear-gradient(45deg,transparent 0 7px,rgba(127,127,127,.13) 7px 14px)}
+.crow.dragging>*{visibility:hidden}
+.dropon{outline:3px solid var(--acc);outline-offset:2px;border-radius:16px;box-shadow:0 0 0 7px var(--glow)}
+h2.sh.dropon{outline:none;box-shadow:none;color:var(--acc-d)}
+#dline{position:fixed;height:4px;border-radius:2px;background:var(--acc);z-index:59;pointer-events:none;box-shadow:0 0 8px var(--glow)}
+#dz{padding:8px 10px 10px}
+#dz .dzh{font-size:12px;margin-bottom:6px}
+.dzc{padding:8px 11px;font-size:13px}
+.mv{font-size:13px;margin-left:3px}
+.mvnote{background:var(--note);color:var(--note-ink);border-radius:10px;padding:7px 10px;margin-bottom:8px;font-size:13px}
+.banner.info .ico{flex:none}
 </style>
 </head>
 <body>
@@ -222,9 +250,9 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
   <div class="meta"><span id="sub"></span><span id="rstat" class="rstat"></span></div>
 </div></header>
 <div class="wrap"><div id="bqs"></div><main id="view"></main></div>
-<div class="dock" id="dock"><div id="sug" class="sug" hidden></div>
+<div class="dock" id="dock"><div class="dockhead"><b>✍️ Neuer Artikel</b><button class="ico" onclick="dockClose()" aria-label="Schließen">✕</button></div><div id="sug" class="sug" hidden></div>
   <div id="fb" class="fb" role="status" aria-live="polite" hidden></div>
-  <div class="dockrow"><input id="ni" placeholder="Was brauchst du? z. B. 2 Milch" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" oninput="suggest()" onkeydown="if(event.key==='Enter')addItem();else if(event.key==='Escape')hideSug()"><button class="btn" id="micb" onclick="mic()" title="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen">+</button></div></div>
+  <div class="dockrow"><input id="ni" placeholder="Was brauchst du? z. B. 2 Milch" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" oninput="suggest()" onkeydown="if(event.key==='Enter')addItem();else if(event.key==='Escape')hideSug()"><button class="btn" id="micb" onclick="mic()" title="Einsprechen" aria-label="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen" aria-label="Hinzufügen">+</button></div><div class="dockhint">Mehrere mit Komma oder „Punkt“ beim Sprechen.</div></div>
 <div class="sheet" id="sheet" hidden onclick="if(event.target===this)closeSheet()"><div class="sheetbox" id="sheetbox"></div></div>
 <nav class="bottom"><div id="tabs"></div></nav>
 <script src="data.js"></script>

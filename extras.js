@@ -17,41 +17,63 @@ function rowInfo(it) {
   return { it, p, info, b, key, dec: info ? decision(info, it) : null };
 }
 
-/* ---------- Plus: neuen Artikel direkt in der Liste eintippen ---------- */
-function iaOpen() { UI.adding = true; render(); const e = $('#ia'); if (e) e.focus(); }
-function iaClose() { UI.adding = false; render(); }
-function iaSubmit() { const e = $('#ia'), v = e ? e.value.trim() : ''; if (!v) return iaClose(); addMany(v); const e2 = $('#ia'); if (e2) e2.focus(); }
-const iaRow = () => UI.adding ? `<div class="card tight main addrow"><div class="crow add"><span class="em" aria-hidden="true">✍️</span><input id="ia" class="iain" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="sentences" placeholder="Neuer Artikel, z. B. 2 Milch" aria-label="Neuer Artikel" onkeydown="if(event.key==='Enter'){event.preventDefault();iaSubmit()}"><button class="chk ok" onclick="iaSubmit()" aria-label="Hinzufügen">✓</button></div><div class="mute small" style="padding:0 2px 8px">Mehrere mit Komma. Die App sortiert es in den passenden Laden ein. <button class="lnk" onclick="iaClose()">Schließen</button></div></div>` : '';
+/* ---------- Plus: Eingabefenster zum Ergänzen (Tippen oder Einsprechen) ---------- */
+function iaOpen() { const d = $('#dock'); if (!d) return; d.classList.add('open'); const x = $('#ni'); if (x) x.focus(); }
+function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
+const iaRow = () => '';
+const plusBtn = () => '<div class="fabrow"><button class="fab" onclick="iaOpen()" aria-label="Artikel hinzufügen">+</button></div>';
 function listHead(title, sub) {
-  const short = shortOn() ? '' : (S.list.filter(i => !i.done).length >= 2 ? '<button class="klnk" onclick="shortOpen()" aria-label="Kurzeinkauf starten" title="Kurzeinkauf: nur einen Teil der Liste zeigen">⚡ Kurz</button>' : '');
-  return `<div class="lhead"><b>${title}</b><span class="lact">${short}<button class="plus" onclick="iaOpen()" aria-label="Artikel hinzufügen">+</button></span><span class="sub">${sub}</span></div>`;
+  const short = shortOn() ? '' : (S.list.filter(i => !i.done).length >= 2 ? '<button class="klnk" onclick="shortOpen()" aria-label="Kurzeinkauf starten" title="Kurzeinkauf: nur einen Teil der Liste zeigen">⚡ Kurzeinkauf</button>' : '');
+  return `<div class="lhead"><b>${title}</b><span class="lact">${short}</span><span class="sub">${sub}</span></div>`;
 }
 
-/* ---------- Halten und ziehen: Artikel heute in einem anderen Laden kaufen ---------- */
-const DRAG = { id: null, on: false, timer: 0, x: 0, y: 0, t: 0, over: null };
+/* ---------- Halten und ziehen: die Karte folgt dem Finger, Läden leuchten, Einfügemarke zeigt die Stelle ---------- */
+const DRAG = { id: null, on: false, timer: 0, x: 0, y: 0, cx: 0, cy: 0, ox: 0, oy: 0, t: 0, over: null, from: null, idx: -1, scroller: 0 };
 const dragPt = e => (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
 function dragStart(e) {
   if (DRAG.on || (e.type === 'mousedown' && e.button !== 0)) return;
   const row = e.target.closest && e.target.closest('.crow[data-id]');
-  if (!row || e.target.closest('button,a,input,label,[role=button]')) return;
-  const pt = dragPt(e); Object.assign(DRAG, { id: row.dataset.id, x: pt.clientX, y: pt.clientY });
+  if (!row || row.classList.contains('done') || e.target.closest('button,a,input,label,[role=button]')) return;
+  const pt = dragPt(e), r = row.getBoundingClientRect();
+  Object.assign(DRAG, { trusted: e.isTrusted, id: row.dataset.id, x: pt.clientX, y: pt.clientY, cx: pt.clientX, cy: pt.clientY, ox: pt.clientX - r.left, oy: pt.clientY - r.top });
   clearTimeout(DRAG.timer); DRAG.timer = setTimeout(dragBegin, 450);
 }
 function dragBegin() {
-  const it = byId(DRAG.id); if (!it) return dragReset();
-  DRAG.on = true; DRAG.over = null; try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(25); } catch (e) { }
+  const it = byId(DRAG.id), row = document.getElementById('it-' + DRAG.id); if (!it || !row) return dragReset();
+  DRAG.on = true; DRAG.over = null; DRAG.idx = -1; DRAG.from = rowInfo(it).key;
+  try { if (DRAG.trusted && navigator.vibrate) navigator.vibrate(25); } catch (e) { }
   document.body.classList.add('dragmode');
-  const row = document.getElementById('it-' + DRAG.id); if (row) row.classList.add('dragging');
+  const r = row.getBoundingClientRect(), g = row.cloneNode(true); // die Karte hebt ab und folgt dem Finger
+  g.id = 'dghost'; g.removeAttribute('data-id'); g.removeAttribute('onclick'); g.style.width = r.width + 'px'; document.body.appendChild(g);
+  row.classList.add('dragging');
   const dz = document.createElement('div'); dz.id = 'dz';
-  dz.innerHTML = `<div class="dzh">„${esc(it.name)}“ heute kaufen bei … (loslassen)</div><div class="dzs">${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<div class="dzc" data-store="${s}" style="--sc:${storeColor(s)}">${esc(STORE(s).short)}</div>`).join('')}<div class="dzc" data-store="auto">Automatisch</div></div>`;
+  dz.innerHTML = `<div class="dzh">In einen Laden ziehen und loslassen:</div><div class="dzs">${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<div class="dzc" data-store="${s}" style="--sc:${storeColor(s)}">${esc(STORE(s).short)}</div>`).join('')}<div class="dzc" data-store="auto">Automatisch</div></div>`;
   document.body.appendChild(dz);
-  const g = document.createElement('div'); g.id = 'dg'; g.textContent = it.name; document.body.appendChild(g); dragPos(DRAG.x, DRAG.y);
+  dragPos(DRAG.cx, DRAG.cy); DRAG.scroller = setInterval(dragScroll, 16);
 }
 function dragPos(x, y) {
-  const g = document.getElementById('dg'); if (g) { g.style.left = x + 'px'; g.style.top = y + 'px'; }
+  DRAG.cx = x; DRAG.cy = y;
+  const g = document.getElementById('dghost'); if (g) { g.style.left = (x - DRAG.ox) + 'px'; g.style.top = (y - DRAG.oy) + 'px'; }
   const el = document.elementFromPoint(x, y), tgt = el && el.closest ? el.closest('[data-store]') : null;
   DRAG.over = tgt ? tgt.dataset.store : null;
+  document.querySelectorAll('.dropon').forEach(n => n.classList.remove('dropon'));
   document.querySelectorAll('#dz .dzc').forEach(c => c.classList.toggle('hot', c.dataset.store === DRAG.over));
+  if (DRAG.over && DRAG.over !== 'auto') document.querySelectorAll('#view [data-store="' + DRAG.over + '"]').forEach(n => n.classList.add('dropon'));
+  // im selben Laden: Einfügemarke zeigt, wo der Artikel landet
+  let line = document.getElementById('dline'); DRAG.idx = -1;
+  const card = DRAG.over && DRAG.over === DRAG.from ? document.querySelector('#view .card.main[data-store="' + DRAG.over + '"]') : null;
+  if (card) {
+    const rows = [...card.querySelectorAll('.crow[data-id]')].filter(n => n.dataset.id !== DRAG.id);
+    DRAG.idx = rows.filter(n => { const b = n.getBoundingClientRect(); return b.top + b.height / 2 < y; }).length;
+    const ref = rows[DRAG.idx] ? rows[DRAG.idx].getBoundingClientRect().top : (rows.length ? rows[rows.length - 1].getBoundingClientRect().bottom : null);
+    if (ref != null) { if (!line) { line = document.createElement('div'); line.id = 'dline'; document.body.appendChild(line); } const cb = card.getBoundingClientRect(); line.style.top = (ref - 2) + 'px'; line.style.left = (cb.left + 8) + 'px'; line.style.width = (cb.width - 16) + 'px'; return; }
+  }
+  if (line) line.remove();
+}
+function dragScroll() { // am oberen oder unteren Rand weiterscrollen
+  if (!DRAG.on) return; const y = DRAG.cy, H = innerHeight; let d = 0;
+  if (y < 150) d = -Math.round((150 - Math.max(y, 0)) / 8) - 3; else if (y > H - 190) d = Math.round((y - (H - 190)) / 8) + 3;
+  if (d) { scrollBy(0, d); dragPos(DRAG.cx, DRAG.cy); }
 }
 function dragMove(e) {
   const pt = dragPt(e);
@@ -60,17 +82,36 @@ function dragMove(e) {
 }
 function dragEnd() {
   clearTimeout(DRAG.timer); if (!DRAG.on) { DRAG.id = null; return; }
-  const id = DRAG.id, to = DRAG.over; DRAG.t = Date.now(); dragReset(); if (to) moveItem(id, to);
+  const id = DRAG.id, to = DRAG.over, from = DRAG.from, idx = DRAG.idx; DRAG.t = Date.now(); dragReset();
+  if (!to) return feedbackText('Zum Verschieben auf einen Laden ziehen und dort loslassen.');
+  if (to === from) { if (idx >= 0) reorderItem(id, from, idx); return; }
+  moveItem(id, to);
 }
 function dragReset() {
-  clearTimeout(DRAG.timer); DRAG.on = false; DRAG.id = null; DRAG.over = null; document.body.classList.remove('dragmode');
-  ['dz', 'dg'].forEach(i => { const e = document.getElementById(i); if (e) e.remove(); });
+  clearTimeout(DRAG.timer); clearInterval(DRAG.scroller); DRAG.on = false; DRAG.id = null; DRAG.over = null; DRAG.idx = -1; document.body.classList.remove('dragmode');
+  ['dz', 'dghost', 'dline'].forEach(i => { const e = document.getElementById(i); if (e) e.remove(); });
   document.querySelectorAll('.crow.dragging').forEach(r => r.classList.remove('dragging'));
+  document.querySelectorAll('.dropon').forEach(n => n.classList.remove('dropon'));
 }
-function moveItem(id, store) {
+const dragDone = () => { if (!S.set.noDragTip) { S.set.noDragTip = true; } };
+function moveItem(id, store) { // in einen anderen Laden (nur heute); „auto“ hebt die Verschiebung auf
   const it = byId(id); if (!it) return;
-  if (store === 'auto') delete it.store; else if (STORES.some(s => s.id === store)) it.store = store; else return;
-  save(); render(); toast(store === 'auto' ? `„${it.name}“ wird wieder automatisch einsortiert.` : `„${it.name}“ kaufst du heute bei ${STORE(store).short}.`);
+  UI.undoMove = { prev: [{ id, store: it.store, pos: it.pos }] };
+  if (store === 'auto') delete it.store; else if (STORES.some(s => s.id === store)) { it.store = store; delete it.pos; } else return;
+  dragDone(); save(); render();
+  feedbackText(store === 'auto' ? `„${esc(it.name)}“ wird wieder automatisch einsortiert. <button class="lnk" onclick="undoMove()">Rückgängig</button>` : `„${esc(it.name)}“ kaufst du heute bei <b>${esc(STORE(store).short)}</b>. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
+}
+function reorderItem(id, key, idx) { // innerhalb desselben Ladens an eine andere Stelle
+  const it = byId(id); if (!it) return;
+  const ids = [...document.querySelectorAll('#view .card.main[data-store="' + key + '"] .crow[data-id]')].map(n => n.dataset.id).filter(x => x !== id);
+  UI.undoMove = { prev: [id, ...ids].map(x => ({ id: x, store: (byId(x) || {}).store, pos: (byId(x) || {}).pos })) };
+  ids.splice(Math.min(idx, ids.length), 0, id); ids.forEach((x, k) => { const t = byId(x); if (t) t.pos = k + 1; });
+  dragDone(); save(); render(); feedbackText(`„${esc(it.name)}“ verschoben. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
+}
+function undoMove() {
+  const u = UI.undoMove; if (!u) return; UI.undoMove = null;
+  u.prev.forEach(p => { const t = byId(p.id); if (!t) return; if (p.store) t.store = p.store; else delete t.store; if (p.pos != null) t.pos = p.pos; else delete t.pos; });
+  save(); render(); feedbackText('✓ Rückgängig gemacht.');
 }
 document.addEventListener('touchstart', dragStart, { passive: true });
 document.addEventListener('touchmove', dragMove, { passive: false });
@@ -81,9 +122,22 @@ document.addEventListener('mousemove', dragMove);
 document.addEventListener('mouseup', dragEnd);
 document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.crow')) e.preventDefault(); });
 
-/* ---------- Kurzeinkauf: nur einen Teil der Liste zeigen, bis er erledigt ist ---------- */
+/* ---------- Kurzeinkauf: eine Kurzliste neben der Hauptliste, hin- und herschaltbar ---------- */
+// S.short = { on: Kurzliste gibt es, view: 'short' | 'all', later: Artikel, die NICHT in der Kurzliste sind, known: bekannte Artikel }
 const shortOn = () => !!(S.short && S.short.on);
-const hiddenShort = it => shortOn() && S.short.later.includes(it.id);
+const hiddenShort = it => shortOn() && S.short.view !== 'all' && S.short.later.includes(it.id); // in der Kurzliste-Ansicht ausgeblendet
+function shortSync() { // neue Artikel: in der Kurzliste-Ansicht gehören sie dazu, in der Gesamtansicht nicht
+  if (!shortOn()) return; const k = new Set(S.short.known || []); let ch = false;
+  S.list.forEach(i => { if (!k.has(i.id)) { if (S.short.view === 'all') S.short.later.push(i.id); k.add(i.id); ch = true; } });
+  if (ch) { S.short.known = S.list.map(i => i.id); save(); }
+}
+const shortMembers = () => S.list.filter(i => !S.short.later.includes(i.id));
+function shortSeg() {
+  if (!shortOn()) return '';
+  const act = S.short.view !== 'all', n = shortMembers().filter(i => !i.done).length, m = S.list.filter(i => !i.done).length;
+  return `<div class="kseg" role="group" aria-label="Liste wählen"><button class="${act ? 'on' : ''}" onclick="shortView('short')">⚡ Kurzliste <small>${n}</small></button><button class="${act ? '' : 'on'}" onclick="shortView('all')">Alle <small>${m}</small></button><button class="kend" onclick="shortEnd()" aria-label="Kurzliste beenden" title="Kurzliste beenden">✕</button></div>`;
+}
+function shortView(v) { if (!shortOn()) return; S.short.view = v === 'all' ? 'all' : 'short'; save(); render(); }
 function shortOpen() { UI.shortSel = new Set(); shortSheet(); }
 function shortSheet() {
   const old = document.querySelector('#sheetbox .sbox'), sc = old ? old.scrollTop : 0;
@@ -100,12 +154,12 @@ function shortTog(id) { const s = UI.shortSel = UI.shortSel || new Set(); s.has(
 function shortStore(k) { const s = UI.shortSel = UI.shortSel || new Set(); S.list.filter(i => !i.done && rowInfo(i).key === k).forEach(i => s.add(i.id)); shortSheet(); }
 function shortStart() {
   const sel = UI.shortSel || new Set(); if (!sel.size) return feedbackText('Wähle zuerst aus, was du jetzt brauchst.', true);
-  S.short = { on: true, later: S.list.filter(i => !i.done && !sel.has(i.id)).map(i => i.id) }; save(); closeSheet(); render();
+  S.short = { on: true, view: 'short', later: S.list.filter(i => !i.done && !sel.has(i.id)).map(i => i.id), known: S.list.map(i => i.id) }; save(); closeSheet(); render();
   toast('⚡ Kurzeinkauf: ' + sel.size + ' Artikel. Der Rest wartet in der Hauptliste.');
 }
-function shortEnd() { S.short = { on: false, later: [] }; save(); render(); }
+function shortEnd() { S.short = { on: false, view: 'short', later: [], known: [] }; save(); render(); toast('Kurzliste beendet. Alles steht wieder in der Hauptliste.'); }
 function shortCheckEnd() { // alles Gewählte im Wagen oder gelöscht: Kurzeinkauf ist fertig
-  if (shortOn() && !S.list.some(i => !i.done && !hiddenShort(i))) { S.short = { on: false, later: [] }; toast('⚡ Kurzeinkauf fertig. Die übrigen Artikel sind wieder in der Liste.'); }
+  if (shortOn() && !S.list.some(i => !i.done && !S.short.later.includes(i.id))) { S.short = { on: false, view: 'short', later: [], known: [] }; toast('⚡ Kurzliste erledigt. Alles steht wieder in der Hauptliste.'); } // erst wenn alles aus der Kurzliste erledigt ist
 }
 
 /* ---------- Löschen mit Rückgängig ---------- */
