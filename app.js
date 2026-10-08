@@ -77,7 +77,18 @@ const prefOf = (p, name) => { // 1. deine eigene Wahl, 2. Standardladen des Prod
 };
 const prefNote = pf => `Kein Angebot bekannt · normal bei ${STORE(pf.id).short}${pf.fb ? ', sonst ' + STORE(pf.fb).short : ''}`;
 // Produktfoto (kaufDA) mit Emoji als Rückfall, falls das Bild nicht lädt
-const thumb = (img, emoji, cls = '') => `<div class="thumb ${cls}"><span class="em">${emoji}</span>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</div>`;
+const imgBig = (u, big) => { // gleiche Bilder in besserer Auflösung (bonial: Original bzw. "large", ALDI: breiter skaliert)
+  if (!u) return u;
+  if (/content-media\.bonial\.biz/.test(u)) return u.split('?')[0] + (big ? '?impolicy=large' : '');
+  if (/dm\.emea\.cms\.aldi\.cx/.test(u)) return u.replace(/scaleWidth\/\d+\//, 'scaleWidth/' + (big ? 800 : 464) + '/');
+  return u;
+};
+const thumb = (img, emoji, cls = '', zoom = false) => `<div class="thumb ${cls}"${img && zoom ? ` data-z="${esc(img)}" onclick="zoomImg(this)" role="button" tabindex="0" aria-label="Bild vergrößern" onkeydown="if(event.key==='Enter')zoomImg(this)" style="cursor:zoom-in"` : ''}><span class="em">${emoji}</span>${img ? `<img src="${esc(imgBig(img))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</div>`;
+function zoomImg(el) {
+  const u = el.dataset.z; if (!u) return;
+  $('#sheetbox').innerHTML = `<div class="row sp"><h3>Produktbild</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div><img src="${esc(imgBig(u, true))}" alt="Produktbild" referrerpolicy="no-referrer" style="width:100%;max-height:70vh;object-fit:contain;background:#fff;border-radius:14px;margin-top:8px" onerror="this.onerror=null;this.src='${esc(imgBig(u))}'">`;
+  $('#sheet').hidden = false;
+}
 
 /* ================= Angebote laden ================= */
 let SRC = { fetched: null, offers: [], source: null, live: false, offline: false };
@@ -189,7 +200,7 @@ function offerCard(o, opt = {}) {
   const laterBtn = !opt.noAdd && (o.state === 'next' || nh) ? `<button class="btn sm" onclick="rememberOffer('${esc(o.id)}')">📌 Merken</button>` : '';
   const add = opt.noAdd || o.state === 'next' || (p && onList(p.id)) ? '' : p ? `<button class="btn sm" onclick="addP('${p.id}')">+ Liste</button>` : `<button class="btn sm" onclick="addOfferItem('${esc(o.id)}')">+ Liste</button>`; // auch Neues, das du sonst nie kaufst
   const badge = o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}" ${o.dubious ? 'title="Vergleich mit Hersteller-UVP, vermutlich Schein-Rabatt"' : ''}>${o.dubious ? '≈ ' : ''}−${Math.round(o.pct * 100)} %</span>` : '';
-  return `<div class="card offer" style="--sc:${storeColor(o.store.id)}"><div class="ohead">${thumb(o.img, iconFor(p, o.name))}
+  return `<div class="card offer" style="--sc:${storeColor(o.store.id)}"><div class="ohead">${thumb(o.img, iconFor(p, o.name), '', true)}
   <div class="grow"><div class="row sp nowrap"><h3 class="grow">${esc(o.name)}</h3>${badge}</div>
   ${o.desc ? `<div class="mute clamp">${esc(o.desc)}</div>` : ''}
   <div class="row" style="margin-top:2px"><span class="price">${eur(o.price)}</span>${o.regular ? `<span class="old">${eur(o.regular)}</span>` : ''}${o.up ? `<span class="mute">${eur(o.up.v)} / ${unitLbl(o.up.base)}</span>` : ''}${p ? `<button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}</div></div></div>
@@ -300,14 +311,14 @@ function cRow(c) {
   const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
   return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" onclick="toggleOpen('${id}')">
     <button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button>
-    <span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>
+    ${b && b.img ? thumb(b.img, iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
     <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
     <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button></div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
   const tip = !it.done && p ? tipFor(p.id) : null;
-  return `<div class="cdet"><div class="row nowrap" style="gap:10px">${thumb(b && b.img, iconFor(p, it.name), 'sm')}<div class="grow small">${b
+  return `<div class="cdet"><div class="row nowrap" style="gap:10px">${thumb(b && b.img, iconFor(p, it.name), 'md', true)}<div class="grow small">${b
     ? `<b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b>${b.up ? ` · ${eur(b.up.v)}/${unitLbl(b.up.base)}` : ''}${b.pct != null ? ` <span class="pct ${b.dubious ? 'dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}${p ? ` <button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}${dec && dec.cls ? ` <span class="tag ${dec.cls}">${dec.tag}</span>` : ''}<div class="mute">${esc(b.name.slice(0, 44))}${b.desc ? ' · ' + esc(b.desc.slice(0, 40)) : ''}</div>`
     : `<span class="mute">${esc(c.note || (pf ? prefNote(pf) : 'Kein aktuelles Angebot bekannt. Normal im City-Center kaufen.'))}</span>`}${c.note && b ? `<div class="mute">${esc(c.note)}</div>` : ''}</div></div>
     ${dec ? `<div class="small" style="margin-top:6px">${esc(dec.why)}</div>` : !p ? '<div class="small mute" style="margin-top:6px">Noch kein Produkt zugeordnet. Mit 👁 wird es beobachtet und bei der nächsten Suche gefunden.</div>' : ''}
