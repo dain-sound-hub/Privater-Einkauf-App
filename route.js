@@ -18,16 +18,17 @@ const itemHeavy = (it, p) => !!heavyKind(it, p);
 
 function planRoute() {
   const mode = S.set.lidl || 'auto';
-  const rows = S.list.filter(i => !i.done).map(it => {
+  const rows = S.list.filter(i => !i.done && !hiddenShort(i)).map(it => {
     const p = it.pid ? PROD(it.pid) : null, info = p ? productInfo(p) : null, heavy = itemHeavy(it, p);
     let nowA = info ? info.now.filter(o => o.store.tier === 'A') : [];
     if (heavy) nowA = nowA.slice().sort(rank); // bei Schwerem sind Großpackungen (z. B. Kiste) okay
     const lidl = info && !heavy ? info.now.find(o => o.store.tier === 'B') || null : null;
-    return { it, p, info, heavy, nowA, near: nowA[0] || null, lidl, pf: prefOf(p, it.name), offer: null, storeId: null, note: '' };
+    return { it, p, info, heavy, nowA, near: nowA[0] || null, lidl, pf: prefOf(p, it.name), offer: null, storeId: null, note: '', fixed: !!(it.store && STORES.some(s => s.id === it.store)) };
   });
 
   // 1) Standardwahl im City-Center (mit deinem Lieblingsladen, falls bekannt)
   for (const r of rows) {
+    if (r.fixed) { r.storeId = r.it.store; r.offer = (r.info ? r.info.now.find(o => o.store.id === r.it.store) : null) || null; r.note = 'von dir so gewählt'; continue; } // „heute bei …" (Halten und Ziehen)
     const { nowA, pf } = r;
     const why = pf && pf.fb ? 'bei ' + STORE(pf.id).short + ', sonst ' + STORE(pf.fb).short : 'dein Standard';
     if (pf) { // Standardladen (z. B. dm für Waschmittel und Drogerie, REWE für Küchenrollen)
@@ -42,7 +43,7 @@ function planRoute() {
   let lidlSave = 0, lidlItems = [];
   if (mode !== 'nein') {
     for (const r of rows) {
-      if (!r.lidl) continue;
+      if (!r.lidl || r.fixed) continue;
       const n = r.near, l = r.lidl;
       const cheaper = !n ? true : (n.up && l.up && n.up.base === l.up.base && l.up.v < n.up.v * 0.9);
       if (!cheaper) continue;
@@ -53,7 +54,7 @@ function planRoute() {
     if (use) lidlItems.forEach(r => { r.offer = r.lidl; r.storeId = 'lidl'; r.note = ''; }); else lidlItems = [], lidlSave = 0;
   }
   // 3) Schwere Sachen auf einen Laden bündeln (der mit den meisten schweren Artikeln)
-  const heavyRows = rows.filter(r => r.heavy && r.storeId && r.storeId !== 'lidl');
+  const heavyRows = rows.filter(r => r.heavy && r.storeId && r.storeId !== 'lidl' && !r.fixed);
   const cnt = {}; heavyRows.forEach(r => cnt[r.storeId] = (cnt[r.storeId] || 0) + (r.pf ? 3 : 1)); // dein Standardladen (z. B. REWE für Küchenrollen) zählt dreifach
   const anchor = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || null;
   if (anchor) for (const r of heavyRows) {
@@ -103,7 +104,7 @@ function copyRoute() {
 const setLidl = k => { S.set.lidl = k; save(); render(); };
 
 function routeView() {
-  const open = S.list.filter(i => !i.done);
+  const open = S.list.filter(i => !i.done && !hiddenShort(i));
   if (!open.length) return empty('🧭', 'Noch keine Route. Trag auf der Liste ein, was du brauchst.<br>Die App sagt dir dann, in welchem Laden du was kaufst und in welcher Reihenfolge.') + `<div style="text-align:center"><button class="btn pri" onclick="go('list')">Zur Liste</button></div>`;
   const plan = planRoute(), mode = S.set.lidl || 'auto';
   const row = x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route' });
@@ -118,7 +119,7 @@ function routeView() {
     return `<div class="card tight stop" style="--sc:${storeColor(s.store.id)}"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.short)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
       <div class="mute small" style="margin:0 0 4px">${esc(hint)}</div>${s.items.map(row).join('')}</div>`;
   }).join('');
-  return `<div class="lhead"><b>🧭 Einkaufsroute</b><span>${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min</span></div>
+  return `<div class="lhead"><b>🧭 Einkaufsroute</b><span class="lact"><button class="plus" onclick="iaOpen()" aria-label="Artikel hinzufügen">+</button></span><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min${shortOn() ? ' · ⚡ Kurzeinkauf' : ''}</span></div>${iaRow()}
   ${cards}
   <div class="mute small" style="text-align:center;margin:2px 0 10px">🏠 Danach nach Hause · ca. 3 Min · in jedem Laden: Obst &amp; Gemüse zuerst, Schweres zuletzt</div>
   <div class="row" style="justify-content:center;gap:8px"><button class="btn sm" onclick="copyRoute()">Route kopieren</button><button class="btn sm" onclick="go('list')">← Zur Liste</button><button class="btn sm" onclick="go('bon')">🧾 Kassenbon</button></div>

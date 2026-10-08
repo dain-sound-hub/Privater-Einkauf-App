@@ -14,10 +14,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Einkauf">
 <title>Intelligente Einkaufsliste</title>
+<script>try{var t=(JSON.parse(localStorage.getItem("einkauf.v2")||"{}").set||{}).theme;if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
 :root{--bg:#eef3f0;--bg2:#e4efe9;--card:#ffffff;--ink:#14201a;--mute:#66756d;--line:#e2eae5;--acc:#14a56b;--acc-d:#0b7a4d;--acc-l:#3ed49a;--acc2:#e1f6ec;--warn:#c25e00;--warn2:#fff0dd;--blue:#2b6cc4;--blue2:#e6f0fd;--vio:#7a45c4;--vio2:#f1e9fc;--red:#d23a2f;--glow:rgba(20,165,107,.35);
 --sh1:0 1px 2px rgba(15,40,28,.08),0 4px 12px rgba(15,40,28,.08);--sh2:0 2px 4px rgba(15,40,28,.08),0 14px 34px rgba(15,40,28,.16);--hi:inset 0 1px 0 rgba(255,255,255,.7);--r:20px}
-@media(prefers-color-scheme:dark){:root{--bg:#0d1411;--bg2:#101a15;--card:#18211c;--ink:#e8efeb;--mute:#93a49b;--line:#26332c;--acc:#35c98b;--acc-d:#1f9a69;--acc-l:#6ee7b0;--acc2:#15322a;--warn:#f5a45c;--warn2:#352613;--blue:#86b6f4;--blue2:#172a45;--vio:#c3a0ee;--vio2:#2b2040;--red:#f58a82;--glow:rgba(53,201,139,.3);--sh1:0 1px 2px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.3);--sh2:0 2px 4px rgba(0,0,0,.4),0 16px 36px rgba(0,0,0,.5);--hi:inset 0 1px 0 rgba(255,255,255,.06)}}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1411;--bg2:#101a15;--card:#18211c;--ink:#e8efeb;--mute:#93a49b;--line:#26332c;--acc:#35c98b;--acc-d:#1f9a69;--acc-l:#6ee7b0;--acc2:#15322a;--warn:#f5a45c;--warn2:#352613;--blue:#86b6f4;--blue2:#172a45;--vio:#c3a0ee;--vio2:#2b2040;--red:#f58a82;--glow:rgba(53,201,139,.3);--sh1:0 1px 2px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.3);--sh2:0 2px 4px rgba(0,0,0,.4),0 16px 36px rgba(0,0,0,.5);--hi:inset 0 1px 0 rgba(255,255,255,.06)}}
+:root[data-theme="dark"]{--bg:#0d1411;--bg2:#101a15;--card:#18211c;--ink:#e8efeb;--mute:#93a49b;--line:#26332c;--acc:#35c98b;--acc-d:#1f9a69;--acc-l:#6ee7b0;--acc2:#15322a;--warn:#f5a45c;--warn2:#352613;--blue:#86b6f4;--blue2:#172a45;--vio:#c3a0ee;--vio2:#2b2040;--red:#f58a82;--glow:rgba(53,201,139,.3);--sh1:0 1px 2px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.3);--sh2:0 2px 4px rgba(0,0,0,.4),0 16px 36px rgba(0,0,0,.5);--hi:inset 0 1px 0 rgba(255,255,255,.06)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0}
 body{background:radial-gradient(900px 500px at 85% -10%,var(--bg2),transparent 70%),radial-gradient(700px 400px at -10% 30%,var(--bg2),transparent 70%),var(--bg);background-attachment:fixed;color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:170px}
@@ -148,11 +150,13 @@ h2.sh{margin:14px 4px 6px;font-size:13px}
 /* ===== Design „Notizzettel & Prospekt“: Liste wie ein Einkaufszettel, Preise und Rabatte wie im Prospekt ===== */
 @font-face{font-family:"PatrickHand";src:url("PatrickHand.ttf") format("truetype");font-display:swap}@font-face{font-family:"Bangers";src:url("Bangers.ttf") format("truetype");font-display:swap}
 :root{--bg:#f6f2e9;--bg2:#ede6d5;--line:#e6dfce;--paper:#fffdf2;--rule:#d3e1ef;--margin:#e98a82;--note:#fff0a0;--note-ink:#4a4210;--sale:#d62f3f;--sale2:#ffe14d;--sale-ink:#b3121f;--hand:"PatrickHand","Segoe Print","Comic Sans MS",cursive;--comic:"Bangers","Impact",sans-serif}
-@media(prefers-color-scheme:dark){:root{--bg:#0d1411;--bg2:#101a15;--line:#26332c;--paper:#1c231e;--rule:#2f3d35;--margin:#8d4b48;--note:#3a3618;--note-ink:#f4eba8}}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1411;--bg2:#101a15;--line:#26332c;--paper:#1c231e;--rule:#2f3d35;--margin:#8d4b48;--note:#3a3618;--note-ink:#f4eba8}}
+:root[data-theme="dark"]{--bg:#0d1411;--bg2:#101a15;--line:#26332c;--paper:#1c231e;--rule:#2f3d35;--margin:#8d4b48;--note:#3a3618;--note-ink:#f4eba8}
 h2{font-family:var(--comic);font-size:20px;font-weight:400;text-transform:uppercase;letter-spacing:1px;color:var(--ink)}
 /* Einkaufszettel */
 .lhead b{font-family:var(--comic);font-size:38px;font-weight:400;letter-spacing:1px;text-transform:uppercase;line-height:1;background:linear-gradient(transparent 60%,rgba(255,225,77,.75) 60%);padding:0 6px 0 2px}
-@media(prefers-color-scheme:dark){.lhead b{background:linear-gradient(transparent 60%,rgba(255,225,77,.28) 60%)}}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .lhead b{background:linear-gradient(transparent 60%,rgba(255,225,77,.28) 60%)}}
+:root[data-theme="dark"] .lhead b{background:linear-gradient(transparent 60%,rgba(255,225,77,.28) 60%)}
 h2.sh{font-size:23px;line-height:1;margin:14px 2px 6px;border-left:8px solid var(--sc,var(--acc));padding-left:9px}
 h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .card.main{background:var(--paper);border:1px solid var(--rule);box-shadow:var(--sh1);position:relative;overflow:hidden}
@@ -188,6 +192,28 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .crow .thumb.xs{flex:none}
 .ohead .grow{min-width:0}
 .cdet td:first-child{white-space:nowrap}
+/* Plus, Kurzeinkauf, Ziehen */
+.lhead{align-items:center}.lhead .lact{margin-left:auto;display:flex;align-items:center;gap:6px}.lhead .sub{order:3;width:100%;color:var(--mute);font-size:12.5px}
+.plus{width:40px;height:40px;border-radius:50%;border:0;background:linear-gradient(var(--acc-l),var(--acc));color:#fff;font-size:28px;line-height:1;font-weight:700;box-shadow:0 4px 10px var(--glow);padding:0 0 3px}
+.plus:active{transform:scale(.94)}
+.klnk{border:0;background:none;color:var(--mute);font-size:12.5px;padding:10px 6px;min-height:40px}
+.iain{flex:1;min-width:0;font-family:var(--hand);font-size:20px;text-transform:uppercase;letter-spacing:.4px;border:0;border-bottom:2px dashed var(--mute);background:transparent;color:var(--ink);padding:6px 2px;outline:none;border-radius:0}.iain:focus{border-bottom-color:var(--acc)}
+.iain::placeholder{text-transform:none;font-family:system-ui,sans-serif;font-size:14px;letter-spacing:0;color:var(--mute)}
+.crow.add{cursor:default}.chk.ok{background:var(--acc);border-color:var(--acc);color:#fff;font-size:20px;font-weight:800}
+.crow{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.crow.dragging{opacity:.35}
+#dz{position:fixed;left:0;right:0;top:0;z-index:60;background:var(--card);padding:10px 10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.35);border-radius:0 0 18px 18px}
+#dz .dzh{font-size:13px;color:var(--mute);margin-bottom:8px}.dzs{display:flex;flex-wrap:wrap;gap:6px}
+.dzc{padding:11px 14px;border-radius:12px;border:2px solid var(--sc,var(--line));font-weight:700;font-size:14px;background:var(--bg);color:var(--ink);transition:transform .1s}
+.dzc.hot{background:var(--sc,var(--acc));color:#fff;transform:scale(1.07)}
+#dg{position:fixed;z-index:61;transform:translate(-50%,-130%);pointer-events:none;background:var(--note);color:var(--note-ink);padding:6px 12px;border-radius:8px;font-family:var(--hand);text-transform:uppercase;font-size:18px;box-shadow:0 8px 20px rgba(0,0,0,.4);max-width:70vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.banner.kurz{background:var(--note);color:var(--note-ink)}
+.lhead b{font-size:34px}
+.crow .rm{flex:none;border:0;background:none;color:var(--mute);opacity:.65;font-size:15px;width:26px;height:38px;padding:0;margin-left:-2px}.crow .rm:active{opacity:1;color:var(--sale)}
+.crow{gap:6px}
+.crow{gap:5px}.crow .nm{font-size:19px;letter-spacing:.2px}.crow .chev{width:18px;margin-right:-4px}.crow .chk{width:32px;height:32px}.crow .rm{width:22px;margin-left:-3px}.crow .pr{font-size:13.5px}
+@media (pointer:coarse){.crow .chk{width:32px;height:32px}}
+.crow .rm{margin-left:0;margin-right:-1px}.crow .chk{margin-left:0}
 </style>
 </head>
 <body>
@@ -205,6 +231,7 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 <script src="offers.js"></script>
 <script src="route.js"></script>
 <script src="receipt.js"></script>
+<script src="extras.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

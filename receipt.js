@@ -81,7 +81,7 @@ function matchBonItem(it) {
   if (S.aliases[key] && PROD(S.aliases[key])) { it.pid = S.aliases[key]; it.how = 'gelernt'; return it; }
   if (!(window.NOISE_RX && NOISE_RX.test(it.name))) {
     let best = null, len = 0;
-    for (const p of PRODUCTS) { const m = rx(p).exec(it.name); if (m && m[0].length > len) { best = p; len = m[0].length; } }
+    for (const p of PRODUCTS) { if (p.not && new RegExp(p.not, 'i').test(it.name)) continue; const m = rx(p).exec(it.name); if (m && m[0].length > len) { best = p; len = m[0].length; } }
     if (best) { it.pid = best.id; it.how = 'erkannt'; return it; }
     const bm = brandMap(); for (const w of key.split(' ')) if (w.length >= 4 && bm[w] && PROD(bm[w])) { it.pid = bm[w]; it.how = 'Marke'; return it; }
   }

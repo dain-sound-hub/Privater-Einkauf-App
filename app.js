@@ -5,7 +5,7 @@ window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Et
 const APP_VERSION = '1.0 · 06.10.2026';
 /* ================= State ================= */
 const LS = 'einkauf.v2';
-const DEF = { hideHelp: false, list: [], later: [], prefs: {}, adds: {}, addDay: {}, rec: {}, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
+const DEF = { hideHelp: false, list: [], later: [], prefs: {}, adds: {}, addDay: {}, rec: {}, short: { on: false, later: [] }, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
 let S;
 // Gespeicherten Stand prüfen und reparieren: eine beschädigte Sicherung oder ein Fehler darf die App nie lahmlegen
 function sanitize(x) {
@@ -17,10 +17,10 @@ function sanitize(x) {
   const set = (o.set && typeof o.set === 'object') ? o.set : {};
   return {
     hideHelp: !!o.hideHelp,
-    list: arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: String(i.name ?? '').slice(0, 80), qty: String(i.qty ?? '').slice(0, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}) })).filter(i => i.name.trim()),
+    list: arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: String(i.name ?? '').slice(0, 80), qty: String(i.qty ?? '').slice(0, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}), ...(STORES.some(s => s.id === i.store) ? { store: i.store } : {}) })).filter(i => i.name.trim()),
     bons: arr(o.bons).filter(b => b && typeof b === 'object' && dateOk(b.date) && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: b.date, store: String(b.store).slice(0, 20), total: Number.isFinite(+b.total) ? +b.total : null, items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: Number.isFinite(+i.p) ? +i.p : 0, pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null) })) })),
     aliases: Object.fromEntries(Object.entries(o.aliases && typeof o.aliases === 'object' && !Array.isArray(o.aliases) ? o.aliases : {}).filter(([k, v]) => k.length <= 60 && idOk(v)).slice(0, 400)),
-    lastBackup: dateOk(o.lastBackup) ? o.lastBackup : '', rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
+    lastBackup: dateOk(o.lastBackup) ? o.lastBackup : '', short: { on: !!(o.short && o.short.on), later: arr(o.short && o.short.later).filter(idOk) }, rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
     adds: Object.fromEntries(Object.entries(o.adds && typeof o.adds === 'object' && !Array.isArray(o.adds) ? o.adds : {}).filter(([k, n]) => idOk(k) && Number.isFinite(+n) && +n >= 0).map(([k, n]) => [k, Math.min(+n, 9999)])),
     addDay: Object.fromEntries(Object.entries(o.addDay && typeof o.addDay === 'object' && !Array.isArray(o.addDay) ? o.addDay : {}).filter(([k, v]) => idOk(k) && dateOk(v))),
     prefs: Object.fromEntries(Object.entries(o.prefs && typeof o.prefs === 'object' && !Array.isArray(o.prefs) ? o.prefs : {}).filter(([k, v]) => idOk(k) && STORES.some(s => s.id === v))),
@@ -30,7 +30,7 @@ function sanitize(x) {
     manual: arr(o.manual).filter(m => m && typeof m === 'object' && typeof m.name === 'string' && Number(m.price) > 0 && STORES.some(s => s.id === m.store) && Array.isArray(m.valid) && dateOk(m.valid[0]) && dateOk(m.valid[1])).map(m => ({ id: String(m.id ?? 'm' + Date.now()).slice(0, 40), store: m.store, name: m.name.slice(0, 80), price: Number(m.price), regular: num(m.regular, null), amount: num(m.amount, null), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(m.unit) ? m.unit : null, valid: [m.valid[0], m.valid[1]], manual: true })),
     hist: arr(o.hist).filter(h => h && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })),
     buys: Object.fromEntries(Object.entries(o.buys && typeof o.buys === 'object' && !Array.isArray(o.buys) ? o.buys : {}).filter(([k, n]) => k.length <= 90 && Number.isFinite(+n) && +n >= 0).map(([k, n]) => [k, +n])),
-    set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20) }
+    set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20), theme: ['light', 'dark'].includes(set.theme) ? set.theme : 'auto' }
   };
 }
 const mkRx = src => { try { return new RegExp(src, 'i'); } catch (e) { try { return new RegExp(src.replace(/\(\?<!\[[^\]]*\]\)/g, ''), 'i'); } catch (e2) { return /$^/; } } }; // ältere Browser ohne Lookbehind
@@ -137,7 +137,7 @@ function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
   const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { const m = rx(q).exec(HEAD_CATS.has(q.cat) ? head : text); if (m && m[0].length > len) { p = q; len = m[0].length; } } }
+  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { if (q.not && new RegExp(q.not, 'i').test(text)) continue; const m = rx(q).exec(HEAD_CATS.has(q.cat) ? head : text); if (m && m[0].length > len) { p = q; len = m[0].length; } } }
   // Eigene Produkte: Treffer der Suchseite (z. B. „Gummibärchen" findet „Goldbären") nutzen, wenn der Name nicht passt
   if (!p && o.found) p = PRODUCTS.find(q => q.custom && q.q && o.found.some(f => f.toLowerCase() === q.q[0])) || null;
   let store = STORE(o.store), up = unitPrice(o, p);
@@ -253,6 +253,11 @@ function noteAdd(pid) { // zählt höchstens einmal pro Tag und Produkt; ab 3 Ta
 }
 function noteRec(pid, day) { const r = (S.rec = S.rec || {})[pid] = S.rec[pid] || []; if (r[r.length - 1] !== day) r.push(day); if (r.length > 8) r.shift(); } // die letzten Kauf-/Eintragstage
 const recScore = p => { const d = (S.rec && S.rec[p.id]) || []; let s = 0; d.forEach(x => { s += Math.pow(0.5, Math.max(0, (+TODAY - +d0(x)) / 864e5) / 30); }); return s + Math.max(0, freq(p) - d.length) * 0.25; }; // jüngere Tage zählen mehr (Halbwertszeit 30 Tage)
+const byUse = (a, b) => recScore(b) - recScore(a) || a.name.localeCompare(b.name, 'de');
+function orderCats(cs) { // Rubriken, aus denen du oft kaufst, zuerst; sonst Reihenfolge wie im Laden (Obst & Gemüse zuerst, Haushalt zuletzt)
+  const sc = {}; PRODUCTS.forEach(p => { sc[p.cat] = (sc[p.cat] || 0) + recScore(p); });
+  return cs.slice().sort((x, y) => ((sc[y] || 0) - (sc[x] || 0)) || ((AISLE[x] || 7) - (AISLE[y] || 7)));
+}
 const mainProducts = () => PRODUCTS.filter(p => freq(p) >= 2).sort((a, b) => recScore(b) - recScore(a) || a.name.localeCompare(b.name, 'de'));
 const chipHtml = p => {
   const on = onList(p.id), i = productInfo(p), b = i.nearBest || i.best;
@@ -271,10 +276,10 @@ function quickAdd() {
   if (!shown.length && !fill.length && !due.length && !open) return `<div class="qa"><div class="row sp qh"><span class="mute">Schnell hinzufügen</span>${toggle}</div></div>`;
   let h = `<div class="qa"><div class="row sp qh"><span class="mute">${title}${due.length ? ' · 📌 jetzt günstiger' : ''}</span>${toggle}</div><div class="chips">${dueChips}${shown.map(chipHtml).join('')}${fill.map(chipHtml).join('')}</div>`;
   if (open) {
-    const cats = [...new Set(rest.map(p => p.cat))];
+    const cats = orderCats([...new Set(rest.map(p => p.cat))]);
     h += (others.length ? `<div class="mute qh" style="margin-top:8px">Weitere Favoriten</div><div class="chips">${others.map(chipHtml).join('')}</div>` : '') +
       `<div class="mute small qh" style="margin-top:8px">Die App lernt mit: Was du in letzter Zeit oft brauchst, steht vorne. Ab 2 Einkaufstagen wird ein Produkt zum Hauptprodukt, ab 3 zum Favoriten.</div>` +
-      cats.map(c => `<div class="mute qh" style="margin-top:8px">${ICON[c] || ''} ${c}</div><div class="chips">${rest.filter(p => p.cat === c).map(chipHtml).join('')}</div>`).join('');
+      cats.map(c => `<div class="mute qh" style="margin-top:8px">${ICON[c] || ''} ${c}</div><div class="chips">${rest.filter(p => p.cat === c).sort(byUse).map(chipHtml).join('')}</div>`).join('');
   }
   return h + '</div>';
 }
@@ -309,11 +314,11 @@ const aisleCmp = (a, b) => aisleOf(a.it, a.p) - aisleOf(b.it, b.p) || a.it.name.
 function cRow(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, open = UI.open.has(id), heavy = c.heavy !== undefined ? c.heavy : itemHeavy(it, p), route = c.ctx === 'route';
   const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
-  return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" onclick="toggleOpen('${id}')">
+  return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
     <button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button>
     ${b && b.img ? thumb(b.img, iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
     <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
-    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button></div>${open ? cDetail(c) : ''}`;
+    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="rm" onclick="event.stopPropagation();delUndo('${id}')" aria-label="Entfernen">✕</button><button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button></div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
@@ -327,36 +332,38 @@ function cDetail(c) {
     ${info && info.now.length ? `<table style="margin-top:6px">${info.now.slice(0, 5).map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
     <div class="row" style="margin-top:8px"><label class="mute"><input type="checkbox" ${it.urgent ? 'checked' : ''} onchange="urgent('${id}')" style="width:auto"> dringend</label><label class="mute"><input type="checkbox" ${itemHeavy(it, p) ? 'checked' : ''} onchange="toggleHeavy('${id}')" style="width:auto"> schwer/sperrig (zuletzt)</label></div>
     ${it.pid ? `<div class="mute" style="margin-top:8px">Wo kaufst du das normalerweise?</div><div class="chips">${['dm', 'rewe', 'netto', 'aldi', 'lidl'].map(s => `<button class="chip ${(S.prefs[it.pid] || (pf || {}).id) === s ? 'on' : ''}" onclick="setPref('${it.pid}','${s}')">${STORE(s).short}</button>`).join('')}<button class="chip" onclick="setPref('${it.pid}','')">Egal</button></div>` : ''}
-    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Beobachtet' : 'Beobachten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="del('${id}')">✕ Entfernen</button></div></div>`;
+    <div class="mute" style="margin-top:8px">Heute kaufen bei <span class="small">(auch: Artikel halten und ziehen)</span></div><div class="chips">${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<button class="chip ${it.store === s ? 'on' : ''}" onclick="moveItem('${id}','${s}')">${STORE(s).short}</button>`).join('')}<button class="chip ${it.store ? '' : 'on'}" onclick="moveItem('${id}','auto')">Automatisch</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Beobachtet' : 'Beobachten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="delUndo('${id}')">✕ Entfernen</button></div></div>`;
 }
 V.list = () => {
-  const rows = S.list.map((it, i) => { const p = it.pid ? PROD(it.pid) : null, info = p ? productInfo(p) : null; return { it, i, p, info, dec: info ? decision(info, it) : null, b: info && (info.nearBest || info.best) }; });
-  const open = rows.filter(r => !r.it.done), done = rows.filter(r => r.it.done);
+  const rows = S.list.map(rowInfo);
+  const open = rows.filter(r => !r.it.done && !hiddenShort(r.it)), done = rows.filter(r => r.it.done), later = rows.filter(r => !r.it.done && hiddenShort(r.it)).length;
   const groups = {};
-  open.forEach(r => { const k = r.b ? r.b.store.id : (prefOf(r.p, r.it.name) || { id: '_none' }).id; (groups[k] = groups[k] || []).push(r); });
+  open.forEach(r => { (groups[r.key] = groups[r.key] || []).push(r); });
   const order = Object.keys(groups).sort((a, b) => (a === '_none') - (b === '_none') || 'ABCD'.indexOf(STORE(a).tier) - 'ABCD'.indexOf(STORE(b).tier));
   order.forEach(k => groups[k].sort(aisleCmp)); // Reihenfolge wie im Laden
   const row = r => cRow({ it: r.it, p: r.p, b: r.b, info: r.info, dec: r.dec });
   const qa = quickAdd();
   SUGG = Object.entries(S.buys).filter(([k, n]) => n >= 2 && (k.startsWith('n:') || !watched(k)) && !(k.startsWith('n:') && S.custom.some(c => c.name.toLowerCase() === k.slice(2)))).slice(0, 3);
   const help = S.hideHelp ? '' : `<div class="card help"><h3>👋 So funktioniert's</h3><ol>
-    <li><b>Liste schreiben oder sprechen:</b> unten eintippen oder 🎤 einsprechen, z. B. „Milch, Butter und 2 Paprika".</li>
+    <li><b>Liste schreiben oder sprechen:</b> mit <b>+</b> oder unten eintippen, oder 🎤 einsprechen, z. B. „Milch, Butter und 2 Paprika".</li>
     <li><b>Angebote suchen:</b> holt die aktuellen Angebote. Die App sagt dir pro Produkt, wo es am besten ist. Dein <b>City-Center Chorweiler</b> steht immer an erster Stelle.</li>
-    <li><b>Produkt antippen:</b> zeigt Preis, Laden und weitere Möglichkeiten.</li>
-    <li><b>Einkauf abschließen:</b> Hake ab, was im Wagen ist. Die App merkt sich, was du oft kaufst.</li></ol>
+    <li><b>Produkt antippen</b> zeigt Preis und Laden. <b>Halten und ziehen</b> schiebt es heute in einen anderen Laden.</li>
+    <li><b>Abhaken und Fertig:</b> Hake ab, was du hast. Mit „Fertig“ räumt die App es weg und lernt, was du oft kaufst.</li></ol>
     <button class="btn sm" onclick="S.hideHelp=true;save();render()">Verstanden</button></div>`;
   const bkDays = S.lastBackup ? Math.round((TODAY - d0(S.lastBackup)) / 864e5) : 999;
   const backupBanner = (S.bons.length + Object.keys(S.adds).length >= 5 && bkDays > 30 && !UI.hideBk) ? `<div class="banner info row sp"><span>💾 Deine Daten liegen nur auf diesem Gerät. ${S.lastBackup ? 'Letzte Sicherung vor ' + bkDays + ' Tagen.' : 'Noch keine Sicherung.'}</span><span class="row" style="gap:6px"><button class="btn sm" onclick="exp()">Jetzt sichern</button><button class="ico" onclick="UI.hideBk=true;render()" aria-label="Später">✕</button></span></div>` : '';
   const sugg = SUGG.map(([k, n], i) => `<div class="banner info row sp"><span>Du kaufst <b>${esc(k.startsWith('n:') ? k.slice(2) : (PROD(k)?.name || k))}</b> oft (${n}×). Beobachten?</span><button class="btn sm" onclick="watchKey(${i})">👁 Ja</button></div>`).join('');
-  const main = open.length
-    ? `<div class="lhead"><b>🛒 Meine Liste</b><span>${open.length} ${open.length === 1 ? 'Artikel' : 'Artikel'} offen · Reihenfolge wie im Laden</span></div>` + order.map(k => `<h2 class="sh" style="--sc:${storeColor(k)}">${groupHead(k)}</h2><div class="card tight main">${groups[k].map(row).join('')}</div>`).join('')
-    : (done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe unten ein, was du brauchst, oder wähle ein Hauptprodukt.'));
-  const wagen = done.length ? `<h2 class="sh">🧺 Im Wagen</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Einkauf abschließen (${done.length})</button>` : '';
+  const kurz = shortOn() ? `<div class="banner kurz row sp"><span>⚡ <b>Kurzeinkauf</b> · ${open.length} jetzt${later ? ' · ' + later + ' warten in der Hauptliste' : ''}</span><button class="btn sm" onclick="shortEnd()">Alles zeigen</button></div>` : '';
+  const head = listHead('🛒 Meine Liste', open.length ? `${open.length} Artikel offen · Reihenfolge wie im Laden` : 'noch leer') + kurz + iaRow();
+  const groupsHtml = order.map(k => `<h2 class="sh" data-store="${k}" style="--sc:${storeColor(k)}">${groupHead(k)}</h2><div class="card tight main" data-store="${k}">${groups[k].map(row).join('')}</div>`).join('');
+  const wagen = done.length ? `<h2 class="sh">✓ Erledigt</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Fertig (${done.length})</button><div class="mute small" style="text-align:center;margin-top:4px">Räumt das Erledigte weg. Die App lernt daraus, was du oft kaufst.</div>` : '';
   const live = !SRC.live ? `<div class="banner">Noch keine echten Angebote geladen. Tippe oben auf <b>Angebote suchen</b>.</div>` : '';
-  // Liste zuerst. Ist sie leer, kommen Anleitung und Schnell-Hinzufügen nach oben, sonst darunter.
+  const bon = `<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>`;
+  // Liste zuerst. Ist sie leer, kommen Anleitung und Schnell-Hinzufügen gleich darunter.
   return open.length
-    ? `${main}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>${topSummary()}`
-    : `${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${main}${wagen}<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>${topSummary()}`;
+    ? `${head}${groupsHtml}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${bon}${topSummary()}`
+    : `${head}${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe auf <b>+</b> oder unten ein, was du brauchst, oder wähle ein Hauptprodukt.')}${wagen}${bon}${topSummary()}`;
 };
 function offersFiltered() {
   const q = UI.q.toLowerCase().trim(); return OFFERS_ALL().filter(o => !q || (o.name + ' ' + (o.desc || '') + ' ' + o.store.short + ' ' + (o.p ? o.p.name : '')).toLowerCase().includes(q));
@@ -397,7 +404,7 @@ V.watch = () => {
   <div class="add"><input id="wn" placeholder="Eigenes Produkt beobachten, z. B. Lachs" onkeydown="if(event.key==='Enter')addCustom()"><button class="btn pri" onclick="addCustom()">+</button></div>
   <div class="add"><input placeholder="Produkte filtern…" value="${esc(UI.wq || '')}" oninput="UI.wq=this.value;$('#wl').innerHTML=watchBody()"></div><div id="wl">${watchBody()}</div>`;
 };
-function watchBody() { const qq = (UI.wq || '').toLowerCase(); return [...new Set(PRODUCTS.map(p => p.cat))].map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id)); const line = p => { const i = productInfo(p), b = i.nearBest || i.best; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Nicht mehr beobachten' : 'Beobachten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
+function watchBody() { const qq = (UI.wq || '').toLowerCase(); return orderCats([...new Set(PRODUCTS.map(p => p.cat))]).map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id) || byUse(a, b)); const line = p => { const i = productInfo(p), b = i.nearBest || i.best; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Nicht mehr beobachten' : 'Beobachten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
 V.route = () => routeView();
 V.bon = () => bonView();
 function extraBody() {
@@ -438,6 +445,7 @@ V.pro = () => {
     ['A', 'B', 'D'].map(t => `<h3 style="margin:14px 4px 6px"><i class="dot t${t}"></i> ${TIER_LABEL[t]}</h3>` + STORES.filter(s => s.tier === t && s.links.length).map(card).join('')).join('');
 };
 V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow">Bon fotografieren: Die App liest ihn, lernt, wo du was kaufst, und findet Spartipps.<div class="mute"><button class="lnk" onclick="bonList()">${S.bons.length} Bons gespeichert, ansehen</button> · 📷 Foto-Lesen: ${aiKey() ? '✓ eingerichtet' : 'noch nicht eingerichtet'} <button class="lnk" onclick="aiSheet()">${aiKey() ? 'ändern' : 'einrichten'}</button></div></div><button class="btn pri sm" onclick="go('bon')">📷 Bon</button></div>
+  <h2>🎨 Darstellung</h2><div class="card">${SEG(S.set.theme || 'auto', [['auto', 'Automatisch'], ['light', '☀️ Hell'], ['dark', '🌙 Dunkel']], 'setTheme')}<div class="mute small" style="margin-top:6px">Automatisch folgt der Einstellung deines Handys.</div></div>
   <h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
   <h2>Datenstand</h2><div class="card"><div>${SRC.live ? `Letzte Suche: <b>${new Date(SRC.fetched).toLocaleString('de-DE')}</b><br><span class="mute">${SRC.offers.length} Angebote · ${esc(SRC.source)}</span>` : 'Noch keine Suche. Tippe oben auf „Angebote suchen".'}</div>
   <div class="mute" style="margin-top:8px">Wichtig: Die Angebote sind Händler-weit. Ob genau deine Filiale in Chorweiler mitmacht, wird nicht geprüft. <b>ALDI SÜD</b> kommt direkt von der ALDI-Webseite: ${SRC.aldi && SRC.aldi.ok ? '✓ ' + SRC.aldi.count + ' Produkte geladen' : '⚠ aktuell nicht geladen' + (SRC.aldi && SRC.aldi.error ? ' (' + esc(SRC.aldi.error) + ')' : '') + ', bitte Prospekt-Link bei Läden nutzen'}. Abgedeckt sind REWE, Netto, Lidl, METRO, ALDI und teilweise dm. Penny ist bewusst nicht dabei.</div></div>
@@ -727,11 +735,11 @@ function topSummary() {
   return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Beobachtete und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', 'Ab 30 % Ersparnis, auch bei Lidl (Spaziergang)', top);
 }
 const byId = id => S.list.find(i => i.id === id);
-const tick = id => { const i = byId(id); if (!i) return; i.done = !i.done; save(); render(); };
-const del = id => { S.list = S.list.filter(i => i.id !== id); save(); render(); };
+const tick = id => { const i = byId(id); if (!i) return; i.done = !i.done; shortCheckEnd(); save(); render(); };
+const del = id => { S.list = S.list.filter(i => i.id !== id); shortCheckEnd(); save(); render(); };
 const toggleHeavy = id => { const i = byId(id); if (!i) return; i.heavy = !itemHeavy(i, i.pid ? PROD(i.pid) : null); save(); render(); };
 const urgent = id => { const i = byId(id); if (!i) return; i.urgent = !i.urgent; save(); render(); };
-const toggleOpen = id => { UI.open.has(id) ? UI.open.delete(id) : UI.open.add(id); render(); };
+const toggleOpen = id => { if (typeof DRAG !== 'undefined' && Date.now() - DRAG.t < 500) return;  UI.open.has(id) ? UI.open.delete(id) : UI.open.add(id); render(); };
 function mkCustom(name) { let c = S.custom.find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) { c = { id: 'c_' + uid(), name }; S.custom.push(c); regCustom(c); CACHE = null; } return c; }
 function eye(id) { const i = byId(id); if (!i) return; if (!i.pid) { const c = mkCustom(i.name); i.pid = c.id; if (!watched(c.id)) S.watch.push(c.id); toast('„' + i.name + '" wird jetzt beobachtet. Bei der nächsten Suche werden Angebote gesucht.'); } else watchP(i.pid, true); save(); render(); }
 function watchP(id, noRender) { S.watch = watched(id) ? S.watch.filter(x => x !== id) : [...S.watch, id]; save(); if (!noRender) { render(); } }
@@ -744,7 +752,7 @@ function finish() { S.list.filter(i => i.done).forEach(i => { const k = i.pid ||
     if (k.startsWith('n:')) { id = mkCustom(k.slice(2)).id; S.buys[id] = n; delete S.buys[k]; }
     if (!watched(id)) { S.watch.push(id); const p = PROD(id); if (p) auto.push(p.name); }
   });
-  save(); render(); toast(auto.length ? 'Einkauf gespeichert. Neu im Beobachten: ' + auto.join(', ') : 'Einkauf gespeichert. Die App lernt daraus.'); }
+  save(); render(); toast(auto.length ? 'Erledigtes weggeräumt. Neu im Beobachten: ' + auto.join(', ') : 'Erledigtes weggeräumt. Die App lernt daraus.'); }
 function addOffer() {
   const name = $('#mn').value.trim(), price = parseFloat($('#mp').value); if (!name || !(price > 0)) return alert('Produkt und Preis nötig.');
   const o = { id: 'm' + Date.now(), store: $('#ms').value, name, price, regular: parseFloat($('#mr').value) || null, amount: parseFloat($('#ma').value) || null, unit: $('#mu').value || null, valid: [new Date().toISOString().slice(0, 10), $('#mv').value || '2999-01-01'], manual: true };
@@ -816,7 +824,7 @@ function render() {
   const pl = $('#pl'); if (pl) pl.innerHTML = PRODUCTS.filter(p => !p.custom).map(p => `<option value="${esc(p.name)}">`).join('');
   $('#view').innerHTML = V[cur](); UI.flash = null;
   $('#sub').textContent = TODAY.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-  rstat(); bqStrip(); scrollTo(0, sy);
+  rstat(); bqStrip(); applyTheme(); scrollTo(0, sy);
 }
 function go(k) { cur = k; location.hash = k; render(); scrollTo(0, 0); }
 repairRefs();

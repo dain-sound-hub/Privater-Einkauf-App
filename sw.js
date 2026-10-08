@@ -1,6 +1,6 @@
 // Offline-Speicher: Die App und die zuletzt geladenen Angebote funktionieren auch ohne Internet (z. B. im Laden).
 // Die App startet sofort aus dem Speicher (auch bei schwachem Netz) und aktualisiert sich im Hintergrund.
-const V = 'einkauf-v29', SHELL = ['./', 'index.html', 'app.js', 'route.js', 'receipt.js', 'PatrickHand.ttf', 'Bangers.ttf', 'data.js', 'offers.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const V = 'einkauf-v37', SHELL = ['./', 'index.html', 'app.js', 'route.js', 'receipt.js', 'extras.js', 'PatrickHand.ttf', 'Bangers.ttf', 'data.js', 'offers.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 // 'reload': nie eine alte Kopie vom Hosting-Zwischenspeicher holen, sonst mischen sich alte und neue Dateien
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => Promise.all(SHELL.map(u => fetch(new Request(u, { cache: 'reload' })).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return c.put(u, r); })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
