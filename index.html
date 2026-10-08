@@ -146,20 +146,20 @@ h2.sh{margin:14px 4px 6px;font-size:13px}
 @media (pointer:coarse){.crow .chk{width:34px;height:34px}.crow .chev{height:40px;width:30px}}
 .qa .chips{gap:5px;margin:3px 0 2px}.qa .chip{padding:3px 10px;font-size:13px;min-height:32px;box-shadow:none}.qa .chip:hover{transform:none}.qa .qh{margin:0 2px 1px}.qa .chip.arrow{padding:3px 10px}
 /* ===== Design „Notizzettel & Prospekt“: Liste wie ein Einkaufszettel, Preise und Rabatte wie im Prospekt ===== */
-@font-face{font-family:"Caveat";src:url("Caveat.ttf") format("truetype");font-weight:400 700;font-display:swap}
-:root{--bg:#f6f2e9;--bg2:#ede6d5;--line:#e6dfce;--paper:#fffdf2;--rule:#d3e1ef;--margin:#e98a82;--note:#fff0a0;--note-ink:#4a4210;--sale:#d62f3f;--sale2:#ffe14d;--sale-ink:#b3121f;--hand:"Caveat","Segoe Print","Bradley Hand",cursive}
+@font-face{font-family:"PatrickHand";src:url("PatrickHand.ttf") format("truetype");font-display:swap}@font-face{font-family:"Bangers";src:url("Bangers.ttf") format("truetype");font-display:swap}
+:root{--bg:#f6f2e9;--bg2:#ede6d5;--line:#e6dfce;--paper:#fffdf2;--rule:#d3e1ef;--margin:#e98a82;--note:#fff0a0;--note-ink:#4a4210;--sale:#d62f3f;--sale2:#ffe14d;--sale-ink:#b3121f;--hand:"PatrickHand","Segoe Print","Comic Sans MS",cursive;--comic:"Bangers","Impact",sans-serif}
 @media(prefers-color-scheme:dark){:root{--bg:#0d1411;--bg2:#101a15;--line:#26332c;--paper:#1c231e;--rule:#2f3d35;--margin:#8d4b48;--note:#3a3618;--note-ink:#f4eba8}}
-h2{font-family:var(--hand);font-size:22px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--ink)}
+h2{font-family:var(--comic);font-size:20px;font-weight:400;text-transform:uppercase;letter-spacing:1px;color:var(--ink)}
 /* Einkaufszettel */
-.lhead b{font-family:var(--hand);font-size:36px;font-weight:700;line-height:1;background:linear-gradient(transparent 60%,rgba(255,225,77,.75) 60%);padding:0 6px 0 2px}
+.lhead b{font-family:var(--comic);font-size:38px;font-weight:400;letter-spacing:1px;text-transform:uppercase;line-height:1;background:linear-gradient(transparent 60%,rgba(255,225,77,.75) 60%);padding:0 6px 0 2px}
 @media(prefers-color-scheme:dark){.lhead b{background:linear-gradient(transparent 60%,rgba(255,225,77,.28) 60%)}}
-h2.sh{font-size:24px;line-height:1;margin:14px 2px 6px;border-left:8px solid var(--sc,var(--acc));padding-left:9px}
+h2.sh{font-size:23px;line-height:1;margin:14px 2px 6px;border-left:8px solid var(--sc,var(--acc));padding-left:9px}
 h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .card.main{background:var(--paper);border:1px solid var(--rule);box-shadow:var(--sh1);position:relative;overflow:hidden}
 .card.main::before{content:"";position:absolute;top:0;bottom:0;left:50px;width:2px;background:var(--margin);opacity:.6;pointer-events:none}
 .card.main .crow{border-bottom:1px solid var(--rule)}
-.crow .nm{font-family:var(--hand);font-size:24px;font-weight:600;line-height:1.05}
-.crow .nm .mute{font-size:18px;font-weight:600}
+.crow .nm{font-family:var(--hand);font-size:20px;font-weight:400;text-transform:uppercase;letter-spacing:.4px;-webkit-text-stroke:.35px currentColor;line-height:1.1}
+.crow .nm .mute{font-size:16px;-webkit-text-stroke:0}.crow .nm{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .crow .chk{border-color:var(--mute);background:transparent;border-radius:8px}.crow .chk.on{background:var(--acc);border-color:var(--acc)}
 .crow.done .nm{opacity:.55}
 .crow .pr b{font-size:15px}
@@ -167,10 +167,10 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .crow .pc{color:var(--sale)}
 .lhead span{font-size:12.5px}
 /* Hauptprodukte wie Klebezettel */
-.qa .chip{font-family:var(--hand);font-size:20px;font-weight:600;line-height:1.05;background:var(--note);color:var(--note-ink);border:0;border-radius:5px;padding:1px 11px 2px;min-height:32px;box-shadow:1px 2px 4px rgba(0,0,0,.2)}
+.qa .chip{font-family:var(--hand);font-size:17px;font-weight:400;text-transform:uppercase;letter-spacing:.3px;-webkit-text-stroke:.3px currentColor;line-height:1.1;background:var(--note);color:var(--note-ink);border:0;border-radius:5px;padding:1px 11px 2px;min-height:32px;box-shadow:1px 2px 4px rgba(0,0,0,.2)}
 .qa .chip:nth-child(odd){transform:rotate(-1.2deg)}.qa .chip:nth-child(even){transform:rotate(1deg)}
 .qa .chip.on{background:var(--acc);color:#fff}
-.qa .chip.arrow{font-family:system-ui,sans-serif;font-size:13px;background:var(--card);color:var(--mute);transform:none;box-shadow:var(--sh1);border:1px solid var(--line)}
+.qa .chip.arrow{font-family:system-ui,sans-serif;font-size:13px;text-transform:none;-webkit-text-stroke:0;letter-spacing:0;background:var(--card);color:var(--mute);transform:none;box-shadow:var(--sh1);border:1px solid var(--line)}
 .qa .chip.due{background:var(--warn2);color:var(--warn)}
 .qa .chip b{font-family:system-ui,sans-serif;font-size:12px;color:var(--sale)!important}
 /* Prospekt: Preis auf gelbem Schild, Rabatt rot, Laden als Farbstreifen */
@@ -178,7 +178,7 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .price{display:inline-block;background:var(--sale2);color:var(--sale-ink);border-radius:8px;padding:0 9px;transform:rotate(-1.5deg);box-shadow:0 2px 4px rgba(0,0,0,.2)}
 .pct:not(.dub){background:var(--sale);box-shadow:0 3px 8px rgba(214,47,63,.35);transform:rotate(3deg)}
 .stop{border-left:8px solid var(--sc,var(--acc))}
-.stop h3{font-family:var(--hand);font-size:24px;font-weight:700}
+.stop h3{font-family:var(--comic);font-size:22px;font-weight:400;letter-spacing:1px;text-transform:uppercase}
 </style>
 </head>
 <body>
