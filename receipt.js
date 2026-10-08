@@ -130,7 +130,7 @@ function tipsBlock() {
 }
 
 /* ---------- Bildschirm „Bon einlesen" ---------- */
-let BON = { text: '', parsed: null, done: null, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null };
+let BON = { text: '', parsed: null, done: null, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' };
 const BON_SAMPLE = `REWE Markt GmbH
 Florenzer Str. 24-28
 50765 Köln
@@ -151,6 +151,7 @@ function bonView() {
   const b = BON.parsed, d = BON.done;
   const back = `<button class="btn sm" onclick="go('list')">← Zur Liste</button>`;
   if (d) return `${back}<div class="card help"><h3>✓ Bon gespeichert</h3><ul>${d.lines.map(l => `<li>${l}</li>`).join('')}</ul><div class="row"><button class="btn pri sm" onclick="BON.done=null;go('list')">Zur Liste</button><button class="btn sm" onclick="BON.done=null;render()">Weiteren Bon einlesen</button></div></div>`;
+  if (BON.detail && !b) return bonDetailView();
   if (!b) return `${back}<div class="card help"><h3>📷 Kassenbon ablegen</h3>
     <div class="small">Bon flach hinlegen, Licht von vorn, ganzer Bon im Bild. Ist er zu lang: erst das obere, dann das untere Stück (bis ${MAX_PHOTOS} Fotos). Dann auf <b>Ablegen</b> tippen. Gelesen wird im Hintergrund, du kannst gleich weitermachen.</div>
     ${BON.addTo ? `<div class="small" style="margin-top:8px;color:var(--warn)">Du ergänzt gerade einen vorhandenen Bon. <button class="lnk" onclick="BON.addTo=null;BON.photos=[];render()">Abbrechen</button></div>` : ''}
@@ -200,6 +201,7 @@ function bonCheck(b, diff) { // prüft nach dem Foto-Lesen, ob wirklich alles ge
   if (b.total == null) why.push('Die Summe wurde nicht gefunden.'); else if (Math.abs(diff) >= 0.015) why.push(`Die Positionen ergeben ${eur(bonSum(b.items))}, auf dem Bon steht ${eur(b.total)}. Vermutlich fehlt eine Zeile.`);
   if (BON.lowRead) why.push(`${BON.lowRead} Stelle(n) waren nicht lesbar (mit [?] markiert).`);
   if (!b.date) why.push('Das Datum wurde nicht gefunden.');
+  if (BON.dupWarn) why.push(BON.dupWarn);
   if (!why.length) return '<div class="card" style="border-color:var(--ok,#2e9e5b)"><b>✓ Alles gelesen:</b> Die Summe stimmt mit den Positionen überein.</div>';
   return `<div class="card help"><b>⚠ Nicht sicher, ob alles gelesen wurde</b><ul class="small">${why.map(w => '<li>' + esc(w) + '</li>').join('')}</ul><div class="row"><button class="btn sm pri" onclick="bonAddTo('${BON.cur}')">📷 Foto ergänzen</button></div></div>`;
 }
@@ -231,6 +233,7 @@ function bonSave() {
   if (!store) return feedbackText('Bitte wähle oben den Laden aus.', true);
   const items = b.items.filter(i => i.kind === 'item' && i.include);
   if (!items.length) return feedbackText('Es ist keine Position ausgewählt.', true);
+  if (!BON.allowDup) { const d = bonDupOf(store, date, b.total, bonNames(items), BON.cur); if (d && d.sure && !confirm('Diesen Bon hast du schon (' + bonStoreName(d.c.store) + ', ' + fmtD(d.c.date) + '). Trotzdem nochmal speichern? Dann zählt er doppelt.')) return; }
   const oldTip = new Set(savingTips().map(t => t.p.id)), before = {};
   items.forEach(i => { if (i.pid) before[i.pid] = stammladen(i.pid); });
   const rec = { id: uid(), date, store, total: b.total, items: items.map(i => ({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null })) };
@@ -260,7 +263,7 @@ function bonSave() {
   [...seen].forEach(pid => { const st = stammladen(pid), was = before[pid]; if (st && (!was || was.store !== st.store)) lines.push(`📍 ${esc(PROD(pid).name)}: Du kaufst das meist bei <b>${esc(bonStoreName(st.store))}</b> (${st.n} von ${st.of} Käufen).`); });
   const newTips = savingTips().filter(t => !oldTip.has(t.p.id)); newTips.slice(0, 2).forEach(t => lines.push(`💡 ${esc(t.p.name)}: ${esc(tipText(t))}`));
   if (qid) { bqSaved(qid, rec, total); lines.push('🗑️ Das Papier kannst du jetzt wegwerfen. Das Foto bleibt noch hier gespeichert.'); }
-  save(); BON = { text: '', parsed: null, done: { lines }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null }; render();
+  save(); BON = { text: '', parsed: null, done: { lines }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' }; render();
 }
 
 /* ---------- Foto lesen: Bon fotografieren, KI schreibt den Text ab, der Bon-Leser oben macht den Rest ---------- */
@@ -420,10 +423,11 @@ const bqNote = t => { BQ.note = t; if (BQ.running) bqStrip(); };
 function bqChanged() { bqStrip(); if (typeof cur !== 'undefined' && cur === 'bon' && !BON.parsed && !BON.done) render(); }
 function bqStrip() { // Statuszeile oben auf jeder Seite
   const el = document.getElementById('bqs'); if (!el) return;
-  const n = s => BQ.list.filter(m => m.status === s).length, run = n('liest'), rdy = n('gelesen'), wait = n('wartet'), bad = n('fehler'), parts = [];
+  const n = s => BQ.list.filter(m => m.status === s).length, run = n('liest'), rdy = n('gelesen'), wait = n('wartet'), bad = n('fehler'), dup = n('doppelt'), parts = [];
   if (run) parts.push(`🔄 Bon wird gelesen … <span class="mute">${esc(BQ.note)}</span>`);
   if (rdy) parts.push(`✓ ${rdy} gelesen, bitte prüfen`);
   if (wait) parts.push(!aiKey() ? `⏳ ${wait} warten, Foto-Lesen einrichten` : BQ.keyProblem ? `⏳ ${wait} warten: ${esc(BQ.keyProblem)}` : run ? `⏳ ${wait} warten` : `⏳ ${wait} warten (Google gerade ausgelastet, später neu)`);
+  if (dup) parts.push(`🔁 ${dup} doppelt`);
   if (bad) parts.push(`⚠ ${bad} nicht lesbar`);
   el.innerHTML = parts.length ? `<button class="bqs" onclick="go('bon')">${parts.join(' · ')}</button>` : '';
 }
@@ -435,7 +439,9 @@ async function bonAblegen() {
     if (m) { const alt = await bqFotosGet(m.id); await bqFotosSet(m.id, [...alt, ...fotos].slice(0, MAX_PHOTOS)); Object.assign(m, { status: 'wartet', err: '', text: '', nPhotos: Math.min(MAX_PHOTOS, alt.length + fotos.length), hasPhotos: true }); await bqSaveMeta(m); }
     BON.addTo = null;
   } else {
-    const m = { id: uid(), created: Date.now(), status: 'wartet', err: '', nPhotos: fotos.length, hasPhotos: true };
+    const hash = fnvHash(fotos.join(''));
+    if (BQ.list.some(x => x.hash === hash)) { BON.photos = []; render(); return feedbackText('Dieses Foto hast du schon abgelegt. Es wird nicht doppelt gezählt.', true); }
+    const m = { id: uid(), created: Date.now(), status: 'wartet', err: '', nPhotos: fotos.length, hasPhotos: true, hash };
     await bqFotosSet(m.id, fotos); BQ.list.unshift(m); await bqSaveMeta(m);
   }
   BON.photos = []; BON.err = ''; BQ.cool = 0;
@@ -458,8 +464,8 @@ async function bqRun(force) {
         if (!text || /^\W*NICHT_LESBAR/i.test(text)) throw Object.assign(new Error('Auf dem Foto war kein Bon lesbar. Neues Foto machen oder löschen.'), { fatal: true });
         const parsed = parseReceipt(text);
         if (!parsed.items.length) throw Object.assign(new Error('Keine Positionen erkannt. Schärferes, näheres Foto machen.'), { fatal: true });
-        Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '' });
-        if (!(typeof cur !== 'undefined' && cur === 'bon')) feedbackText('✓ Ein Bon wurde gelesen. Unter Mehr → 📷 Bon kannst du ihn prüfen.');
+        Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '', warn: '' }); bqDupCheck(m, parsed);
+        if (!(typeof cur !== 'undefined' && cur === 'bon')) feedbackText(m.status === 'doppelt' ? '🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.' : '✓ Ein Bon wurde gelesen. Unter Mehr → 📷 Bon kannst du ihn prüfen.');
       } catch (e) {
         if (e.fatal) { m.status = 'fehler'; m.err = e.message; }
         else { m.status = 'wartet'; m.err = e.message; stop = true; if (/Schlüssel|Guthaben|eingerichtet/.test(e.message)) BQ.keyProblem = e.message; else BQ.cool = Date.now(); }
@@ -470,20 +476,25 @@ async function bqRun(force) {
   } finally { BQ.running = false; bqChanged(); }
 }
 function bqList() {
-  if (!BQ.list.length) return '';
-  const rows = [...BQ.list].sort((a, b) => b.created - a.created).map(m => {
+  const open = BQ.list.filter(m => m.status !== 'gespeichert').sort((a, b) => b.created - a.created);
+  const rows = open.map(m => {
     const st = m.status, when = new Date(m.created).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const sub = st === 'gespeichert' ? `✅ gespeichert: ${esc(bonStoreName(m.store))} · ${eur(m.sum)} · ${m.n} Positionen${m.hasPhotos ? '' : ' · Foto gelöscht'}`
-      : st === 'gelesen' ? `✓ gelesen, bitte prüfen${m.total != null ? ' · ' + eur(m.total) : ''}` : st === 'liest' ? '🔄 wird gelesen …'
+    const sub = st === 'gelesen' ? `✓ gelesen, bitte prüfen${m.total != null ? ' · ' + eur(m.total) : ''}${m.warn ? ' · ⚠ evtl. doppelt' : ''}` : st === 'liest' ? '🔄 wird gelesen …'
+      : st === 'doppelt' ? '🔁 doppelt: ' + esc(m.dupText || 'schon vorhanden') + '. Wird nicht mitgerechnet.'
       : st === 'fehler' ? '⚠ ' + esc(m.err) : '⏳ wartet auf das Lesen' + (m.err ? ' (' + esc(m.err.slice(0, 80)) + ')' : '');
     const btn = st === 'gelesen' ? `<button class="btn sm pri" onclick="bonOpen('${m.id}')">Prüfen</button>`
+      : st === 'doppelt' ? `<button class="btn sm" onclick="bqForce('${m.id}')">Trotzdem speichern</button>`
       : st === 'fehler' ? `<button class="btn sm" onclick="bonAddTo('${m.id}')">Foto ergänzen</button>`
-      : st === 'wartet' ? `<button class="btn sm" onclick="BQ.cool=0;bqRun(true)">Jetzt lesen</button>`
-      : st === 'gespeichert' && m.hasPhotos ? `<button class="btn sm" onclick="bqShow('${m.id}')">Foto</button>` : '';
-    return `<div class="item"><div class="grow"><div class="nm" style="cursor:default">Bon vom ${esc(st === 'gespeichert' && m.date ? fmtD(m.date) : when)} <span class="mute">· ${m.nPhotos || 1} Foto${(m.nPhotos || 1) > 1 ? 's' : ''}</span></div><div class="small">${sub}</div></div>${btn}<button class="ico" onclick="bonDelete('${m.id}')" aria-label="Bon löschen">🗑</button></div>`;
+      : st === 'wartet' ? `<button class="btn sm" onclick="BQ.cool=0;bqRun(true)">Jetzt lesen</button>` : '';
+    return `<div class="item"><div class="grow"><div class="nm" style="cursor:default">Bon vom ${esc(when)} <span class="mute">· ${m.nPhotos || 1} Foto${(m.nPhotos || 1) > 1 ? 's' : ''}</span></div><div class="small">${sub}</div></div>${btn}<button class="ico" onclick="bonDelete('${m.id}')" aria-label="Bon löschen">🗑</button></div>`;
+  }).join('');
+  const saved = [...S.bons].sort((a, b) => b.date.localeCompare(a.date)).map(b => {
+    const m = BQ.list.find(x => x.recId === b.id), tot = b.total != null ? b.total : +b.items.reduce((s, i) => s + i.p, 0).toFixed(2);
+    return `<div class="item" role="button" tabindex="0" style="cursor:pointer" onclick="bonDetail('${b.id}')" onkeydown="if(event.key==='Enter')bonDetail('${b.id}')"><div class="grow"><div class="nm" style="cursor:pointer"><b>${esc(fmtD(b.date))}</b> · ${esc(bonStoreName(b.store))}</div><div class="small">${b.items.length} Positionen · ${eur(tot)}${m && m.hasPhotos ? ' · 📷 Foto da' : ''}</div></div><span class="mute" aria-hidden="true">›</span></div>`;
   }).join('');
   setTimeout(bqStorageInfo, 0);
-  return `<h2>🧾 Deine Bons (${BQ.list.length})</h2><div class="card tight">${rows}</div><div class="mute small" id="bqinfo" style="margin:6px 4px"></div>`;
+  return (rows ? `<h2>🧾 Bons in Bearbeitung (${open.length})</h2><div class="card tight">${rows}</div>` : '') +
+    `<h2 id="bonlist">📚 Gespeicherte Bons (${S.bons.length})</h2>` + (saved ? `<div class="card tight">${saved}</div>` : '<div class="card mute">Noch keine Bons gespeichert.</div>') + '<div class="mute small" id="bqinfo" style="margin:6px 4px"></div>';
 }
 async function bqStorageInfo() {
   const el = document.getElementById('bqinfo'); if (!el || !(navigator.storage && navigator.storage.estimate)) return;
@@ -491,7 +502,7 @@ async function bqStorageInfo() {
 }
 async function bonOpen(id) {
   const m = BQ.list.find(x => x.id === id); if (!m || !m.text) return;
-  BON.text = m.text; BON.parsed = parseReceipt(m.text); BON.lowRead = m.lowRead || 0; BON.cur = id; BON.fromPhoto = true; BON.err = '';
+  BON.text = m.text; BON.parsed = parseReceipt(m.text); BON.lowRead = m.lowRead || 0; BON.cur = id; BON.fromPhoto = true; BON.err = ''; BON.allowDup = !!m.allowDup; BON.dupWarn = m.warn || '';
   BON.curPhotos = await bqFotosGet(id); render(); scrollTo(0, 0);
 }
 function bonClose() { BON.parsed = null; BON.cur = null; BON.fromPhoto = false; BON.curPhotos = []; BON.text = ''; render(); }
@@ -510,10 +521,47 @@ async function bonDelete(id) {
 }
 async function bqSaved(id, rec, total) { // nach „Speichern“: Eintrag abschließen, alte Fotos aufräumen
   const m = BQ.list.find(x => x.id === id); if (!m) return;
-  Object.assign(m, { status: 'gespeichert', store: rec.store, date: rec.date, sum: rec.total != null ? rec.total : total, n: rec.items.length, savedAt: Date.now(), text: '' });
+  Object.assign(m, { status: 'gespeichert', recId: rec.id, store: rec.store, date: rec.date, sum: rec.total != null ? rec.total : total, n: rec.items.length, savedAt: Date.now(), text: '' });
   await bqSaveMeta(m);
   const saved = BQ.list.filter(x => x.status === 'gespeichert').sort((a, b) => b.savedAt - a.savedAt);
   for (const o of saved.slice(BQ_KEEP)) if (o.hasPhotos) { o.hasPhotos = false; await bqFotosDel(o.id); await bqSaveMeta(o); }
   for (const o of saved.slice(80)) { BQ.list = BQ.list.filter(x => x !== o); await bqTx('meta', 'readwrite', s => s.delete(o.id)).catch(() => { }); }
 }
 window.addEventListener('online', () => bqRun(true));
+/* ---------- Doppelte Bons erkennen ---------- */
+const bonNorm = n => fold(String(n)).replace(/[^a-z0-9]/g, '');
+const bonNames = items => [...new Set(items.filter(i => !i.kind || i.kind === 'item').map(i => bonNorm(i.name || i.n)).filter(Boolean))];
+const fnvHash = s => { let h = 2166136261; for (let i = 0; i < s.length; i += 7) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0).toString(36) + s.length; };
+// Vergleicht Laden, Datum, Summe und Produktnamen mit gespeicherten und schon gelesenen Bons. sure = sicher derselbe Bon.
+function bonDupOf(store, date, total, names, skipId) {
+  const cands = S.bons.map(b => ({ store: b.store, date: b.date, total: b.total, names: b.items.map(i => bonNorm(i.n)), saved: true }));
+  BQ.list.forEach(m => { if (m.id !== skipId && m.sig && m.status === 'gelesen') cands.push({ ...m.sig, saved: false }); });
+  for (const c of cands) {
+    if (c.store !== store || c.date !== date) continue;
+    const both = total != null && c.total != null; if (both && Math.abs(c.total - total) >= 0.005) continue;
+    const A = new Set(c.names), B = new Set(names), inter = [...B].filter(x => A.has(x)).length, jac = inter / Math.max(1, A.size + B.size - inter);
+    if (jac >= (both ? 0.6 : 0.8)) return { c, sure: true };
+    if (both) return { c, sure: false };
+  }
+  return null;
+}
+const bonDetail = id => { BON.detail = id; render(); scrollTo(0, 0); };
+function bonDetailView() {
+  const b = S.bons.find(x => x.id === BON.detail); if (!b) { BON.detail = null; return ''; }
+  const m = BQ.list.find(x => x.recId === b.id), sum = +b.items.reduce((s, i) => s + i.p, 0).toFixed(2);
+  const rows = b.items.map(i => { const p = i.pid ? PROD(i.pid) : null; return `<div class="item"><div class="grow"><div class="nm" style="cursor:default">${esc(i.n)}${i.q > 1 ? ` <span class="mute">× ${i.q}</span>` : ''}</div>${p ? `<span class="tag t-ok">${esc(p.name)}</span>` : '<span class="tag">kein Produkt zugeordnet</span>'}</div><b>${eur(i.p)}</b></div>`; }).join('');
+  return `<button class="btn sm" onclick="BON.detail=null;render()">← Zu den Bons</button>
+    <div class="card"><h3>🧾 ${esc(bonStoreName(b.store))} · ${esc(fmtD(b.date))}</h3><div class="small" style="margin-top:6px">${b.items.length} Positionen · Summe laut Bon ${b.total != null ? eur(b.total) : 'unbekannt'} · Positionen zusammen ${eur(sum)} (Pfand wird nicht mitgezählt)</div></div>
+    <h2>Gekauft</h2><div class="card tight">${rows || '<div class="empty">Keine Positionen.</div>'}</div>
+    ${m && m.hasPhotos ? `<button class="btn" style="margin-top:10px" onclick="bqShow('${m.id}')">📄 Foto vom Bon ansehen</button>` : ''}`;
+}
+function bqDupCheck(m, parsed) { // nach dem Lesen: ist das derselbe Bon wie ein schon vorhandener?
+  m.sig = null; m.dupText = '';
+  if (!parsed.store || !parsed.date) return;
+  const names = bonNames(parsed.items); m.sig = { store: parsed.store, date: parsed.date, total: parsed.total, names };
+  const d = bonDupOf(parsed.store, parsed.date, parsed.total, names, m.id); if (!d) return;
+  if (d.sure) { m.status = 'doppelt'; m.dupText = bonStoreName(d.c.store) + ' ' + fmtD(d.c.date) + (d.c.total != null ? ', ' + eur(d.c.total) : '') + (d.c.saved ? ' ist schon gespeichert' : ' ist schon in der Liste'); m.hasPhotos = false; bqFotosDel(m.id); }
+  else m.warn = 'Gleicher Laden, gleiches Datum und gleiche Summe wie ein anderer Bon, aber andere Produkte. Prüfe, ob es derselbe ist.';
+}
+async function bqForce(id) { const m = BQ.list.find(x => x.id === id); if (!m || !m.text) return; m.status = 'gelesen'; m.allowDup = true; m.warn = ''; await bqSaveMeta(m); bonOpen(id); }
+function bonList() { go('bon'); setTimeout(() => { const e = document.getElementById('bonlist'); if (e) e.scrollIntoView(); }, 120); }
