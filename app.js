@@ -299,10 +299,10 @@ function cRow(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, open = UI.open.has(id), heavy = c.heavy !== undefined ? c.heavy : itemHeavy(it, p), route = c.ctx === 'route';
   const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
   return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" onclick="toggleOpen('${id}')">
-    <button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button>
+    <button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button>
     <span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>
     <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
-    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button></div>${open ? cDetail(c) : ''}`;
+    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button></div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
