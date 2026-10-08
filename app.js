@@ -320,10 +320,10 @@ function cRow(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, open = UI.open.has(id), heavy = c.heavy !== undefined ? c.heavy : itemHeavy(it, p), route = c.ctx === 'route';
   const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
   return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
-    <button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button>
+    <button class="rm" onclick="event.stopPropagation();delUndo('${id}')" aria-label="Entfernen">✕</button><button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button>
     ${b && b.img ? thumb(b.img, iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
     <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.store ? ' <span class="mv" title="Von dir in diesen Laden verschoben">📍</span>' : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
-    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="rm" onclick="event.stopPropagation();delUndo('${id}')" aria-label="Entfernen">✕</button><button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button></div>${open ? cDetail(c) : ''}`;
+    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button></div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
@@ -378,6 +378,7 @@ function offersFiltered() {
 const WHERE = { local: ['A'], walk: ['B'], car: ['C', 'D'] };
 const whereCount = k => OFFERS_ALL().filter(o => o.state === 'now' && WHERE[k].includes(o.store.tier)).length;
 function offersBody() {
+  if (UI.store && UI.store !== 'all') return storeBody();
   const w = UI.where || 'local', tiers = WHERE[w], t = UI.offers;
   const offs = offersFiltered().filter(o => tiers.includes(o.store.tier)), byPct = (a, b) => (b.pct || 0) - (a.pct || 0), lim = (a, n) => UI.more ? a : a.slice(0, n);
   const more = (a, n) => !UI.more && a.length > n ? `<div style="text-align:center;margin:10px"><button class="btn" onclick="UI.more=true;renderOffers()">Alle ${a.length} anzeigen</button></div>` : '';
@@ -400,10 +401,21 @@ function offersBody() {
   <h2>Haltbares ab ${S.set.stockPct} % Ersparnis</h2>${stock.length ? grid(lim(stock, 24).map(o => offerCard(o)).join('')) : empty('📦', 'Aktuell nichts, das den Schwellwert erreicht.')}`;
 }
 const SEG = (cur, items, fn, cls = '') => `<div class="seg ${cls}">${items.map(([k, l]) => `<button class="${k === cur ? 'on' : ''}" onclick="${fn}('${k}')">${l}</button>`).join('')}</div>`;
-V.offers = () => `${SEG(UI.where || 'local', [['local', `🏠 Vor Ort <small>${whereCount('local')}</small>`], ['walk', `🚶 Spazieren <small>${whereCount('walk')}</small>`], ['car', `🚗 Auto <small>${whereCount('car')}</small>`]], 'setWhere', 'seg3')}
-  <div class="chips scroll" style="margin:0 0 10px">${[['week', 'Diese Woche'], ['next', `Nächste Woche <small>${nextBadge()}</small>`], ['discover', 'Entdecken'], ['stock', 'Vorrat & Fleisch']].map(([k, l]) => `<button class="chip ${k === UI.offers ? 'on' : ''}" onclick="setOff('${k}')">${l}</button>`).join('')}</div>
+V.offers = () => `${SEG(UI.store && UI.store !== 'all' ? '' : (UI.where || 'local'), [['local', `🏠 Vor Ort <small>${whereCount('local')}</small>`], ['walk', `🚶 Spazieren <small>${whereCount('walk')}</small>`], ['car', `🚗 Auto <small>${whereCount('car')}</small>`]], 'setWhere', 'seg3')}${storeRow()}
+  <div class="chips scroll" style="margin:0 0 10px">${[['week', 'Diese Woche'], ['next', `Nächste Woche <small>${nextBadge()}</small>`], ['discover', 'Entdecken'], ['stock', 'Vorrat & Fleisch']].filter(([k]) => !(UI.store && UI.store !== 'all') || k === 'week' || k === 'next').map(([k, l]) => `<button class="chip ${k === UI.offers ? 'on' : ''}" onclick="setOff('${k}')">${l}</button>`).join('')}</div>
   <div class="add"><input id="oq" placeholder="Angebote durchsuchen…" value="${esc(UI.q)}" oninput="UI.q=this.value;UI.more=false;renderOffers()"></div><div id="olist">${offersBody()}</div>`;
-const setWhere = k => { UI.where = k; UI.more = false; render(); };
+const setWhere = k => { UI.where = k; UI.store = 'all'; UI.more = false; render(); };
+const setStore = k => { UI.store = k; UI.more = false; if (k !== 'all' && !['week', 'next'].includes(UI.offers)) UI.offers = 'week'; render(); };
+const storeCount = id => OFFERS_ALL().filter(o => o.store.id === id && o.state === 'now').length;
+const storeRow = () => `<div class="chips scroll" style="margin:0 0 8px" role="group" aria-label="Laden wählen"><button class="chip ${!UI.store || UI.store === 'all' ? 'on' : ''}" onclick="setStore('all')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && storeCount(s.id) > 0).map(s => `<button class="chip ${UI.store === s.id ? 'on' : ''}" onclick="setStore('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)} <small>${storeCount(s.id)}</small></button>`).join('')}</div>`;
+function storeBody() { // alle Angebote eines Ladens, deine Produkte zuerst
+  const id = UI.store, st = STORE(id), state = UI.offers === 'next' ? 'next' : 'now', byPct = (x, y) => (y.dubious ? 0 : (y.pct || 0)) - (x.dubious ? 0 : (x.pct || 0));
+  const all = offersFiltered().filter(o => o.store.id === id && o.state === state), mine = all.filter(o => o.p && (onList(o.p.id) || watched(o.p.id))).sort(byPct), rest = all.filter(o => !mine.includes(o)).sort(byPct), lim = UI.more ? rest : rest.slice(0, 24);
+  return `<div class="banner info">${st.tier === 'A' ? '🏠' : st.tier === 'B' ? '🚶' : '🚗'} <b>${esc(st.name)}</b> · ${all.length} Angebote ${state === 'next' ? 'für nächste Woche' : 'diese Woche'}</div>` +
+    (mine.length ? `<h2>Zu deiner Liste und deinen Favoriten</h2>${grid(mine.map(o => offerCard(o)).join(''))}` : '') +
+    (rest.length ? `<h2>Alle Angebote bei ${esc(st.short)}</h2>${grid(lim.map(o => offerCard(o)).join(''))}${!UI.more && rest.length > 24 ? `<div style="text-align:center;margin:10px"><button class="btn" onclick="UI.more=true;renderOffers()">Alle ${rest.length} anzeigen</button></div>` : ''}` : '') +
+    (!all.length ? empty('🏷️', state === 'next' ? `Für ${esc(st.short)} sind noch keine Angebote für nächste Woche bekannt.` : `Für ${esc(st.short)} sind gerade keine Angebote geladen.`) : '');
+}
 const renderOffers = () => { const e = $('#olist'); if (e) e.innerHTML = offersBody(); };
 V.watch = () => {
   return `<div class="banner info">👁 <b>Was ist das?</b> Beobachtete Produkte sind deine Dauerprodukte. Die App prüft sie bei jeder Angebotssuche, auch wenn sie nicht auf deiner Liste stehen, und zeigt dir starke Angebote dafür auf der Startseite. Aktuell beobachtet: <b>${S.watch.length}</b></div>
@@ -590,6 +602,8 @@ function feedbackText(html, warn) {
 function jumpToItem(id) { go('list'); setTimeout(() => { const e = document.getElementById('it-' + id); if (e) e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); }
 function showFeedback(added, dup, favNew = []) {
   if (!added.length && !dup.length) return;
+  const dk = document.getElementById('dock');
+  if (dk && dk.classList.contains('open') && added.length && !dup.length && !added.some(x => x.guess)) { miniToast('✓ ' + added.slice(0, 3).map(x => (x.qty ? x.qty + ' ' : '') + x.name).join(', ') + (added.length > 3 ? ' + ' + (added.length - 3) + ' weitere' : '') + ' eingetragen'); const f = $('#fb'); if (f) f.hidden = true; return; }
   const shown = added.slice(0, 3), restN = added.length - shown.length;
   const items = shown.map(x => `${x.qty ? esc(qtyLabel(x.qty)) + ' ' : ''}<b>${esc(x.name)}</b>${x.known ? '' : ' <i>(neu)</i>'}`).join(' · ') + (restN > 0 ? ` · +${restN} weitere` : '');
   const first = added[0], gx = added.find(x => x.guess);
@@ -819,14 +833,14 @@ async function startResearch() {
 }
 
 /* ================= Shell ================= */
-const TABS = [['list', '🛒', 'Liste'], ['route', '🧭', 'Route'], ['offers', '🏷️', 'Angebote'], ['watch', '👁', 'Beobachten'], ['pro', '📰', 'Prospekte'], ['more', '⚙️', 'Mehr']];
+const TABS = [['list', '🛒', 'Liste'], ['route', '🧭', 'Route'], ['offers', '🏷️', 'Angebote'], ['watch', '👁', 'Favoriten'], ['pro', '📰', 'Prospekte'], ['more', '⚙️', 'Mehr']];
 let cur = (location.hash || '#list').slice(1);
 function render() {
   TIPS = null; shortSync();
   if (!V[cur]) cur = 'list';
   const sy = scrollY, ae = document.activeElement && document.activeElement.id;
   const nOpen = S.list.filter(i => !i.done).length;
-  $('#tabs').innerHTML = TABS.map(([k, i, l]) => `<button class="${k === cur ? 'on' : ''}" onclick="go('${k}')"><span>${i}${k === 'list' && nOpen ? `<b class="bdg">${nOpen}</b>` : ''}</span>${l}</button>`).join('');
+  $('#tabs').innerHTML = TABS.map(([k, i, l], n) => (n === 3 ? '<span class="fabslot"></span>' : '') + `<button class="${k === cur ? 'on' : ''}" onclick="go('${k}')"><span>${i}${k === 'list' && nOpen ? `<b class="bdg">${nOpen}</b>` : ''}</span>${l}</button>`).join('');
   const pl = $('#pl'); if (pl) pl.innerHTML = PRODUCTS.filter(p => !p.custom).map(p => `<option value="${esc(p.name)}">`).join('');
   $('#view').innerHTML = V[cur](); UI.flash = null;
   $('#sub').textContent = TODAY.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });

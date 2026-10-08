@@ -242,6 +242,23 @@ h2.sh.dropon{outline:none;box-shadow:none;color:var(--acc-d)}
 .mv{font-size:13px;margin-left:3px}
 .mvnote{background:var(--note);color:var(--note-ink);border-radius:10px;padding:7px 10px;margin-bottom:8px;font-size:13px}
 .banner.info .ico{flex:none}
+.kdel{display:flex;justify-content:flex-end;margin:-2px 0 10px}.kdel button{border:0;background:none;color:var(--mute);font-size:12px;padding:8px 6px;text-decoration:underline}
+.sdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:baseline;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.chip.on .sdot{box-shadow:0 0 0 2px #fff}
+/* runder Plus-Knopf in der Menüleiste, kleine Meldung oben, Hauptprodukte etwas leiser */
+.fabslot{flex:none;width:64px}
+nav.bottom .navfab{position:absolute;left:50%;top:-28px;transform:translateX(-50%);flex:none;width:62px;height:62px;border-radius:50%;border:5px solid var(--bg);background:linear-gradient(var(--acc-l),var(--acc));color:#fff;font-size:40px;line-height:1;font-weight:700;padding:0 0 5px;display:block;box-shadow:0 10px 22px var(--glow),var(--hi);transition:transform .2s}
+nav.bottom .navfab:hover{background:linear-gradient(var(--acc-l),var(--acc));color:#fff}nav.bottom .navfab:active{transform:translateX(-50%) scale(.94)}
+nav.bottom .navfab.open{transform:translateX(-50%) rotate(45deg);background:linear-gradient(#f0836f,var(--sale))}
+.dock{bottom:calc(112px + env(safe-area-inset-bottom))}
+.dock.open::after{content:"";position:absolute;left:50%;bottom:-10px;width:16px;height:16px;background:var(--paper);border-right:2px solid var(--acc);border-bottom:2px solid var(--acc);transform:translateX(-50%) rotate(45deg)}
+.tt{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translate(-50%,-14px);z-index:70;max-width:min(520px,calc(100% - 28px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;text-align:center}
+.tt.show{opacity:1;transform:translate(-50%,0)}
+.crow .rm{margin:0 -3px 0 -4px;opacity:.5}
+.qa .chip{background:color-mix(in srgb,var(--note) 55%,var(--card));color:color-mix(in srgb,var(--note-ink) 80%,var(--card));-webkit-text-stroke:0;box-shadow:0 1px 2px rgba(0,0,0,.12);font-size:16px}
+.qa .chip.on{background:color-mix(in srgb,var(--acc) 70%,var(--card));color:#fff}
+.qa .chip b{opacity:.85}.qa .qh .mute{opacity:.85}.qa .chips{opacity:.93}
+.fabslot{width:56px}nav.bottom #tabs button{font-size:9.8px;letter-spacing:-.2px;padding-left:0;padding-right:0}nav.bottom #tabs button span{font-size:21px}
 </style>
 </head>
 <body>
@@ -254,7 +271,8 @@ h2.sh.dropon{outline:none;box-shadow:none;color:var(--acc-d)}
   <div id="fb" class="fb" role="status" aria-live="polite" hidden></div>
   <div class="dockrow"><input id="ni" placeholder="Was brauchst du? z. B. 2 Milch" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" oninput="suggest()" onkeydown="if(event.key==='Enter')addItem();else if(event.key==='Escape')hideSug()"><button class="btn" id="micb" onclick="mic()" title="Einsprechen" aria-label="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen" aria-label="Hinzufügen">+</button></div><div class="dockhint">Mehrere mit Komma oder „Punkt“ beim Sprechen.</div></div>
 <div class="sheet" id="sheet" hidden onclick="if(event.target===this)closeSheet()"><div class="sheetbox" id="sheetbox"></div></div>
-<nav class="bottom"><div id="tabs"></div></nav>
+<div id="tt" class="tt" role="status" aria-live="polite"></div>
+<nav class="bottom"><div id="tabs"></div><button class="navfab" id="navfab" onclick="iaOpen()" aria-label="Artikel eintragen">+</button></nav>
 <script src="data.js"></script>
 <script src="offers.js"></script>
 <script src="route.js"></script>

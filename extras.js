@@ -18,8 +18,13 @@ function rowInfo(it) {
 }
 
 /* ---------- Plus: Eingabefenster zum Ergänzen (Tippen oder Einsprechen) ---------- */
-function iaOpen() { const d = $('#dock'); if (!d) return; d.classList.add('open'); const x = $('#ni'); if (x) x.focus(); }
-function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
+function iaOpen() { // Plus: Eingabefenster auf oder zu
+  const d = $('#dock'); if (!d) return; if (d.classList.contains('open')) return dockClose();
+  d.classList.add('open'); const f = $('#navfab'); if (f) f.classList.add('open'); const x = $('#ni'); if (x) x.focus();
+}
+let TT_T = 0;
+function miniToast(t) { const el = $('#tt'); if (!el) return; el.textContent = t; el.classList.add('show'); clearTimeout(TT_T); TT_T = setTimeout(() => el.classList.remove('show'), 2200); }
+function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); const f = $('#navfab'); if (f) f.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
 const iaRow = () => '';
 const plusBtn = () => '<div class="fabrow"><button class="fab" onclick="iaOpen()" aria-label="Artikel hinzufügen">+</button></div>';
 function listHead(title, sub) {
@@ -96,7 +101,7 @@ function dragReset() {
 const dragDone = () => { if (!S.set.noDragTip) { S.set.noDragTip = true; } };
 function moveItem(id, store) { // in einen anderen Laden (nur heute); „auto“ hebt die Verschiebung auf
   const it = byId(id); if (!it) return;
-  UI.undoMove = { prev: [{ id, store: it.store, pos: it.pos }] };
+  UI.undoMove = { prev: [{ id, store: it.store, pos: it.pos }] }; UI.open.delete(id);
   if (store === 'auto') delete it.store; else if (STORES.some(s => s.id === store)) { it.store = store; delete it.pos; } else return;
   dragDone(); save(); render();
   feedbackText(store === 'auto' ? `„${esc(it.name)}“ wird wieder automatisch einsortiert. <button class="lnk" onclick="undoMove()">Rückgängig</button>` : `„${esc(it.name)}“ kaufst du heute bei <b>${esc(STORE(store).short)}</b>. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
@@ -105,12 +110,12 @@ function reorderItem(id, key, idx) { // innerhalb desselben Ladens an eine ander
   const it = byId(id); if (!it) return;
   const ids = [...document.querySelectorAll('#view .card.main[data-store="' + key + '"] .crow[data-id]')].map(n => n.dataset.id).filter(x => x !== id);
   UI.undoMove = { prev: [id, ...ids].map(x => ({ id: x, store: (byId(x) || {}).store, pos: (byId(x) || {}).pos })) };
-  ids.splice(Math.min(idx, ids.length), 0, id); ids.forEach((x, k) => { const t = byId(x); if (t) t.pos = k + 1; });
+  UI.open.delete(id); ids.splice(Math.min(idx, ids.length), 0, id); ids.forEach((x, k) => { const t = byId(x); if (t) t.pos = k + 1; });
   dragDone(); save(); render(); feedbackText(`„${esc(it.name)}“ verschoben. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
 }
 function undoMove() {
   const u = UI.undoMove; if (!u) return; UI.undoMove = null;
-  u.prev.forEach(p => { const t = byId(p.id); if (!t) return; if (p.store) t.store = p.store; else delete t.store; if (p.pos != null) t.pos = p.pos; else delete t.pos; });
+  u.prev.forEach(p => { UI.open.delete(p.id); const t = byId(p.id); if (!t) return; if (p.store) t.store = p.store; else delete t.store; if (p.pos != null) t.pos = p.pos; else delete t.pos; });
   save(); render(); feedbackText('✓ Rückgängig gemacht.');
 }
 document.addEventListener('touchstart', dragStart, { passive: true });
@@ -135,8 +140,9 @@ const shortMembers = () => S.list.filter(i => !S.short.later.includes(i.id));
 function shortSeg() {
   if (!shortOn()) return '';
   const act = S.short.view !== 'all', n = shortMembers().filter(i => !i.done).length, m = S.list.filter(i => !i.done).length;
-  return `<div class="kseg" role="group" aria-label="Liste wählen"><button class="${act ? 'on' : ''}" onclick="shortView('short')">⚡ Kurzliste <small>${n}</small></button><button class="${act ? '' : 'on'}" onclick="shortView('all')">Alle <small>${m}</small></button><button class="kend" onclick="shortEnd()" aria-label="Kurzliste beenden" title="Kurzliste beenden">✕</button></div>`;
+  return `<div class="kseg" role="group" aria-label="Liste wählen"><button class="${act ? 'on' : ''}" onclick="shortView('short')">⚡ Kurzliste <small>${n}</small></button><button class="${act ? '' : 'on'}" onclick="shortView('all')">Alle <small>${m}</small></button></div><div class="kdel"><button onclick="shortDelete()">🗑 Kurzliste löschen</button></div>`;
 }
+function shortDelete() { if (confirm('Kurzliste löschen?\n\nAlle Artikel bleiben in der Hauptliste.')) shortEnd(); }
 function shortView(v) { if (!shortOn()) return; S.short.view = v === 'all' ? 'all' : 'short'; save(); render(); }
 function shortOpen() { UI.shortSel = new Set(); shortSheet(); }
 function shortSheet() {
@@ -157,7 +163,7 @@ function shortStart() {
   S.short = { on: true, view: 'short', later: S.list.filter(i => !i.done && !sel.has(i.id)).map(i => i.id), known: S.list.map(i => i.id) }; save(); closeSheet(); render();
   toast('⚡ Kurzeinkauf: ' + sel.size + ' Artikel. Der Rest wartet in der Hauptliste.');
 }
-function shortEnd() { S.short = { on: false, view: 'short', later: [], known: [] }; save(); render(); toast('Kurzliste beendet. Alles steht wieder in der Hauptliste.'); }
+function shortEnd() { S.short = { on: false, view: 'short', later: [], known: [] }; save(); render(); toast('Kurzliste gelöscht. Alles steht in der Hauptliste.'); }
 function shortCheckEnd() { // alles Gewählte im Wagen oder gelöscht: Kurzeinkauf ist fertig
   if (shortOn() && !S.list.some(i => !i.done && !S.short.later.includes(i.id))) { S.short = { on: false, view: 'short', later: [], known: [] }; toast('⚡ Kurzliste erledigt. Alles steht wieder in der Hauptliste.'); } // erst wenn alles aus der Kurzliste erledigt ist
 }
