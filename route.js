@@ -86,12 +86,15 @@ function planRoute(all) { // all = auch Artikel, die in der Kurzliste-Ansicht au
     centerIds.sort((a, b) => hv(a) - hv(b) || byStore[b].length - byStore[a].length);
   }
   const mk = id => { const items = byStore[id].slice().sort(aisleCmp); return { store: STORE(id), kind: id === 'lidl' ? 'lidl' : 'center', items, heavyCount: items.filter(x => x.heavy).length }; };
+  const favs = rows.filter(r => r.it.fav && r.storeId).map(r => ({ ...r, recName: STORE(r.storeId).short }));
+  Object.keys(byStore).forEach(id => { byStore[id] = byStore[id].filter(r => !r.it.fav); });
+  centerIds = centerIds.filter(id => byStore[id] && byStore[id].length);
   const stops = [];
   if (byStore.lidl && byStore.lidl.length) stops.push(mk('lidl'));
   centerIds.forEach(id => byStore[id] && byStore[id].length && stops.push(mk(id)));
   const centerStops = stops.filter(s => s.kind === 'center').length;
   const mins = (stops[0] && stops[0].kind === 'lidl' ? 18 + 18 : 3) + Math.max(0, centerStops - 1) * 2 + 3; // Lidl hin, zurück ins City-Center, Wege zwischen Läden, nach Hause
-  return { stops, mins, lidlSave, lidlUsed: !!(byStore.lidl && byStore.lidl.length), lidlPossible: rows.some(r => r.lidl), count: rows.length };
+  return { stops, favs, mins, lidlSave, lidlUsed: !!(byStore.lidl && byStore.lidl.length), lidlPossible: rows.some(r => r.lidl), count: rows.length };
 }
 
 function routeText(plan) {
@@ -109,6 +112,7 @@ function routeView() {
   const plan = planRoute(), mode = S.set.lidl || 'auto';
   const row = x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route' });
   const last = plan.stops.length - 1;
+  const favCard = plan.favs.length ? `<div class="card tight stop favc"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">★</span><h3>Im Blick</h3></div><span class="tag">ohne Laden</span></div><div class="mute small" style="margin:0 0 4px">Du entscheidest unterwegs, wo du es kaufst.</div>${plan.favs.map(x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route', rec: x.recName })).join('')}</div>` : '';
   const cards = plan.stops.map((s, i) => {
     let hint;
     if (s.kind === 'lidl') hint = `${s.store.walk} Min zu Fuß · nur Leichtes, passt in den Rucksack${plan.lidlSave > 0 ? ` · spart ca. ${eur(plan.lidlSave)}` : ''}`;
@@ -120,7 +124,7 @@ function routeView() {
       <div class="mute small" style="margin:0 0 4px">${esc(hint)}</div>${s.items.map(row).join('')}</div>`;
   }).join('');
   return `<div class="lhead"><b>🧭 Einkaufsroute</b><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min${shortOn() && S.short.view !== 'all' ? ' · ⚡ Kurzliste' : ''}</span></div>${shortSeg()}
-  ${cards}
+  ${favCard}${cards}
   <div class="mute small" style="text-align:center;margin:2px 0 10px">🏠 Danach nach Hause · ca. 3 Min · in jedem Laden: Obst &amp; Gemüse zuerst, Schweres zuletzt</div>
   
   <details class="card tight" style="margin-top:12px"><summary class="mute">Einstellungen &amp; Hinweise</summary>

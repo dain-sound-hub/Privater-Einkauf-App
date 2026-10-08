@@ -102,8 +102,8 @@ function dragReset() {
 const dragDone = () => { if (!S.set.noDragTip) { S.set.noDragTip = true; } };
 function moveItem(id, store) { // in einen anderen Laden (nur heute); „auto“ hebt die Verschiebung auf
   const it = byId(id); if (!it) return;
-  UI.undoMove = { prev: [{ id, store: it.store, pos: it.pos }] }; UI.open.delete(id);
-  if (store === 'auto') delete it.store; else if (STORES.some(s => s.id === store)) { it.store = store; delete it.pos; } else return;
+  UI.undoMove = { prev: [{ id, store: it.store, pos: it.pos, fav: it.fav }] }; UI.open.delete(id);
+  if (store === 'auto') delete it.store; else if (STORES.some(s => s.id === store)) { it.store = store; delete it.pos; delete it.fav; } else return;
   dragDone(); save(); render();
   feedbackText(store === 'auto' ? `„${esc(it.name)}“ wird wieder automatisch einsortiert. <button class="lnk" onclick="undoMove()">Rückgängig</button>` : `„${esc(it.name)}“ kaufst du heute bei <b>${esc(STORE(store).short)}</b>. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
 }
@@ -116,7 +116,7 @@ function reorderItem(id, key, idx) { // innerhalb desselben Ladens an eine ander
 }
 function undoMove() {
   const u = UI.undoMove; if (!u) return; UI.undoMove = null;
-  u.prev.forEach(p => { UI.open.delete(p.id); const t = byId(p.id); if (!t) return; if (p.store) t.store = p.store; else delete t.store; if (p.pos != null) t.pos = p.pos; else delete t.pos; });
+  u.prev.forEach(p => { UI.open.delete(p.id); const t = byId(p.id); if (!t) return; if (p.store) t.store = p.store; else delete t.store; if (p.pos != null) t.pos = p.pos; else delete t.pos; if (p.fav) t.fav = true; });
   save(); render(); feedbackText('✓ Rückgängig gemacht.');
 }
 document.addEventListener('touchstart', dragStart, { passive: true });
