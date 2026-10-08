@@ -147,6 +147,7 @@ function enrich(o) {
   let store = STORE(o.store), up = unitPrice(o, p);
   if (p && p.base && p.base !== 'st' && up && up.base === 'st' && !o.pidLocked) { p = null; up = unitPrice(o, null); }
   else if (p && up && (p.base === 'l' || p.base === 'kg') && up.base !== p.base && up.base !== 'st') up = { v: up.v, base: p.base }; // Dichte ≈ 1 (Kefir in g, Milch in l)
+  if (p && p.meat && (o.food === false || MEAT_NOISE.test(text))) { p = null; up = unitPrice(o, null); } // „Rindengefäß“, Lammfell-Kissen & Co. sind kein Fleisch
   let pct = null, kind = null;
   if (o.regular && o.regular > o.price) { pct = (o.regular - o.price) / o.regular; kind = o.regularIsUvp ? 'UVP' : 'Normalpreis'; }
   else if (up && p && p.base && up.base === p.base) { const r = refPrice(p); if (r && r.v > up.v) { pct = (r.v - up.v) / r.v; kind = 'Referenz: ' + r.note; } }
@@ -159,6 +160,7 @@ function enrich(o) {
   const gourmet = !!(p && p.meat && (GOURMET_RX.test(o.name) || (up && up.base === 'kg' && up.v > 22))); // Edelstück (Steak, Filet …) oder über 22 €/kg: nur Zusatzinfo
   return { ...o, p, store, up, pct, kind, dubious, bulk, state, daysLeft: Math.round((to - TODAY) / 864e5), excluded, gourmet };
 }
+const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|decke|kissen|korb|gefäß|deko|holz|spielzeug|plüsch|figur|kerze|schuh|haustier|hund|katze|futter/i;
 const GOURMET_RX = /steak|filet|entrec|tafelspitz|roastbeef|wagyu|angus|dry.?aged|karree|carr[ée]|lendenbraten|chateaubriand|t-bone|porterhouse|ribeye|rib-eye|medaillon|lachsschinken|keulenbraten|hirsch|wild|gans|gänse/i;
 const OFFERS_ALL = () => CACHE || (CACHE = [...SRC.offers, ...S.manual].map(enrich).filter(o => o.state !== 'expired' && !o.excluded));
 const rank = (a, b) => (a.up && b.up && a.up.base === b.up.base) ? a.up.v - b.up.v : (!!b.up - !!a.up) || a.price - b.price;
