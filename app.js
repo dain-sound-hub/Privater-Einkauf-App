@@ -61,6 +61,8 @@ function repairRefs() {
   for (const k of Object.keys(S.prefs)) if (!PROD(k)) delete S.prefs[k];
   for (const k of Object.keys(S.adds)) if (!PROD(k)) { delete S.adds[k]; delete S.addDay[k]; }
 }
+const SC = { rewe: '#cc071e', netto: '#f2c200', aldi: '#1a73c9', dm: '#e8590c', lidl: '#0b3c91' }; // Ladenfarben wie im Prospekt
+const storeColor = id => SC[id] || '#8a9a92';
 const ICON = { 'Haushalt & Wäsche': '🧺', 'Milchprodukte': '🥛', 'Obst & Gemüse': '🥬', 'Öle & Grundnahrung': '🌿', 'Fleisch': '🥩', 'Getränke': '🥤', 'Eigene Produkte': '⭐', 'Drogerie & Gesundheit': '🧴' };
 const PICON = { wm_dunkel: '🧺', wm_bunt: '🧺', wm_weiss: '🧺', wm_uni: '🧺', weichspueler: '🌸', farbfang: '🎨', kuechenrolle: '🧻', milch: '🥛', ayran: '🥛', buttermilch: '🥛', kefir: '🥛', butter: '🍞', butterschmalz: '🍳', tomaten: '🍅', gurken: '🥒', paprika: '🌶️', melone: '🍈', trauben: '🍇', heidelbeeren: '🍇', erdbeeren: '🍓', apfel: '🍎', ananas: '🍍', kiwi: '🥝', zwiebeln: '🧅', leinoel: '🌿', salatoel: '🌿', basmati: '🍚', buchweizen: '🌾', sonnenblumenkerne: '🌻', kuerbiskerne: '🎃', pinienkerne: '🌰', rinderhack: '🥩', gemhack: '🥩', haehnchen: '🍗', pute: '🍗', rind: '🥩', wasser: '💧', bitburger: '🍺', vitamine: '💊', zahnpasta: '🦷', zahnseide: '🦷', zahnbuerste: '🦷', handcreme: '🧴', duschgel: '🚿', shampoo: '🧴', deo: '🧴' };
 const GUESS = [[/kaffee|espresso|krönung/i, '☕'], [/pasta|nudel|spaghetti|barilla/i, '🍝'], [/lachs|fisch|thunfisch|garnele/i, '🐟'], [/käse|kaese|gouda|mozzarella/i, '🧀'], [/joghurt|quark|skyr/i, '🥣'], [/ei(er)?\b|eier/i, '🥚'], [/brot|toast|brötchen/i, '🍞'], [/schoko|keks|riegel|gummi|süß/i, '🍫'], [/saft|limo|cola|fanta|sprite|schorle/i, '🧃'], [/bier|pils/i, '🍺'], [/wein|sekt/i, '🍷'], [/waschmittel|persil|perwoll|weichspüler/i, '🧺'], [/reiniger|spül|geschirr/i, '🧽'], [/nuss|nüsse|kerne|mandel/i, '🥜'], [/honig/i, '🍯'], [/avocado/i, '🥑'], [/brokkoli|spinat|salat|gemüse|karotte|möhre/i, '🥦'], [/obst|beere|banane|orange|zitrone|mango/i, '🍊'], [/reis/i, '🍚'], [/öl\b|olivenöl/i, '🌿'], [/fleisch|steak|filet|braten|hack/i, '🥩'], [/pizza/i, '🍕'], [/eis\b|eiscreme/i, '🍨'], [/tee\b/i, '🍵']];
@@ -187,7 +189,7 @@ function offerCard(o, opt = {}) {
   const laterBtn = !opt.noAdd && (o.state === 'next' || nh) ? `<button class="btn sm" onclick="rememberOffer('${esc(o.id)}')">📌 Merken</button>` : '';
   const add = opt.noAdd || o.state === 'next' || (p && onList(p.id)) ? '' : p ? `<button class="btn sm" onclick="addP('${p.id}')">+ Liste</button>` : `<button class="btn sm" onclick="addOfferItem('${esc(o.id)}')">+ Liste</button>`; // auch Neues, das du sonst nie kaufst
   const badge = o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}" ${o.dubious ? 'title="Vergleich mit Hersteller-UVP, vermutlich Schein-Rabatt"' : ''}>${o.dubious ? '≈ ' : ''}−${Math.round(o.pct * 100)} %</span>` : '';
-  return `<div class="card offer"><div class="ohead">${thumb(o.img, iconFor(p, o.name))}
+  return `<div class="card offer" style="--sc:${storeColor(o.store.id)}"><div class="ohead">${thumb(o.img, iconFor(p, o.name))}
   <div class="grow"><div class="row sp nowrap"><h3 class="grow">${esc(o.name)}</h3>${badge}</div>
   ${o.desc ? `<div class="mute clamp">${esc(o.desc)}</div>` : ''}
   <div class="row" style="margin-top:2px"><span class="price">${eur(o.price)}</span>${o.regular ? `<span class="old">${eur(o.regular)}</span>` : ''}${o.up ? `<span class="mute">${eur(o.up.v)} / ${unitLbl(o.up.base)}</span>` : ''}${p ? `<button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}</div></div></div>
@@ -299,8 +301,8 @@ function cRow(c) {
   return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" onclick="toggleOpen('${id}')">
     <button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button>
     <span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>
-    <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${route && heavy ? ' <span title="schwer">🏋️</span>' : ''}</span>
-    <span class="pr">${right}</span><button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button></div>${open ? cDetail(c) : ''}`;
+    <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
+    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span><button class="chev" aria-expanded="${open}" aria-label="Einzelheiten ${open ? 'zuklappen' : 'aufklappen'}" onclick="event.stopPropagation();toggleOpen('${id}')">▾</button></div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
@@ -336,7 +338,7 @@ V.list = () => {
   const backupBanner = (S.bons.length + Object.keys(S.adds).length >= 5 && bkDays > 30 && !UI.hideBk) ? `<div class="banner info row sp"><span>💾 Deine Daten liegen nur auf diesem Gerät. ${S.lastBackup ? 'Letzte Sicherung vor ' + bkDays + ' Tagen.' : 'Noch keine Sicherung.'}</span><span class="row" style="gap:6px"><button class="btn sm" onclick="exp()">Jetzt sichern</button><button class="ico" onclick="UI.hideBk=true;render()" aria-label="Später">✕</button></span></div>` : '';
   const sugg = SUGG.map(([k, n], i) => `<div class="banner info row sp"><span>Du kaufst <b>${esc(k.startsWith('n:') ? k.slice(2) : (PROD(k)?.name || k))}</b> oft (${n}×). Beobachten?</span><button class="btn sm" onclick="watchKey(${i})">👁 Ja</button></div>`).join('');
   const main = open.length
-    ? `<div class="lhead"><b>🛒 Meine Liste</b><span>${open.length} ${open.length === 1 ? 'Artikel' : 'Artikel'} offen · Reihenfolge wie im Laden</span></div>` + order.map(k => `<h2 class="sh">${groupHead(k)}</h2><div class="card tight main">${groups[k].map(row).join('')}</div>`).join('')
+    ? `<div class="lhead"><b>🛒 Meine Liste</b><span>${open.length} ${open.length === 1 ? 'Artikel' : 'Artikel'} offen · Reihenfolge wie im Laden</span></div>` + order.map(k => `<h2 class="sh" style="--sc:${storeColor(k)}">${groupHead(k)}</h2><div class="card tight main">${groups[k].map(row).join('')}</div>`).join('')
     : (done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe unten ein, was du brauchst, oder wähle ein Hauptprodukt.'));
   const wagen = done.length ? `<h2 class="sh">🧺 Im Wagen</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Einkauf abschließen (${done.length})</button>` : '';
   const live = !SRC.live ? `<div class="banner">Noch keine echten Angebote geladen. Tippe oben auf <b>Angebote suchen</b>.</div>` : '';

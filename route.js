@@ -1,7 +1,20 @@
 // Einkaufsroute: verteilt die Liste auf Läden. Leichte Sachen zuerst (Rucksack), schwere und sperrige zuletzt.
 // Wird vor app.js geladen und nutzt dessen Funktionen erst beim Aufruf.
-const HEAVY_RX = /wasser|kasten|kiste|getränk|bier|klopapier|toilettenpapier|küchen(rolle|tuch|tücher|krepp)|haushaltstuch|servietten|waschmittel|weichspüler|spülmittel|reiniger|katzenstreu|mehl\b|zucker\b|windel/i;
-const itemHeavy = (it, p) => it.heavy !== undefined ? !!it.heavy : !!(p && p.heavy) || HEAVY_RX.test(it.name);
+// Schwer oder sperrig = passt nicht in den Rucksack. Normale Packungen (Weichspüler, Waschmittel) zählen nicht. „Wasser“ allein heißt Sixer/Kasten, „kleine Flasche Wasser“ passt in den Rucksack.
+const BULKY_RX = /klopapier|toilettenpapier|küchen(rolle|rollen|tuch|tücher|krepp)|haushaltstuch|haushaltstücher|servietten|windel|katzenstreu/i;
+const DRINK_RX = /wasser|getränk|bier|cola|limo|saft|sprudel|schorle|kasten|kiste/i;
+const BIG_RX = /xxl|groß|gross|kanister|karton|sixer|6er|12er|palette|vorrat|(^|\s)([3-9]|\d\d)\s?(kg|l)(\s|$)/i;
+const SMALL_RX = /klein|mini|to go|einzel|0[,.][2-5]\s?l|\b(250|330|500)\s?ml|(1|eine?)\s?flasche(\s|$)/i;
+function heavyKind(it, p) { // 'schwer' | 'sperrig' | null; deine Einstellung beim Artikel gilt immer
+  const n = it.name || '';
+  if (it.heavy !== undefined) return it.heavy ? (BULKY_RX.test(n) ? 'sperrig' : 'schwer') : null;
+  if (BULKY_RX.test(n)) return SMALL_RX.test(n) ? null : 'sperrig';
+  if (SMALL_RX.test(n)) return null;
+  if (BIG_RX.test(n)) return 'schwer';
+  if (DRINK_RX.test(n) || (p && /^(wasser|bitburger)$/.test(p.id))) return 'schwer';
+  return null;
+}
+const itemHeavy = (it, p) => !!heavyKind(it, p);
 
 function planRoute() {
   const mode = S.set.lidl || 'auto';
@@ -102,7 +115,7 @@ function routeView() {
       hint = i === 0 ? '3 Min von zu Hause' : plan.stops[i - 1].kind === 'lidl' ? 'zurück im City-Center' : 'ca. 2 Min weiter';
       if (s.heavyCount) hint += i === last ? ' · Schweres zuletzt, danach nach Hause' : ' · enthält Schweres';
     }
-    return `<div class="card tight stop"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.name)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
+    return `<div class="card tight stop" style="--sc:${storeColor(s.store.id)}"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.short)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
       <div class="mute small" style="margin:0 0 4px">${esc(hint)}</div>${s.items.map(row).join('')}</div>`;
   }).join('');
   return `<div class="lhead"><b>🧭 Einkaufsroute</b><span>${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min</span></div>
