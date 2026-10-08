@@ -67,7 +67,7 @@ function dragPos(x, y) {
   if (DRAG.over && DRAG.over !== 'auto') document.querySelectorAll('#view [data-store="' + DRAG.over + '"]').forEach(n => n.classList.add('dropon'));
   // im selben Laden: Einfügemarke zeigt, wo der Artikel landet
   let line = document.getElementById('dline'); DRAG.idx = -1;
-  const card = DRAG.over && DRAG.over === DRAG.from ? document.querySelector('#view .card.main[data-store="' + DRAG.over + '"]') : null;
+  const card = DRAG.over && DRAG.over === DRAG.from ? document.querySelector('#view .card[data-store="' + DRAG.over + '"]') : null;
   if (card) {
     const rows = [...card.querySelectorAll('.crow[data-id]')].filter(n => n.dataset.id !== DRAG.id);
     DRAG.idx = rows.filter(n => { const b = n.getBoundingClientRect(); return b.top + b.height / 2 < y; }).length;
@@ -109,7 +109,7 @@ function moveItem(id, store) { // in einen anderen Laden (nur heute); „auto“
 }
 function reorderItem(id, key, idx) { // innerhalb desselben Ladens an eine andere Stelle
   const it = byId(id); if (!it) return;
-  const ids = [...document.querySelectorAll('#view .card.main[data-store="' + key + '"] .crow[data-id]')].map(n => n.dataset.id).filter(x => x !== id);
+  const ids = [...document.querySelectorAll('#view .card[data-store="' + key + '"] .crow[data-id]')].map(n => n.dataset.id).filter(x => x !== id);
   UI.undoMove = { prev: [id, ...ids].map(x => ({ id: x, store: (byId(x) || {}).store, pos: (byId(x) || {}).pos })) };
   UI.open.delete(id); ids.splice(Math.min(idx, ids.length), 0, id); ids.forEach((x, k) => { const t = byId(x); if (t) t.pos = k + 1; });
   dragDone(); save(); render(); feedbackText(`„${esc(it.name)}“ verschoben. <button class="lnk" onclick="undoMove()">Rückgängig</button>`);
