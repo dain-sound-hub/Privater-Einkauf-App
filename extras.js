@@ -220,3 +220,60 @@ backInit();
 
 /* ---------- Kassenbon-Knopf: schwebt rechts über der Menüleiste, nur bei Liste und Route ---------- */
 function bonFabSync() { const f = document.getElementById('bonfab'); if (f) f.hidden = !(cur === 'list' || cur === 'route'); }
+
+/* ---------- Hauptprodukte: antippen = auf die Liste, lange drücken = Angebot genauer ansehen ---------- */
+let CHIP = { timer: 0, t: 0, x: 0, y: 0, pid: null };
+function chipTap(id) { if (Date.now() - CHIP.t < 900) return; toggleP(id); } // nach langem Drücken zählt das Loslassen nicht als Antippen
+function chipPressStart(e) {
+  const c = e.target.closest && e.target.closest('.qa .chip[data-pid]'); if (!c) return;
+  if (e.type === 'mousedown' && e.button !== 0) return;
+  const pt = e.touches ? e.touches[0] : e; CHIP.x = pt.clientX; CHIP.y = pt.clientY; CHIP.pid = c.dataset.pid;
+  clearTimeout(CHIP.timer); CHIP.timer = setTimeout(() => { CHIP.t = Date.now(); chipInfo(CHIP.pid); try { if (navigator.vibrate && e.isTrusted) navigator.vibrate(20); } catch (x) { } }, 480);
+}
+function chipPressMove(e) { const pt = e.touches ? e.touches[0] : e; if (CHIP.timer && Math.hypot(pt.clientX - CHIP.x, pt.clientY - CHIP.y) > 10) { clearTimeout(CHIP.timer); CHIP.timer = 0; } }
+function chipPressEnd() { clearTimeout(CHIP.timer); CHIP.timer = 0; }
+document.addEventListener('touchstart', chipPressStart, { passive: true });
+document.addEventListener('mousedown', chipPressStart);
+document.addEventListener('touchmove', chipPressMove, { passive: true });
+document.addEventListener('mousemove', chipPressMove);
+document.addEventListener('touchend', chipPressEnd);
+document.addEventListener('touchcancel', chipPressEnd);
+document.addEventListener('mouseup', chipPressEnd);
+document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.qa .chip[data-pid]')) e.preventDefault(); });
+function chipInfo(pid) {
+  const p = PROD(pid), sb = $('#sheetbox'), sh = $('#sheet'); if (!p || !sb || !sh) return;
+  const i = productInfo(p), b = i.nearBest || i.best, on = onList(pid);
+  let h = `<div class="row sp"><h3>${iconFor(p)} ${esc(p.name)}</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>`;
+  if (!b) {
+    h += `<div class="mute" style="margin:8px 0">Aktuell ist kein Angebot bekannt.${p.note ? ' ' + esc(p.note) : ''}</div>`;
+  } else {
+    const s = saveEur(b), dl = b.daysLeft, valid = b.valid && b.valid[0] ? `${fmtD(b.valid[0])} bis ${fmtD(b.valid[1])}` : '';
+    const rest = dl <= 0 ? 'endet heute' : dl === 1 ? 'noch 1 Tag' : `noch ${dl} Tage`;
+    const dec = (() => { try { return decision(i, null); } catch (e) { return null; } })();
+    h += `<div class="row nowrap" style="gap:12px;margin:10px 0">${thumb(b.img, iconFor(p), 'md', true)}<div class="grow small"><div style="font-size:16px"><b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b></div>${b.up ? `<div class="mute">${eur(b.up.v)}/${unitLbl(b.up.base)}</div>` : ''}${b.pct != null ? `<div><span class="pct ${b.dubious ? 'dub' : ''}">${b.dubious ? '≈ ' : ''}−${Math.round(b.pct * 100)} %</span>${saveTag(b)}</div>` : ''}${b.regular && b.regular > b.price ? `<div class="mute">statt ${eur(b.regular)} (${b.regularIsUvp ? 'Hersteller-Preis' : 'Normalpreis'})</div>` : ''}</div></div>
+      <div class="small"><b>Angebot:</b> ${esc(b.name.slice(0, 60))}${b.desc ? ' · ' + esc(b.desc.slice(0, 80)) : ''}</div>
+      <div class="small" style="margin-top:4px"><b>Gültig:</b> ${esc(valid || 'Zeitraum unbekannt')} · ${rest}</div>
+      ${b.dubious ? '<div class="small" style="margin-top:4px;color:var(--warn)">⚠ Der Rabatt bezieht sich auf einen Hersteller-Preis. Vermutlich weniger echte Ersparnis.</div>' : ''}${b.bulk ? '<div class="small" style="margin-top:4px">📦 Großpackung. Rechne den Preis pro Stück oder Liter.</div>' : ''}${b.note ? `<div class="small mute" style="margin-top:4px">${esc(b.note)}</div>` : ''}
+      ${dec ? `<div class="small" style="margin-top:8px"><span class="tag ${dec.cls || ''}">${esc(dec.tag)}</span> ${esc(dec.why)}</div>` : ''}`;
+    const seen = new Set([b.store.id + b.name]), others = i.now.filter(o => { const k = o.store.id + o.name; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3);
+    if (others.length) h += `<div class="mute small" style="margin-top:10px">Auch bei:</div><table class="small">${others.map(o => `<tr><td><i class="dot t${o.store.tier}"></i>${esc(o.store.short)}</td><td class="mute">${esc(o.name.slice(0, 26))}</td><td>${eur(o.price)}${o.up ? ` <span class="mute">${eur(o.up.v)}/${unitLbl(o.up.base)}</span>` : ''}</td></tr>`).join('')}</table>`;
+    if (i.nextBest) h += `<div class="small nxt" style="margin-top:8px">📅 Nächste Woche: ${eur(i.nextBest.price)} bei ${esc(i.nextBest.store.short)} (ab ${fmtD(i.nextBest.valid[0])})</div>`;
+    const tip = tipFor(pid); if (tip) h += `<div class="small nxt">💡 ${esc(tipText(tip))}</div>`;
+  }
+  h += `<div class="row" style="margin-top:14px;gap:10px"><button class="btn pri" style="flex:1" onclick="closeSheet();toggleP('${pid}')">${on ? '− Von der Liste nehmen' : '+ Auf die Liste'}</button><button class="btn" onclick="closeSheet()">Abbrechen</button></div>`;
+  sb.innerHTML = h; window.SHEET_T = Date.now(); sh.hidden = false;
+}
+
+/* ---------- Eingabefeld #ni: verhält sich im Code wie ein normales Feld (value, placeholder, focus) ---------- */
+(function () {
+  function setup() {
+    const el = document.getElementById('ni'); if (!el || el._ok) return; el._ok = true;
+    const caretEnd = () => { try { const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch (e) { } };
+    Object.defineProperty(el, 'value', { get() { return el.textContent.replace(/\u00a0/g, ' '); }, set(v) { el.textContent = v == null ? '' : String(v); if (document.activeElement === el) caretEnd(); } });
+    Object.defineProperty(el, 'placeholder', { get() { return el.dataset.placeholder || ''; }, set(v) { el.dataset.placeholder = v; } });
+    const f = el.focus.bind(el); el.focus = o => { f(o); caretEnd(); };
+    el.addEventListener('paste', e => { e.preventDefault(); const tx = ((e.clipboardData || window.clipboardData).getData('text') || '').replace(/\s*\n\s*/g, ' '); document.execCommand('insertText', false, tx); });
+    el.addEventListener('input', () => { if (!el.textContent) el.innerHTML = ''; }); // leer = Platzhalter wieder zeigen
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup); else setup();
+})();

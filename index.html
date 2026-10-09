@@ -317,6 +317,15 @@ header{min-height:116px;display:flex;flex-direction:column;background-position:0
 .crow .askov .askbtns{display:flex;gap:5px}
 .crow .askov .btn.sm{min-height:30px;min-width:0;padding:3px 7px;font-size:12px;border-radius:10px;white-space:nowrap;line-height:1.1;box-shadow:0 2px 0 var(--line)}
 .crow .askov .btn.sm.pri{box-shadow:0 2px 0 var(--acc-d)}
+/* Ersparnis in Euro */
+.sv{color:var(--acc-d);font-weight:700;font-size:12px;white-space:nowrap}
+.crow .pr small.sv{color:var(--acc-d);font-weight:700;font-size:11.5px}
+/* lange drücken auf Hauptprodukte */
+.qa .chip{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+/* Eingabefeld ohne Autofill-Leiste */
+.ni{flex:1;min-width:0;min-height:44px;padding:9px 12px;border-radius:14px;font-size:15px;line-height:24px;color:var(--ink);background:var(--card);border:2px solid var(--line);outline:none;box-shadow:inset 0 2px 4px rgba(15,40,28,.06);white-space:nowrap;overflow:hidden;cursor:text;-webkit-user-select:text;user-select:text;transition:border-color .15s,box-shadow .15s}
+.ni:focus{border-color:var(--acc);box-shadow:0 0 0 4px var(--glow)}
+.ni:empty::before{content:attr(data-placeholder);color:var(--mute);pointer-events:none}
 </style>
 </head>
 <body>
@@ -327,8 +336,8 @@ header{min-height:116px;display:flex;flex-direction:column;background-position:0
 <div class="wrap"><div id="bqs"></div><main id="view"></main></div>
 <div class="dock" id="dock"><div class="dockhead"><b>✍️ Neuer Artikel</b><button class="ico" onclick="dockClose()" aria-label="Schließen">✕</button></div><div id="heard" class="heard" hidden></div><div id="recent" class="recentl" hidden></div><div id="sug" class="sug" hidden></div>
   <div id="fb" class="fb" role="status" aria-live="polite" hidden></div>
-  <div class="dockrow"><input id="ni" placeholder="Was brauchst du? z. B. 2 Milch" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" oninput="this.classList.remove('sent');suggest()" onkeydown="if(event.key==='Enter')addItem();else if(event.key==='Escape')hideSug()"><button class="btn" id="micb" onclick="mic()" title="Einsprechen" aria-label="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen" aria-label="Hinzufügen">+</button></div><div class="dockhint">Mehrere mit Komma oder „Punkt“ beim Sprechen.</div></div>
-<div class="sheet" id="sheet" hidden onclick="if(event.target===this)closeSheet()"><div class="sheetbox" id="sheetbox"></div></div>
+  <div class="dockrow"><div id="ni" class="ni" contenteditable="plaintext-only" role="textbox" aria-label="Neuer Artikel" data-placeholder="Was brauchst du? z. B. 2 Milch" spellcheck="true" autocapitalize="sentences" enterkeyhint="done" inputmode="text" oninput="this.classList.remove('sent');suggest()" onkeydown="if(event.key==='Enter'){event.preventDefault();addItem();}else if(event.key==='Escape')hideSug()"></div><button class="btn" id="micb" onclick="mic()" title="Einsprechen" aria-label="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen" aria-label="Hinzufügen">+</button></div><div class="dockhint">Mehrere mit Komma oder „Punkt“ beim Sprechen.</div></div>
+<div class="sheet" id="sheet" hidden onclick="if(event.target===this&&Date.now()-(window.SHEET_T||0)>700)closeSheet()"><div class="sheetbox" id="sheetbox"></div></div>
 <div id="tt" class="tt" role="status" aria-live="polite"></div>
 <button class="bonfab" id="bonfab" onclick="go('bon')" aria-label="Kassenbon einscannen" title="Kassenbon einscannen" hidden>🧾</button>
 <nav class="bottom"><div id="tabs"></div><button class="navfab" id="navfab" onclick="iaOpen()" aria-label="Artikel eintragen">+</button></nav>

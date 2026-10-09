@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 72, t: '09.10. 14:53' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 77, t: '09.10. 15:13' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -135,6 +135,14 @@ function refPrice(p) {
   if (h.length >= 2) return { v: h[Math.floor(h.length / 2)], note: 'dein Mittelwert aus ' + h.length + ' Einträgen' };
   return p.ref ? { v: p.ref, note: p.refNote || 'historische Referenz' } : null;
 }
+// Ersparnis in Euro: Normalpreis minus Angebotspreis, sonst Unterschied zum Referenzpreis mal Menge
+function saveEur(o) {
+  if (!o || o.pct == null || o.dubious) return null;
+  if (o.regular && o.regular > o.price) return +(o.regular - o.price).toFixed(2);
+  if (o.up && o.p) { const r = refPrice(o.p), q = qtyBase(o); if (r && q && r.v > o.up.v) return +((r.v - o.up.v) * q).toFixed(2); }
+  return null;
+}
+const saveTag = o => { const s = saveEur(o); return s != null && s >= 0.05 ? ` <span class="sv">spart ${eur(s)}</span>` : ''; };
 const COMPOUND_CATS = new Set(['Obst & Gemüse', 'Milchprodukte']); // „Paprika-Chips“, „Bananen-Haarspange“: vorne steht nur die Zutat
 const FB_NOISE = /gelee|schokolad|zartbitter|praline|bonbon|gummi|haar|pflege|dekor|spange|vase|topf|fußmatte|nektar|saft|smoothie|joghurt|quark|riegel|kuchen|keks|zwerge|quetschie|quetschbeutel|eis\b|spielzeug|plüsch|puppe/i;
 const customOk = (o, q) => o.food !== false && !FB_NOISE.test(o.name + ' ' + (o.cats || '')) && (o.food === true || (o.name + ' ' + (o.cats || '')).toLowerCase().includes(q.name.toLowerCase().slice(0, 4)));
@@ -143,7 +151,7 @@ function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
   const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { if (q.group) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; if (COMPOUND_CATS.has(q.cat) && /^-[A-Za-zÄÖÜäöü]/.test(src.slice(m.index + m[0].length))) continue; if (m[0].length > len) { p = q; len = m[0].length; } } }
+  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; if (COMPOUND_CATS.has(q.cat) && /^-[A-Za-zÄÖÜäöü]/.test(src.slice(m.index + m[0].length))) continue; if (m[0].length > len) { p = q; len = m[0].length; } } }
   // Eigene Produkte: Treffer der Suchseite (z. B. „Gummibärchen" findet „Goldbären") nutzen, wenn der Name nicht passt
   if (!p && o.found) p = PRODUCTS.find(q => q.custom && q.q && o.found.some(f => f.toLowerCase() === q.q[0]) && customOk(o, q)) || null;
   let store = STORE(o.store), up = unitPrice(o, p);
@@ -174,7 +182,7 @@ function productInfo(p) {
   const gourmet = p.group ? offs.filter(o => o.gourmet && o.state === 'now').sort(rank) : []; // „Fleisch“: Edelstücke nur als Zusatzinfo
   if (p.group) offs = offs.filter(o => !o.gourmet);
   const pc = x => x.dubious || x.pct == null ? 0 : Math.round(x.pct * 20); // Ersparnis in 5-%-Stufen
-  const byBulk = p.meat ? (x, y) => (!!x.gourmet - !!y.gourmet) || (x.bulk - y.bulk) || (p.group ? pc(y) - pc(x) : 0) || rank(x, y) : (x, y) => (x.bulk - y.bulk) || rank(x, y);
+  const byBulk = p.meat ? (x, y) => (!!x.gourmet - !!y.gourmet) || (x.bulk - y.bulk) || (p.mainFirst ? (x.p.main ? 0 : 1) - (y.p.main ? 0 : 1) : 0) || (p.group ? pc(y) - pc(x) : 0) || rank(x, y) : (x, y) => (x.bulk - y.bulk) || rank(x, y);
   const now = offs.filter(o => o.state === 'now').sort(byBulk), next = offs.filter(o => o.state === 'next').sort(p.meat ? byBulk : rank);
   const nearBest = now.find(isNear) || null;
   // Großmarkt (Tier D) ist nur eine Option unter „Wege" und nie der Standard-Vorschlag der Liste
@@ -185,7 +193,7 @@ function decision(info, item) {
   if (!b) { const pf = prefOf(p, item && item.name); return { tag: 'Kein Angebot', cls: '', why: pf ? prefNote(pf) + '.' : 'Aktuell kein bekanntes Angebot. Normal in der Nah-Runde kaufen.' }; }
   if (nextBest && b.up && nextBest.up && nextBest.up.base === b.up.base && nextBest.up.v < b.up.v * 0.9 && !(item && item.urgent))
     return { tag: 'Lohnt sich warten', cls: 't-warn', why: `Nächste Woche ${eur(nextBest.price)} bei ${nextBest.store.short} (ab ${fmtD(nextBest.valid[0])}), deutlich günstiger.` };
-  if (p.stock && b.pct != null && !b.dubious && b.pct * 100 >= S.set.stockPct) return { tag: 'Vorratskauf', cls: 't-stock', why: `${Math.round(b.pct * 100)} % Ersparnis (${b.kind}). ${p.meat ? 'Portionsweise einfrieren.' : 'Haltbar, auf Vorrat sinnvoll.'}` };
+  if (p.stock && b.pct != null && !b.dubious && b.pct * 100 >= S.set.stockPct) return { tag: 'Vorratskauf', cls: 't-stock', why: `${Math.round(b.pct * 100)} % Ersparnis${saveEur(b) >= 0.05 ? ' (' + eur(saveEur(b)) + ')' : ''} (${b.kind}). ${p.meat ? 'Portionsweise einfrieren.' : 'Haltbar, auf Vorrat sinnvoll.'}` };
   const ends = b.daysLeft <= 1;
   return { tag: ends ? 'Heute kaufen' : 'Diese Woche', cls: 't-ok', why: (ends ? 'Angebot endet bald. ' : '') + (p.perish ? 'Schnell verderblich, nicht auf Vorrat kaufen.' : 'Kein Zeitdruck.') };
 }
@@ -213,7 +221,7 @@ function offerCard(o, opt = {}) {
   const nh = p && o.state === 'now' ? nextHint(productInfo(p)) : null;
   const laterBtn = !opt.noAdd && (o.state === 'next' || nh) ? `<button class="btn sm" onclick="rememberOffer('${esc(o.id)}')">📌 Merken</button>` : '';
   const add = opt.noAdd || o.state === 'next' || (p && onList(p.id)) ? '' : p ? `<button class="btn sm" onclick="addP('${p.id}')">+ Liste</button>` : `<button class="btn sm" onclick="addOfferItem('${esc(o.id)}')">+ Liste</button>`; // auch Neues, das du sonst nie kaufst
-  const badge = o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}" ${o.dubious ? 'title="Vergleich mit Hersteller-UVP, vermutlich Schein-Rabatt"' : ''}>${o.dubious ? '≈ ' : ''}−${Math.round(o.pct * 100)} %</span>` : '';
+  const badge = o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}" ${o.dubious ? 'title="Vergleich mit Hersteller-UVP, vermutlich Schein-Rabatt"' : ''}>${o.dubious ? '≈ ' : ''}−${Math.round(o.pct * 100)} %</span>${saveTag(o)}` : '';
   return `<div class="card offer" style="--sc:${storeColor(o.store.id)}"><div class="ohead">${thumb(o.img, iconFor(p, o.name), '', true)}
   <div class="grow"><div class="row sp nowrap"><h3 class="grow">${esc(o.name)}</h3>${badge}</div>
   ${o.desc ? `<div class="mute clamp">${esc(o.desc)}</div>` : ''}
@@ -277,7 +285,7 @@ function orderCats(cs) { // Rubriken, aus denen du oft kaufst, zuerst; sonst Rei
 const mainProducts = () => PRODUCTS.filter(p => freq(p) >= 2).sort((a, b) => recScore(b) - recScore(a) || a.name.localeCompare(b.name, 'de'));
 const chipHtml = p => {
   const on = onList(p.id), i = productInfo(p), b = i.nearBest || i.best;
-  return `<button class="chip ${on ? 'on' : ''} ${freq(p) >= 2 ? 'main' : ''}" onclick="toggleP('${p.id}')" aria-pressed="${on}">${on ? '✓' : iconFor(p)} ${esc(p.name.split(' /')[0])}${!on && b && b.pct != null && !b.dubious ? ` <b style="color:var(--acc)">−${Math.round(b.pct * 100)}%<span class="qst"> ${esc(b.store.short)}</span></b>` : ''}</button>`;
+  return `<button class="chip ${on ? 'on' : ''} ${freq(p) >= 2 ? 'main' : ''}" data-pid="${p.id}" onclick="chipTap('${p.id}')" aria-pressed="${on}">${on ? '✓' : iconFor(p)} ${esc(p.name.split(' /')[0])}${!on && b && b.pct != null && !b.dubious ? ` <b style="color:var(--acc)">−${Math.round(b.pct * 100)}%<span class="qst"> ${esc(b.store.short)}${saveEur(b) >= 0.05 ? ' · spart ' + eur(saveEur(b)) : ''}</span></b>` : ''}</button>`;
 };
 function toggleP(id) { if (onList(id)) { S.list = S.list.filter(i => !(i.pid === id && !i.done)); save(); render(); } else addP(id); }
 function quickAdd() {
@@ -329,7 +337,7 @@ const aisleCmp = (a, b) => { const pa = a.it.pos, pb = b.it.pos; if (pa != null 
 // Kompakte Zeile: Haken, Symbol, Name, Preis. Antippen klappt die Einzelheiten auf (gilt für Liste und Route).
 function cRow(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, open = UI.open.has(id), heavy = c.heavy !== undefined ? c.heavy : itemHeavy(it, p), route = c.ctx === 'route';
-  const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
+  const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>${saveEur(b) >= 0.05 ? `<small class="sv">spart ${eur(saveEur(b))}</small>` : ''}` : '';
   return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${askOpen(id, it) ? ' asking' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
     <button class="rm" onclick="event.stopPropagation();askDel('${id}')" aria-label="Entfernen">✕</button><span class="chev" aria-hidden="true">▾</span>
     ${b && b.img ? thumb(b.img, iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
@@ -340,7 +348,7 @@ function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
   const tip = !it.done && p ? tipFor(p.id) : null;
   return `<div class="cdet">${it.store ? `<div class="mvnote">📍 Von dir nach <b>${esc(STORE(it.store).short)}</b> verschoben. <button class="lnk" onclick="moveItem('${id}','auto')">Verschiebung aufheben</button></div>` : ''}<div class="row nowrap" style="gap:10px">${thumb(b && b.img, iconFor(p, it.name), 'md', true)}<div class="grow small">${b
-    ? `<b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b>${b.up ? ` · ${eur(b.up.v)}/${unitLbl(b.up.base)}` : ''}${b.pct != null ? ` <span class="pct ${b.dubious ? 'dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}${p ? ` <button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}${dec && dec.cls ? ` <span class="tag ${dec.cls}">${dec.tag}</span>` : ''}<div class="mute">${esc(b.name.slice(0, 44))}${b.desc ? ' · ' + esc(b.desc.slice(0, 40)) : ''}</div>`
+    ? `<b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b>${b.up ? ` · ${eur(b.up.v)}/${unitLbl(b.up.base)}` : ''}${b.pct != null ? ` <span class="pct ${b.dubious ? 'dub' : ''}">−${Math.round(b.pct * 100)} %</span>${saveTag(b)}` : ''}${p ? ` <button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}${dec && dec.cls ? ` <span class="tag ${dec.cls}">${dec.tag}</span>` : ''}<div class="mute">${esc(b.name.slice(0, 44))}${b.desc ? ' · ' + esc(b.desc.slice(0, 40)) : ''}</div>`
     : `<span class="mute">${esc(c.note || (pf ? prefNote(pf) : 'Kein aktuelles Angebot bekannt. Normal im City-Center kaufen.'))}</span>`}${c.note && b ? `<div class="mute">${esc(c.note)}</div>` : ''}</div></div>
     ${dec ? `<div class="small" style="margin-top:6px">${esc(dec.why)}</div>` : !p ? '<div class="small mute" style="margin-top:6px">Noch kein Produkt zugeordnet. Mit 👁 wird es beobachtet und bei der nächsten Suche gefunden.</div>' : ''}
     ${info && info.gourmet && info.gourmet.length ? `<div class="small mute" style="margin-top:6px">🥩 Edelstück im Angebot: ${esc(info.gourmet[0].name.slice(0, 32))} ${eur(info.gourmet[0].price)} bei ${esc(info.gourmet[0].store.short)}${info.gourmet[0].pct != null && !info.gourmet[0].dubious ? ' (−' + Math.round(info.gourmet[0].pct * 100) + ' %)' : ''}</div>` : ''}
@@ -348,8 +356,8 @@ function cDetail(c) {
     ${!it.done ? nextLine(info ? nextHint(info) : null, `<button class="lnk" onclick="rememberItem('${id}')">📌 für nächste Woche merken</button>`) : ''}
     ${info && info.now.length ? `<table style="margin-top:6px">${info.now.slice(0, 5).map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
     ${it.fav ? `<div class="mvnote">★ Im Blick: kein fester Laden. ${c.rec ? 'Empfohlen: <b>' + esc(c.rec) + '</b>. ' : ''}<button class="lnk" onclick="toggleFav('${id}')">Stern entfernen</button></div>` : ''}<div class="row" style="margin-top:8px"><label class="mute"><input type="checkbox" ${it.urgent ? 'checked' : ''} onchange="urgent('${id}')" style="width:auto"> dringend</label><label class="mute"><input type="checkbox" ${itemHeavy(it, p) ? 'checked' : ''} onchange="toggleHeavy('${id}')" style="width:auto"> schwer/sperrig (zuletzt)</label></div>
-    ${it.pid ? `<div class="mute" style="margin-top:8px">Wo kaufst du das normalerweise?</div><div class="chips">${['dm', 'rewe', 'netto', 'aldi', 'lidl'].map(s => `<button class="chip ${(S.prefs[it.pid] || (pf || {}).id) === s ? 'on' : ''}" onclick="setPref('${it.pid}','${s}')">${STORE(s).short}</button>`).join('')}<button class="chip" onclick="setPref('${it.pid}','')">Egal</button></div>` : ''}
-    <div class="mute" style="margin-top:8px">Heute kaufen bei <span class="small">(auch: Artikel halten und ziehen)</span></div><div class="chips">${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<button class="chip ${it.store === s ? 'on' : ''}" onclick="moveItem('${id}','${s}')">${STORE(s).short}</button>`).join('')}<button class="chip ${it.store ? '' : 'on'}" onclick="moveItem('${id}','auto')">Automatisch</button></div>
+    ${it.pid ? `<div class="mute" style="margin-top:8px">Wo kaufst du das normalerweise?</div><div class="chips"><button class="chip ${(S.prefs[it.pid] || (pf || {}).id) ? '' : 'on'}" onclick="setPref('${it.pid}','')">Egal</button>${['dm', 'rewe', 'netto', 'aldi', 'lidl'].map(s => `<button class="chip ${(S.prefs[it.pid] || (pf || {}).id) === s ? 'on' : ''}" onclick="setPref('${it.pid}','${s}')">${STORE(s).short}</button>`).join('')}</div>` : ''}
+    <div class="mute" style="margin-top:8px">Heute kaufen bei</div><div class="chips"><button class="chip ${it.store ? '' : 'on'}" onclick="moveItem('${id}','auto')">Automatisch</button>${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<button class="chip ${it.store === s ? 'on' : ''}" onclick="moveItem('${id}','${s}')">${STORE(s).short}</button>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Beobachtet' : 'Beobachten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="askDel('${id}')">✕ Entfernen</button></div></div>`;
 }
 V.list = () => {
@@ -436,7 +444,7 @@ V.watch = () => {
   <div class="add"><input id="wn" placeholder="Eigenes Produkt beobachten, z. B. Lachs" onkeydown="if(event.key==='Enter')addCustom()"><button class="btn pri" onclick="addCustom()">+</button></div>
   <div class="add"><input placeholder="Produkte filtern…" value="${esc(UI.wq || '')}" oninput="UI.wq=this.value;$('#wl').innerHTML=watchBody()"></div><div id="wl">${watchBody()}</div>`;
 };
-function watchBody() { const qq = (UI.wq || '').toLowerCase(); return orderCats([...new Set(PRODUCTS.map(p => p.cat))]).map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id) || byUse(a, b)); const line = p => { const i = productInfo(p), b = i.nearBest || i.best; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Nicht mehr beobachten' : 'Beobachten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
+function watchBody() { const qq = (UI.wq || '').toLowerCase(); return orderCats([...new Set(PRODUCTS.map(p => p.cat))]).map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id) || byUse(a, b)); const line = p => { const i = productInfo(p), b = i.nearBest || i.best; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Nicht mehr beobachten' : 'Beobachten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %${saveEur(b) >= 0.05 ? ' · spart ' + eur(saveEur(b)) : ''}` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
 V.route = () => routeView();
 V.bon = () => bonView();
 function extraBody() {
@@ -749,7 +757,7 @@ function compare(pid) {
     let best = null;
     rows.filter(r => r.o).forEach(r => { if (!best || ((r.o.up && best.o.up && r.o.up.base === best.o.up.base) ? r.o.up.v < best.o.up.v : r.o.price < best.o.price)) best = r; });
     const cell = r => r.o
-      ? `<td><b>${eur(r.o.price)}</b>${r.o.regular ? ` <s class="mute">${eur(r.o.regular)}</s>` : ''}<div class="mute clamp">${esc(r.o.name.slice(0, 40))}</div></td><td>${r.o.up ? eur(r.o.up.v) + '/' + unitLbl(r.o.up.base) : ''}${r.o.pct != null && !r.o.dubious ? `<div><span class="pct">−${Math.round(r.o.pct * 100)} %</span></div>` : ''}</td>`
+      ? `<td><b>${eur(r.o.price)}</b>${r.o.regular ? ` <s class="mute">${eur(r.o.regular)}</s>` : ''}<div class="mute clamp">${esc(r.o.name.slice(0, 40))}</div></td><td>${r.o.up ? eur(r.o.up.v) + '/' + unitLbl(r.o.up.base) : ''}${r.o.pct != null && !r.o.dubious ? `<div><span class="pct">−${Math.round(r.o.pct * 100)} %</span>${saveTag(r.o)}</div>` : ''}</td>`
             : `<td colspan="2" class="mute">${nextMode && NEXT_STORES.includes(r.s.id) && !OFFERS_ALL().some(o => o.store.id === r.s.id && o.state === 'next') ? '⏳ Prospekt für nächste Woche noch nicht veröffentlicht' : 'kein Angebot bekannt' + (r.s.id === 'dm' ? ' (hat selten Prospektpreise)' : '')}</td>`;
     return `<h4>${label}</h4><table class="cmp">${rows.map(r => `<tr class="${best && r === best ? 'win' : ''}"><td><i class="dot t${r.s.tier}"></i>${esc(r.s.short)}${best && r === best ? ' ✓' : ''}</td>${cell(r)}</tr>`).join('')}</table>${best ? `<div class="small">✓ Am günstigsten: <b>${esc(best.s.name)}</b></div>` : ''}`;
   };
