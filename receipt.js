@@ -300,7 +300,7 @@ async function bqDupMerge(m) {
   const bts = bonTs(date, b.time), cand = [];
   S.list.filter(l => !l.done && !addedAfter(l, bts)).forEach(l => { const hit = bonMatchList(l, items); if (hit) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: hit.name }); });
   const done = askDone(); bonAskAdd(cand.filter(c => !done.has(c.id)));
-  m.merged = true; await bqSaveMeta(m); save();
+  m.merged = true; await bqSaveMeta(m); save(); if (cand.length) setTimeout(() => askPopup(true), 400);
   return add;
 }
 // Bon verbuchen (von Hand oder automatisch): lernt Produkte, Preise, Stammladen und meldet, was auf der Liste schon gekauft ist
@@ -351,7 +351,7 @@ async function bqAutoSave(m) {
   const pairs = await bqAiPair(items, date, b.time).catch(() => []);
   const res = bonCommit(b, items, store, date, m.id, { lowRead: m.lowRead || 0, pairs });
   if (res.cand.length) bonAskAdd(res.cand);
-  save();
+  save(); if (res.cand.length) setTimeout(() => askPopup(true), 400);
   feedbackText(`✓ Bon gespeichert: ${res.n} Artikel bei ${esc(bonStoreName(store))}${res.partial ? ' (teilweise gelesen)' : ''}.${res.cand.length ? ' Auf der Liste fragt die App, was schon gekauft ist.' : ''}`);
   return true;
 }
@@ -392,21 +392,39 @@ function bonRecheck() { // schaut in die Bons der letzten 7 Tage: steht davon no
   if (added) save();
 }
 function bonAskAdd(c) { S.ask = S.ask || []; const have = new Set(S.ask.map(x => x.id)); c.forEach(x => { if (!have.has(x.id)) S.ask.push(x); }); S.ask = S.ask.slice(-30); }
-function askBoughtCard(inSheet) {
-  if (!inSheet) bonRecheck();
+function askBoughtCard() { // prüft im Hintergrund und zeigt beim Betreten von Liste oder Route sofort das Fenster; die Fragen selbst stehen an den Produkten
+  bonRecheck();
   S.ask = (S.ask || []).filter(x => S.list.some(l => l.id === x.id && !l.done));
-  if (!S.ask.length) return '';
-  if (!inSheet) { const k = S.ask.map(x => x.id).join(','); if (UI.askKey !== k) { UI.askKey = k; setTimeout(askPopup, 350); } } // beim Betreten der Seite sofort als Fenster zeigen
-  return `<div class="card askc"><h3>🛒 Schon gekauft?</h3><div class="mute small" style="margin:4px 0 8px">Diese Artikel waren auf deinem letzten Bon:</div>${S.ask.map(x => `<div class="item"><div class="grow"><div class="nm" style="cursor:default">${esc(x.name)}${x.qty ? ` <span class="mute">${esc(qtyLabel(x.qty))}</span>` : ''}</div><div class="mute small">auf dem Bon: ${esc(x.bon)}</div></div><button class="btn sm pri" onclick="askBought('${x.id}',true)">✓ Gekauft</button><button class="btn sm" onclick="askBought('${x.id}',false)">Bleibt</button></div>`).join('')}<div class="row" style="margin-top:8px"><button class="btn pri sm" onclick="askBoughtAll(true)">Alle ✓ gekauft</button><button class="btn sm" onclick="askBoughtAll(false)">Alle bleiben</button></div></div>`;
+  if (S.ask.length) { const sh = askShown(); if (S.ask.some(x => !sh.has(x.id))) setTimeout(askPopup, 350); } // Fenster nur für Fragen, die du noch nie im Fenster gesehen hast
+  return '';
 }
-function askPopup() { // Fenster „Schon gekauft?“, solange es etwas zu fragen gibt (auf Liste und Route)
-  if (!(cur === 'list' || cur === 'route') || !(S.ask || []).length) return;
+function askStrip(id, it) { // Frage direkt über dem Produkt in Liste und Route, bis sie beantwortet ist
+  const a = (S.ask || []).find(x => x.id === id); if (!a || it.done) return '';
+  return `<div class="askstrip"><span>🧾 Auf dem Bon: <b>${esc(a.bon)}</b>. Schon gekauft?</span><span class="row" style="gap:6px;flex:none"><button class="btn sm pri" onclick="event.stopPropagation();askBought('${id}',true)">✓ Gekauft</button><button class="btn sm" onclick="event.stopPropagation();askBought('${id}',false)">Bleibt</button></span></div>`;
+}
+function askSheetHtml() {
+  UI.askOff = UI.askOff || new Set();
+  const list = (S.ask || []).filter(x => byId(x.id)), n = list.filter(x => !UI.askOff.has(x.id)).length;
+  const rows = list.map(x => { const it = byId(x.id), r = rowInfo(it), on = !UI.askOff.has(x.id);
+    return `<div class="askit${on ? ' on' : ''}" onclick="askTog('${x.id}')" role="checkbox" aria-checked="${on}" tabindex="0">${thumb(r.b && r.b.img, iconFor(r.p, it.name), 'md')}<div class="grow"><div class="askn">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}</div><div class="mute small">🧾 auf dem Bon: ${esc(x.bon)}</div></div><span class="chk${on ? ' on' : ''}">${on ? '✓' : ''}</span></div>`; }).join('');
+  return `<h3>🛒 Schon gekauft?</h3><div class="mute small" style="margin:2px 0 8px">Das stand schon vor dem Einkauf auf deiner Liste und ist auf dem Bon. Häkchen = gekauft. Antippen schaltet um.</div>${rows}<div class="row" style="margin-top:10px"><button class="btn pri" style="flex:1" onclick="askConfirm()">✓ Bestätigen (${n})</button><button class="btn" onclick="closeSheet()">Abbrechen</button></div><div class="mute small" style="text-align:center;margin-top:6px">Abbrechen: die Fragen stehen dann direkt an den Produkten.</div>`;
+}
+const askShown = () => { try { return new Set(JSON.parse(localStorage.getItem('einkauf.askshown') || '[]')); } catch (e) { return new Set(); } };
+const askShownAdd = ids => { try { const s = askShown(); ids.forEach(i => s.add(i)); localStorage.setItem('einkauf.askshown', JSON.stringify([...s].slice(-150))); } catch (e) { } };
+function askPopup(any) { // Fenster sofort, wenn etwas erkannt wurde, oder beim Betreten von Liste oder Route; wer es wegklickt, sieht es nicht noch einmal (die Fragen stehen dann an den Produkten)
+  if (!any && !(cur === 'list' || cur === 'route')) return;
+  const sh0 = askShown(); if (!(S.ask || []).some(x => !sh0.has(x.id))) return;
   const sh = $('#sheet'), dk = $('#dock'); if (!sh || !sh.hidden || (dk && dk.classList.contains('open')) || DRAG.on) return;
-  UI.askSheet = true; $('#sheetbox').innerHTML = askBoughtCard(true) + '<div style="text-align:center;margin-top:8px"><button class="btn sm" onclick="closeSheet()">Später</button></div>'; sh.hidden = false;
+  askShownAdd(S.ask.map(x => x.id)); UI.askSheet = true; UI.askOff = new Set(); $('#sheetbox').innerHTML = askSheetHtml(); sh.hidden = false;
 }
-function askRefresh() { const sh = $('#sheet'); if (!UI.askSheet || !sh || sh.hidden) return; if (!(S.ask || []).length) { closeSheet(); UI.askSheet = false; } else $('#sheetbox').innerHTML = askBoughtCard(true) + '<div style="text-align:center;margin-top:8px"><button class="btn sm" onclick="closeSheet()">Später</button></div>'; }
+function askRefresh() { const sh = $('#sheet'); if (!UI.askSheet || !sh || sh.hidden) return; if (!(S.ask || []).length) closeSheet(); else $('#sheetbox').innerHTML = askSheetHtml(); }
+function askTog(id) { UI.askOff = UI.askOff || new Set(); if (UI.askOff.has(id)) UI.askOff.delete(id); else UI.askOff.add(id); askRefresh(); }
+function askConfirm() { // Häkchen = gekauft (von der Liste nehmen), ohne Häkchen = bleibt
+  const off = UI.askOff || new Set(), all = (S.ask || []).map(x => x.id), yes = all.filter(i => !off.has(i));
+  askDoneAdd(all); if (yes.length) { S.list = S.list.filter(i => !yes.includes(i.id)); shortCheckEnd(); }
+  S.ask = []; UI.askOff = new Set(); closeSheet(); save(); render(); toast(yes.length ? '✓ ' + yes.length + ' von der Liste genommen' : 'Alles bleibt auf der Liste');
+}
 function askBought(id, yes) { askDoneAdd([id]); if (yes) { S.list = S.list.filter(i => i.id !== id); shortCheckEnd(); } S.ask = (S.ask || []).filter(x => x.id !== id); save(); render(); askRefresh(); }
-function askBoughtAll(yes) { const ids = new Set((S.ask || []).map(x => x.id)); askDoneAdd([...ids]); if (yes) { S.list = S.list.filter(i => !ids.has(i.id)); shortCheckEnd(); } S.ask = []; save(); render(); askRefresh(); }
 // Gespeicherte Bon-Zeile nachträglich einem anderen Produkt zuordnen (die App merkt es sich)
 let FIX = null;
 function bonFix(bid, i) {

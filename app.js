@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 68, t: '09.10. 14:26' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 70, t: '09.10. 14:46' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -330,7 +330,7 @@ const aisleCmp = (a, b) => { const pa = a.it.pos, pb = b.it.pos; if (pa != null 
 function cRow(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, open = UI.open.has(id), heavy = c.heavy !== undefined ? c.heavy : itemHeavy(it, p), route = c.ctx === 'route';
   const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
-  return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
+  return `${askStrip(id, it)}<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
     <button class="rm" onclick="event.stopPropagation();askDel('${id}')" aria-label="Entfernen">✕</button><span class="chev" aria-hidden="true">▾</span>
     ${b && b.img ? thumb(b.img, iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
     <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.store ? ' <span class="mv" title="Von dir in diesen Laden verschoben">📍</span>' : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${c.rec ? ` <span class="rec">Empfehlung: ${esc(c.rec)}</span>` : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
@@ -353,6 +353,7 @@ function cDetail(c) {
     <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Beobachtet' : 'Beobachten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="askDel('${id}')">✕ Entfernen</button></div></div>`;
 }
 V.list = () => {
+  askBoughtCard();
   const rows = S.list.map(rowInfo), byId2 = Object.fromEntries(rows.map(x => [x.it.id, x]));
   const plan = planRoute(); // Läden und Reihenfolge wie in der Route (Leichtes zuerst, Schweres zuletzt, Gänge wie im Laden)
   const groups = {}, order = [], open = [];
@@ -373,7 +374,7 @@ V.list = () => {
   const sugg = SUGG.map(([k, n], i) => `<div class="banner info row sp"><span>Du kaufst <b>${esc(k.startsWith('n:') ? k.slice(2) : (PROD(k)?.name || k))}</b> oft (${n}×). Beobachten?</span><button class="btn sm" onclick="watchKey(${i})">👁 Ja</button></div>`).join('');
   const kurz = shortSeg();
   const dragTip = (!S.set.noDragTip && open.length >= 2) ? `<div class="banner info row sp nowrap"><span>💡 <b>Tipp:</b> Artikel kurz gedrückt halten und in einen anderen Laden ziehen.</span><button class="ico" onclick="S.set.noDragTip=true;save();render()" aria-label="Tipp schließen">✕</button></div>` : '';
-  const head = listHead('🛒 Meine Liste', open.length ? `${open.length} Artikel offen · Reihenfolge wie im Laden` : 'noch leer') + kurz + askBoughtCard() + dragTip;
+  const head = listHead('🛒 Meine Liste', open.length ? `${open.length} Artikel offen · Reihenfolge wie im Laden` : 'noch leer') + kurz + dragTip;
   const favHtml = favs.length ? `<h2 class="sh" data-store="fav" style="--sc:#e8a317">★ Im Blick <span class="mute small">· du entscheidest, wo</span></h2><div class="card tight favc" data-store="fav" style="--sc:#e8a317">${favs.map(row).join('')}</div>` : '';
   const groupsHtml = favHtml + order.map(k => `<h2 class="sh" data-store="${k}" style="--sc:${storeColor(k)}">${groupHead(k)}</h2><div class="card tight main" data-store="${k}">${groups[k].map(row).join('')}</div>`).join('');
   const wagen = done.length ? `<h2 class="sh">✓ Erledigt</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Fertig (${done.length})</button><div class="mute small" style="text-align:center;margin-top:4px">Räumt das Erledigte weg. Die App lernt daraus, was du oft kaufst.</div>` : '';

@@ -107,6 +107,7 @@ function copyRoute() {
 const setLidl = k => { S.set.lidl = k; save(); render(); };
 
 function routeView() {
+  askBoughtCard();
   const open = S.list.filter(i => !i.done && !hiddenShort(i));
   if (!open.length) return empty('🧭', 'Noch keine Route. Trag auf der Liste ein, was du brauchst.<br>Die App sagt dir dann, in welchem Laden du was kaufst und in welcher Reihenfolge.') + `<div style="text-align:center"><button class="btn pri" onclick="go('list')">Zur Liste</button></div>`;
   const plan = planRoute(), mode = S.set.lidl || 'auto';
@@ -123,7 +124,7 @@ function routeView() {
     return `<div class="card tight stop" data-store="${s.store.id}" style="--sc:${storeColor(s.store.id)}"><div class="row sp nowrap" style="padding:8px 0 2px"><div class="row nowrap"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.short)}</h3></div><span class="tag ${s.kind === 'lidl' ? 't-warn' : 't-ok'}">${s.kind === 'lidl' ? 'Spaziergang' : 'City-Center'}</span></div>
       <div class="mute small" style="margin:0 0 4px">${esc(hint)}</div>${s.items.map(row).join('')}</div>`;
   }).join('');
-  return `<div class="lhead"><b>🧭 Einkaufsroute</b><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min${shortOn() && S.short.view !== 'all' ? ' · ⚡ Kurzliste' : ''}</span></div>${shortSeg()}${askBoughtCard()}
+  return `<div class="lhead"><b>🧭 Einkaufsroute</b><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'} · ca. ${plan.mins} Min${shortOn() && S.short.view !== 'all' ? ' · ⚡ Kurzliste' : ''}</span></div>${shortSeg()}
   ${favCard}${cards}
   <div class="mute small" style="text-align:center;margin:2px 0 10px">🏠 Danach nach Hause · ca. 3 Min · in jedem Laden: Obst &amp; Gemüse zuerst, Schweres zuletzt</div>
   
