@@ -1,4 +1,5 @@
 'use strict';
+const APP_BUILD = { v: 66, t: '09.10. 13:54' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -825,6 +826,7 @@ let R = { running: false };
 let MODE = 'unknown'; // 'server' = eigener Server (start.bat) kann selbst suchen · 'static' = Hosting: Angebote kommen automatisch aus offers.json
 fetch('/api/status').then(r => { MODE = r.ok ? 'server' : 'static'; rstat(); }).catch(() => { MODE = 'static'; rstat(); });
 function rstat() {
+  const vr = $('#ver'); if (vr) vr.textContent = 'v' + APP_BUILD.v + ' · ' + APP_BUILD.t;
   const b = $('#rbtn'), s = $('#rstat'); if (!b) return;
   b.disabled = R.running; b.textContent = R.running ? 'Suche läuft…' : MODE === 'static' ? 'Neueste Angebote' : 'Angebote suchen';
   const when = SRC.fetched ? new Date(SRC.fetched).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
