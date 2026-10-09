@@ -7,7 +7,7 @@ const BON_NAMES = { kaufland: 'Kaufland', penny: 'Penny', edeka: 'EDEKA', rossma
 const bonStoreName = id => (STORES.find(s => s.id === id) || {}).short || BON_NAMES[id] || id;
 const SKIP_RX = /^(?:betrag|zwischensumme|mwst|ust|steuer|netto-?warenwert|nettowert|brutto|incl|inkl|davon|bar|ec|girocard|maestro|visa|mastercard|karte|kartenzahlung|contactless|zahlung|r(?:ü|ue)ckgeld|zur(?:ü|ue)ck|gegeben|geg|bonus|payback|punkte|filiale|kasse|bediener|kassierer|beleg|bon|tel|telefon|datum|uhrzeit|trace|terminal|genehmigung|vielen dank|danke|www|http|tse|seriennummer|kundenbeleg|ihr einkauf|ersparnis|anzahl|artikel|eur|uid|ust-?id|steuernr|plz)\b/i;
 const TOTAL_RX = /^\W*(summe|gesamt(?:betrag)?|total|zu zahlen|zahlbetrag)\b.*?(-?\d{1,5}[.,]\d{2})\s*(?:€|eur)?\W*$/i;
-const LINE_RX = /^(.*?)\s+(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?(?:\s*(?:[A-Za-z]|\d))?(?:\s*\*)?\s*$/;
+const LINE_RX = /^(.*?)\s+(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?(?:\s*([A-Za-z]|\d))?(?:\s*\*)?\s*$/;
 const QTY_RX = /^(\d+)\s*(?:x|×|\*|stk\.?\s*x)\s*(\d{1,4}[.,]\d{2})(?:\s*(?:€|eur))?(?:\s+(\d{1,4}[.,]\d{2}))?\s*[A-Za-z*]?$/i;
 const WEIGHT_RX = /^(\d+[.,]\d{1,3})\s*kg\s*(?:x|×)\s*(\d{1,4}[.,]\d{2})/i;
 const num = s => parseFloat(String(s).replace(',', '.'));
@@ -34,19 +34,25 @@ function packOf(name) { // Packungsgröße aus dem Namen: 1L, 500g, 6x1,5L, 8er,
   return null;
 }
 function classifyBon(name, price) {
-  if (price < 0 || /rabatt|coupon|gutschein|preisvorteil|aktionspreis|treue/i.test(name)) return /pfand|leergut/i.test(name) ? 'pfand' : 'discount';
-  if (/pfand|leergut|einweg|mehrweg/i.test(name)) return 'pfand';
+  const pf = /pfand|leergut|(?:einweg|mehrweg)[\s-]*(?:flasche|dose|kasten|pfand)/i.test(name);
+  if (price < 0 || /rabatt|coupon|gutschein|preisvorteil|aktionspreis|treue/i.test(name)) return pf ? 'pfand' : 'discount';
+  if (pf) return 'pfand';
+  if (/tragetasche|tragetüte|papiertüte|plastiktüte|einkaufstasche/i.test(name)) return 'bag';
   return 'item';
 }
 const cleanTranscript = s => String(s || '').replace(/\r/g, '').replace(/```[a-z]*/gi, '').replace(/\*\*|__/g, '').replace(/\|/g, ' ').replace(/^[ \t]*[-•]\s+/gm, '');
 function parseReceipt(text) {
-  const lines = cleanTranscript(text).split('\n').map(s => s.replace(/[ \t]+/g, ' ').trim().slice(0, 160)).filter(Boolean).slice(0, 400);
-  const out = { store: detectStore(lines.slice(0, 14).join('\n')) || detectStore(lines.join('\n')), date: detectDate(lines), total: null, items: [], skipped: [] };
+  const lines = cleanTranscript(text).split('\n').map(s => s.replace(/[ \t]+/g, ' ').trim().slice(0, 160).replace(/(?:^|(?<=\s))(?:[A-Za-zÄÖÜäöü] ){2,}[A-Za-zÄÖÜäöü](?=\s|$)/g, m => m.replace(/ /g, ''))).filter(Boolean).slice(0, 400);
+  const out = { store: detectStore(lines.slice(0, 14).join('\n')) || detectStore(lines.join('\n')), date: detectDate(lines), total: null, count: null, taxMap: {}, items: [], skipped: [] };
   let pending = null, last = null;
-  const push = (name, qty, price, unit) => { const it = { raw: name, name: cleanBonName(name), qty, price, unit: unit || null, kind: classifyBon(name, price), include: true, pid: null, how: '' }; it.pack = packOf(it.name); out.items.push(it); last = it; pending = null; };
+  const push = (name, qty, price, unit, tax) => { const it = { raw: name, name: cleanBonName(name), qty, price, unit: unit || null, tax: tax && /[A-Za-z]/.test(tax) ? tax.toUpperCase() : null, kind: classifyBon(name, price), include: true, pid: null, how: '' }; it.pack = packOf(it.name); out.items.push(it); last = it; pending = null; };
   for (const L of lines) {
     const tm = L.match(TOTAL_RX);
     if (tm && !/zwischen/i.test(L)) { if (out.total == null) out.total = num(tm[2]); continue; }
+    const tx = L.match(/^([A-E])\s+(\d{1,2})[.,]\d\s?%/); // „A 07,0% Netto 13,77 MwSt 0,96“: Steuerzeile, nie ein Artikel
+    if (tx || (/\b(?:mwst|ust)\b/i.test(L) && /\d[.,]\d{2}/.test(L))) { if (tx) out.taxMap[tx[1]] = +tx[2]; out.skipped.push(L); pending = null; continue; }
+    const cm = L.match(/^(\d{1,3})\s+(?:artikel|positionen)\b/i); if (cm) { out.count = +cm[1]; out.skipped.push(L); pending = null; continue; }
+    if (/öffnungszeit|\buhr\b|^[*\-_=#.]{3,}|^\*\s|keine punkte|kein stress|gutes für alle|zum \w+ preis/i.test(L)) { out.skipped.push(L); pending = null; continue; }
     if (SKIP_RX.test(L)) { out.skipped.push(L); pending = null; continue; }
     const qm = L.match(QTY_RX);
     if (qm) {
@@ -63,12 +69,26 @@ function parseReceipt(text) {
       if (name.length < 2 || !/[A-Za-zÄÖÜäöü]/.test(name)) { out.skipped.push(L); continue; }
       const kind = classifyBon(name, price);
       if (kind === 'discount') { if (last) last.discount = +((last.discount || 0) + price).toFixed(2); else out.skipped.push(L); continue; }
-      push(name, 1, price, null); continue;
+      push(name, 1, price, null, m[3]); continue;
     }
     if (/[A-Za-zÄÖÜäöü]{3,}/.test(L) && !/^\d/.test(L)) pending = L; else out.skipped.push(L);
   }
+  const merged = [];
+  for (const it of out.items) {
+    const twin = it.kind === 'item' && !it.weightKg && !it.discount ? merged.find(x => x.kind === 'item' && !x.weightKg && !x.discount && x.name === it.name && Math.abs(x.price / x.qty - it.price / it.qty) < 0.005) : null;
+    if (twin) { twin.qty += it.qty; twin.price = +(twin.price + it.price).toFixed(2); twin.unit = twin.unit || +(twin.price / twin.qty).toFixed(2); } else merged.push(it);
+  }
+  out.items = merged;
+  out.items.forEach(it => { if (it.tax && out.taxMap[it.tax] != null) it.rate = out.taxMap[it.tax]; });
   out.items.forEach(matchBonItem);
   return out;
+}
+// true = vollständig gelesen, false = nur teilweise, null = nicht festzustellen (nur zur Information, nie eine Pflicht)
+function bonComplete(b) {
+  const n = b.items.filter(i => i.kind === 'item' || i.kind === 'bag').reduce((s, i) => s + (i.qty || 1), 0);
+  if (b.count != null) return n >= b.count;
+  if (b.total != null) return Math.abs(bonSum(b.items) - b.total) < 0.015;
+  return null;
 }
 const netPrice = it => +(it.price + (it.discount || 0)).toFixed(2);
 const bonSum = items => +items.filter(i => i.include && i.kind !== 'discount').reduce((s, i) => s + netPrice(i), 0).toFixed(2);
@@ -170,13 +190,13 @@ function bonView() {
     <div class="row" style="margin-top:10px"><button class="btn pri" onclick="bonRead()">Auslesen</button><button class="btn" onclick="BON.text=BON_SAMPLE;render()">Beispiel ausprobieren</button></div></details>`;
   const items = b.items.filter(i => i.kind === 'item' || i.kind === 'pfand');
   const sum = bonSum(b.items), diff = b.total != null ? +(sum - b.total).toFixed(2) : null;
-  const sumLine = b.total == null ? 'Summe auf dem Bon nicht gefunden.' : Math.abs(diff) < 0.015 ? `Summe laut Bon ${eur(b.total)} ✓ stimmt mit den Positionen überein.` : `Summe laut Bon ${eur(b.total)}, Positionen ${eur(sum)} (Differenz ${eur(Math.abs(diff))}). Prüfe, ob eine Zeile fehlt oder doppelt ist.`;
+  const sumLine = b.total == null ? '' : `Summe laut Bon ${eur(b.total)}${Math.abs(diff) < 0.015 ? ' ✓' : ''}`;
   const stores = [...STORES.filter(s => s.tier !== 'D' || s.id === 'selgros' || s.id === 'metro'), ...Object.keys(BON_NAMES).map(id => ({ id, short: BON_NAMES[id] }))];
   const row = (it, i) => {
     const p = it.pid ? PROD(it.pid) : null, plan = p && it.kind === 'item' ? bonPlanNote(it, p, b.store) : '';
     return `<div class="item"><input type="checkbox" ${it.include ? 'checked' : ''} onchange="BON.parsed.items[${i}].include=this.checked;render()" aria-label="Zeile übernehmen" style="width:20px;height:20px;flex:none">
       <div class="grow"><div class="nm" style="cursor:default">${esc(it.name)}${it.qty > 1 ? ` <span class="mute">× ${it.qty}</span>` : ''}${it.pack ? ` <span class="mute">· ${esc(packLabel(it.pack.base, it.pack.amount))}</span>` : ''}</div>
-      ${it.kind === 'pfand' ? '<span class="tag">Pfand</span>' : p ? `<button class="tag t-ok" onclick="bonAssign(${i})">✓ ${esc(p.name)}${it.how === 'ähnlich' ? ' (ähnlich, bitte prüfen)' : it.how === 'KI' ? ' (Vorschlag der KI, bitte prüfen)' : it.how === 'Marke' ? ' (an der Marke erkannt)' : ''}</button>` : it.sugPid && PROD(it.sugPid) ? `<button class="tag t-warn" onclick="bonSetPid(${i},'${it.sugPid}')">💡 Vielleicht „${esc(PROD(it.sugPid).name)}“? Antippen zum Übernehmen</button> <button class="lnk" onclick="bonAssign(${i})">anders zuordnen</button>` : `<button class="tag t-warn" onclick="bonAssign(${i})">❓ Produkt nicht erkannt · zuordnen</button>${it.what ? `<div class="mute small">Vermutlich: ${esc(it.what)}</div>` : ''}`}
+      ${it.kind === 'pfand' ? '<span class="tag">Pfand</span>' : p ? `<button class="tag t-ok" onclick="bonAssign(${i})">✓ ${esc(p.name)}${it.how === 'ähnlich' ? ' (ähnlich, bitte prüfen)' : it.how === 'KI' ? ' (Vorschlag der KI, bitte prüfen)' : it.how === 'Marke' ? ' (an der Marke erkannt)' : ''}</button>` : it.sugPid && PROD(it.sugPid) ? `<button class="tag t-warn" onclick="bonSetPid(${i},'${it.sugPid}')">💡 Vielleicht „${esc(PROD(it.sugPid).name)}“? Antippen zum Übernehmen</button> <button class="lnk" onclick="bonAssign(${i})">anders zuordnen</button>` : `<button class="tag" onclick="bonAssign(${i})">🆕 wird als neues Produkt gemerkt${it.newName ? ': ' + esc(it.newName) : ''} · ändern</button>${it.what ? `<div class="mute small">Vermutlich: ${esc(it.what)}</div>` : ''}`}
       ${plan ? `<div class="mute small">${plan}</div>` : ''}</div><b>${eur(netPrice(it))}</b></div>`;
   };
   return `${back}<div class="card"><h3>🧾 Bon gelesen</h3><div class="fgrid" style="margin-top:8px"><label class="f">Laden<select id="bs" onchange="BON.parsed.store=this.value">${b.store ? '' : '<option value="">– bitte wählen –</option>'}${stores.map(s => `<option value="${s.id}" ${s.id === b.store ? 'selected' : ''}>${esc(s.short || s.name)}</option>`).join('')}</select></label><label class="f">Datum<input id="bd" type="date" value="${b.date || ''}" onchange="BON.parsed.date=this.value"></label></div><div class="small" style="margin-top:8px">${esc(sumLine)}</div></div>
@@ -196,15 +216,15 @@ function bonPlanNote(it, p, store) {
   }
   return txt;
 }
-function bonCheck(b, diff) { // prüft nach dem Foto-Lesen, ob wirklich alles gelesen wurde
+function bonCheck(b, diff) { // nur ein Hinweis: gespeichert wird immer, gelesene Artikel zählen immer
   if (!BON.fromPhoto) return '';
-  const why = [];
-  if (b.total == null) why.push('Die Summe wurde nicht gefunden.'); else if (Math.abs(diff) >= 0.015) why.push(`Die Positionen ergeben ${eur(bonSum(b.items))}, auf dem Bon steht ${eur(b.total)}. Vermutlich fehlt eine Zeile.`);
+  const comp = bonComplete(b), n = b.items.filter(i => i.kind === 'item' || i.kind === 'bag').reduce((s, i) => s + (i.qty || 1), 0), why = [];
+  if (comp === false) why.push(b.count != null ? `Auf dem Bon stehen ${b.count} Artikel, gelesen wurden ${n}.` : `Summe laut Bon ${eur(b.total)}, gelesene Positionen ${eur(bonSum(b.items))}.`);
   if (BON.lowRead) why.push(`${BON.lowRead} Stelle(n) waren nicht lesbar (mit [?] markiert).`);
-  if (!b.date) why.push('Das Datum wurde nicht gefunden.');
+  if (!b.date) why.push('Das Datum wurde nicht gefunden. Es wird das heutige eingetragen, du kannst es oben ändern.');
   if (BON.dupWarn) why.push(BON.dupWarn);
-  if (!why.length) return '<div class="card" style="border-color:var(--ok,#2e9e5b)"><b>✓ Alles gelesen:</b> Die Summe stimmt mit den Positionen überein.</div>';
-  return `<div class="card help"><b>⚠ Nicht sicher, ob alles gelesen wurde</b><ul class="small">${why.map(w => '<li>' + esc(w) + '</li>').join('')}</ul><div class="row"><button class="btn sm pri" onclick="bqReread('${BON.cur}')">🔄 Nochmal lesen</button><button class="btn sm" onclick="bonAddTo('${BON.cur}')">📷 Foto ergänzen</button></div></div>`;
+  if (!why.length) return '<div class="card" style="border-color:var(--ok,#2e9e5b)"><b>✓ Alles gelesen.</b></div>';
+  return `<div class="card help"><b>ℹ️ Vielleicht nicht ganz vollständig</b><div class="small" style="margin-top:4px">Du kannst trotzdem speichern. Alles Gelesene wird genutzt.</div><ul class="small">${why.map(w => '<li>' + esc(w) + '</li>').join('')}</ul><div class="row"><button class="btn sm" onclick="bonAddTo('${BON.cur}')">📷 Foto ergänzen</button><button class="btn sm" onclick="bqReread('${BON.cur}')">🔄 Nochmal lesen</button></div></div>`;
 }
 function bonRead() {
   const t = $('#bt') ? $('#bt').value : BON.text; BON.text = t;
@@ -235,12 +255,32 @@ function bonSave() {
   const items = b.items.filter(i => i.kind === 'item' && i.include);
   if (!items.length) return feedbackText('Es ist keine Position ausgewählt.', true);
   if (!BON.allowDup) { const d = bonDupOf(store, date, b.total, bonNames(items), BON.cur); if (d && d.sure && !confirm('Diesen Bon hast du schon (' + bonStoreName(d.c.store) + ', ' + fmtD(d.c.date) + '). Trotzdem nochmal speichern? Dann zählt er doppelt.')) return; }
+  const res = bonCommit(b, items, store, date, BON.cur, { lowRead: BON.lowRead });
+  save(); BON = { text: '', parsed: null, done: { lines: res.lines, ask: res.cand }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' }; render();
+}
+// Name für ein neues Produkt aus einer unbekannten Bon-Zeile (KI-Name, sonst der aufgeräumte Bon-Name)
+function bonNewName(i) {
+  let n = String(i.newName || '').trim();
+  if (!n) n = i.name.replace(/\b\d+[.,]?\d*\s?(?:kg|g|ml|l|er|stk|st|wl|x)\b/ig, ' ').replace(/\d+/g, ' ').replace(/[^\p{L}\s-]/gu, ' ').replace(/\b(?:nfp|altp)\b/ig, ' ').replace(/\s+/g, ' ').trim();
+  if (!/\p{L}{3}/u.test(n)) return '';
+  return n.charAt(0).toUpperCase() + n.slice(1, 40);
+}
+// Bon verbuchen (von Hand oder automatisch): lernt Produkte, Preise, Stammladen und meldet, was auf der Liste schon gekauft ist
+function bonCommit(b, items, store, date, qid, opt) {
+  opt = opt || {};
+  const neu = [];
+  items.forEach(i => { // unbekannte Zeilen: KI-Vorschlag übernehmen oder als neues Produkt anlegen. So kennt die App es beim nächsten Mal von selbst.
+    if (i.pid) return;
+    if (i.sugPid && PROD(i.sugPid) && i.sugC !== 'low') { i.pid = i.sugPid; i.how = 'ähnlich'; return; }
+    const nm = bonNewName(i); if (!nm) return;
+    const a = parseAdd(nm); i.pid = a.pid || mkCustom(a.name).id; i.how = 'neu'; if (!a.pid) neu.push(a.name);
+  });
+  const partial = bonComplete(b) === false || !!opt.lowRead;
   const oldTip = new Set(savingTips().map(t => t.p.id)), before = {};
   items.forEach(i => { if (i.pid) before[i.pid] = stammladen(i.pid); });
-  const rec = { id: uid(), date, store, total: b.total, items: items.map(i => ({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null })) };
-  const qid = BON.cur;
+  const rec = { id: uid(), date, store, total: b.total, items: items.map(i => ({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null })), ...(partial ? { partial: true } : {}) };
   S.bons.unshift(rec); S.bons = bonsSorted().slice(0, 60);
-  const lines = [], spont = [], favNew = [], fixed = [];
+  const lines = [], spont = [], favNew = [];
   const seen = new Set();
   items.forEach(i => {
     if (!i.pid) return;
@@ -254,17 +294,53 @@ function bonSave() {
   S.hist = S.hist.slice(-400);
   TIPS = null;
   const total = items.reduce((s, i) => s + netPrice(i), 0);
-  lines.push(`<b>${items.length} Positionen</b> bei <b>${esc(bonStoreName(store))}</b> am ${esc(fmtD(date))}, zusammen ${eur(total)}.`);
-  // Artikel, die noch offen auf der Liste stehen und auf dem Bon sind (und schon vor dem Bon-Datum auf der Liste standen): nachfragen
-  const cand = [];
+  lines.push(`<b>${items.length} Positionen</b> bei <b>${esc(bonStoreName(store))}</b> am ${esc(fmtD(date))}, zusammen ${eur(total)}${partial ? ' (nur teilweise gelesen)' : ''}.`);
+  const cand = []; // noch offene Listen-Artikel, die auf dem Bon waren (und schon vor dem Bon-Datum auf der Liste standen)
   S.list.filter(l => !l.done).forEach(l => { if (l.t && isoDay(new Date(l.t)) > date) return; const hit = items.find(i => (l.pid && i.pid === l.pid) || (!l.pid && bonNorm(i.name) === bonNorm(l.name))); if (hit) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: hit.name }); });
   if (spont.length) lines.push(`🛍️ Spontan gekauft (stand nicht auf der Liste): ${spont.slice(0, 8).map(esc).join(', ')}. Was öfter vorkommt, wird automatisch zum Hauptprodukt.`);
+  if (neu.length) lines.push(`🆕 Neue Produkte gemerkt: ${neu.slice(0, 6).map(esc).join(', ')}. Beim nächsten Bon erkennt die App sie von selbst.`);
   if (favNew.length) lines.push(`⭐ Neu in deinen Hauptprodukten: ${favNew.map(esc).join(', ')}.`);
-  const unk = b.items.filter(i => i.kind === 'item' && i.include && !i.pid).length; if (unk) lines.push(`❓ ${unk} Positionen ohne Produkt gespeichert. Du kannst sie später zuordnen.`);
   [...seen].forEach(pid => { const st = stammladen(pid), was = before[pid]; if (st && (!was || was.store !== st.store)) lines.push(`📍 ${esc(PROD(pid).name)}: Du kaufst das meist bei <b>${esc(bonStoreName(st.store))}</b> (${st.n} von ${st.of} Käufen).`); });
   const newTips = savingTips().filter(t => !oldTip.has(t.p.id)); newTips.slice(0, 2).forEach(t => lines.push(`💡 ${esc(t.p.name)}: ${esc(tipText(t))}`));
   if (qid) { bqSaved(qid, rec, total); lines.push('🗑️ Das Papier kannst du jetzt wegwerfen. Das Foto bleibt noch hier gespeichert.'); }
-  save(); BON = { text: '', parsed: null, done: { lines, ask: cand }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' }; render();
+  return { lines, cand, rec, total, partial, n: items.length };
+}
+// Automatisch speichern, sobald ein Bon gelesen ist (nur wenn Laden bekannt und kein Verdacht auf doppelt)
+async function bqAutoSave(m) {
+  if (m.status !== 'gelesen' || m.warn || !m.text) return false;
+  const b = parseReceipt(m.text); if (m.ai) bonApplyAi(b.items, m.ai);
+  const store = b.store, date = b.date || isoDay(new Date(m.created));
+  if (!store) return false;
+  const items = b.items.filter(i => i.kind === 'item' && i.include); if (!items.length) return false;
+  const res = bonCommit(b, items, store, date, m.id, { lowRead: m.lowRead || 0 });
+  if (res.cand.length) bonAskAdd(res.cand);
+  save();
+  feedbackText(`✓ Bon gespeichert: ${res.n} Artikel bei ${esc(bonStoreName(store))}${res.partial ? ' (teilweise gelesen)' : ''}.${res.cand.length ? ' Auf der Liste fragt die App, was schon gekauft ist.' : ''}`);
+  return true;
+}
+// „Schon gekauft?“ bleibt auf der Liste und der Route stehen, bis du antwortest
+function bonAskAdd(c) { S.ask = S.ask || []; const have = new Set(S.ask.map(x => x.id)); c.forEach(x => { if (!have.has(x.id)) S.ask.push(x); }); S.ask = S.ask.slice(-30); }
+function askBoughtCard() {
+  S.ask = (S.ask || []).filter(x => S.list.some(l => l.id === x.id && !l.done));
+  if (!S.ask.length) return '';
+  return `<div class="card askc"><h3>🛒 Schon gekauft?</h3><div class="mute small" style="margin:4px 0 8px">Diese Artikel waren auf deinem letzten Bon:</div>${S.ask.map(x => `<div class="item"><div class="grow"><div class="nm" style="cursor:default">${esc(x.name)}${x.qty ? ` <span class="mute">${esc(qtyLabel(x.qty))}</span>` : ''}</div><div class="mute small">auf dem Bon: ${esc(x.bon)}</div></div><button class="btn sm pri" onclick="askBought('${x.id}',true)">✓ Gekauft</button><button class="btn sm" onclick="askBought('${x.id}',false)">Bleibt</button></div>`).join('')}<div class="row" style="margin-top:8px"><button class="btn pri sm" onclick="askBoughtAll(true)">Alle ✓ gekauft</button><button class="btn sm" onclick="askBoughtAll(false)">Alle bleiben</button></div></div>`;
+}
+function askBought(id, yes) { if (yes) { S.list = S.list.filter(i => i.id !== id); shortCheckEnd(); } S.ask = (S.ask || []).filter(x => x.id !== id); save(); render(); }
+function askBoughtAll(yes) { if (yes) { const ids = new Set((S.ask || []).map(x => x.id)); S.list = S.list.filter(i => !ids.has(i.id)); shortCheckEnd(); } S.ask = []; save(); render(); }
+// Gespeicherte Bon-Zeile nachträglich einem anderen Produkt zuordnen (die App merkt es sich)
+let FIX = null;
+function bonFix(bid, i) {
+  const b = S.bons.find(x => x.id === bid), it = b && b.items[i]; if (!it) return; FIX = { bid, i };
+  $('#sheetbox').innerHTML = `<div class="row sp"><h3>Welches Produkt ist das?</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div><div class="mute">Auf dem Bon: <b>${esc(it.n)}</b></div><input id="bf" value="${esc(bonKey(it.n))}" oninput="bonFixSearch()" style="width:100%;margin:10px 0" aria-label="Produkt suchen"><div id="bfr"></div>`;
+  $('#sheet').hidden = false; bonFixSearch();
+}
+function bonFixSearch() {
+  const q = $('#bf') ? $('#bf').value : ''; BON.res = suggestFor(q, 6);
+  $('#bfr').innerHTML = BON.res.map((s, j) => `<button class="sugrow" onclick="bonFixPick(${j})"><span class="em">${iconFor(s.pid ? PROD(s.pid) : null, s.t)}</span><span class="grow"><b>${esc(s.t)}</b></span><span class="plus">✓</span></button>`).join('') || '<div class="mute">Nichts gefunden.</div>';
+}
+function bonFixPick(j) {
+  const s = BON.res[j]; if (!s || !FIX) return; const b = S.bons.find(x => x.id === FIX.bid), it = b && b.items[FIX.i]; if (!it) return;
+  const a = parseAdd(s.t); it.pid = a.pid || mkCustom(a.name).id; S.aliases[bonKey(it.n)] = it.pid; TIPS = null; save(); closeSheet(); render(); feedbackText('✓ Geändert. Die App merkt sich das für die nächsten Bons.');
 }
 
 /* ---------- Foto lesen: Bon fotografieren, KI schreibt den Text ab, der Bon-Leser oben macht den Rest ---------- */
@@ -470,13 +546,13 @@ async function bqRun(force) {
           try { const t2 = await aiAsk(fotos, AI_PROMPT + ' Do not stop early: the transcription must include the last lines (SUMME/total, payment and date).', 2500, aiAsk.meta && aiAsk.meta.model), p2 = parseReceipt(t2); if (p2.total != null || p2.items.length > parsed.items.length) { text = t2; parsed = p2; } } catch (e) { /* erstes Ergebnis behalten */ }
         }
         Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '', warn: '' }); bqDupCheck(m, parsed);
-        if (!(typeof cur !== 'undefined' && cur === 'bon')) feedbackText(m.status === 'doppelt' ? '🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.' : '✓ Ein Bon wurde gelesen. Unter Mehr → 📷 Bon kannst du ihn prüfen.');
+        if (m.status === 'doppelt') feedbackText('🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.');
       } catch (e) {
         if (e.fatal) { m.status = 'fehler'; m.err = e.message; }
         else { m.status = 'wartet'; m.err = e.message; stop = true; if (/Schlüssel|Guthaben|eingerichtet/.test(e.message)) BQ.keyProblem = e.message; else BQ.cool = Date.now(); }
       }
       await bqSaveMeta(m); bqChanged();
-      if (m.status === 'gelesen') await bqAiMatch(m);
+      if (m.status === 'gelesen') { await bqAiMatch(m); let ok = false; try { ok = await bqAutoSave(m); } catch (e) { ok = false; } if (!ok) feedbackText('✓ Ein Bon wurde gelesen. Unter Mehr → 📷 Bon kannst du ihn prüfen und speichern.'); }
       if (stop) break;
     }
   } finally { BQ.running = false; bqChanged(); }
@@ -556,9 +632,9 @@ const bonDetail = id => { BON.detail = id; render(); scrollTo(0, 0); };
 function bonDetailView() {
   const b = S.bons.find(x => x.id === BON.detail); if (!b) { BON.detail = null; return ''; }
   const m = BQ.list.find(x => x.recId === b.id), sum = +b.items.reduce((s, i) => s + i.p, 0).toFixed(2);
-  const rows = b.items.map(i => { const p = i.pid ? PROD(i.pid) : null; return `<div class="item"><div class="grow"><div class="nm" style="cursor:default">${esc(i.n)}${i.q > 1 ? ` <span class="mute">× ${i.q}</span>` : ''}</div>${p ? `<span class="tag t-ok">${esc(p.name)}</span>` : '<span class="tag">kein Produkt zugeordnet</span>'}</div><b>${eur(i.p)}</b></div>`; }).join('');
+  const rows = b.items.map((i, ix) => { const p = i.pid ? PROD(i.pid) : null; return `<div class="item" role="button" tabindex="0" style="cursor:pointer" onclick="bonFix('${b.id}',${ix})"><div class="grow"><div class="nm" style="cursor:default">${esc(i.n)}${i.q > 1 ? ` <span class="mute">× ${i.q}</span>` : ''}</div>${p ? `<span class="tag t-ok">${esc(p.name)}</span>` : '<span class="tag">kein Produkt zugeordnet</span>'}</div><b>${eur(i.p)}</b><span class="mute" aria-hidden="true">›</span></div>`; }).join('');
   return `<button class="btn sm" onclick="BON.detail=null;render()">← Zu den Bons</button>
-    <div class="card"><h3>🧾 ${esc(bonStoreName(b.store))} · ${esc(fmtD(b.date))}</h3><div class="small" style="margin-top:6px">${b.items.length} Positionen · Summe laut Bon ${b.total != null ? eur(b.total) : 'unbekannt'} · Positionen zusammen ${eur(sum)} (Pfand wird nicht mitgezählt)</div></div>
+    <div class="card"><h3>🧾 ${esc(bonStoreName(b.store))} · ${esc(fmtD(b.date))}</h3><div class="small" style="margin-top:6px">${b.items.length} Positionen · Summe laut Bon ${b.total != null ? eur(b.total) : 'unbekannt'} · Positionen zusammen ${eur(sum)} (Pfand wird nicht mitgezählt)${b.partial ? '<br>ℹ️ Nur teilweise gelesen. Die gelesenen Artikel zählen trotzdem.' : ''}<br><span class="mute">Antippen einer Zeile ändert das Produkt.</span></div></div>
     <h2>Gekauft</h2><div class="card tight">${rows || '<div class="empty">Keine Positionen.</div>'}</div>
     ${m && m.hasPhotos ? `<button class="btn" style="margin-top:10px" onclick="bqShow('${m.id}')">📄 Foto vom Bon ansehen</button>` : ''}`;
 }
@@ -593,7 +669,7 @@ function bonApplyAi(items, ai) { // KI-Vorschläge auf noch unbekannte Zeilen an
   items.forEach(it => {
     if (it.kind !== 'item' || it.pid) return; const a = ai[bonKey(it.name)]; if (!a) return;
     const p = a.pid ? PROD(a.pid) : null;
-    if (p && a.c === 'high') { it.pid = p.id; it.how = 'KI'; } else if (p) it.sugPid = p.id;
+    if (p && a.c === 'high') { it.pid = p.id; it.how = 'KI'; } else if (p) { it.sugPid = p.id; it.sugC = a.c; } else if (a.g) it.newName = a.g;
     if (a.w) it.what = a.w;
   });
 }
@@ -602,13 +678,13 @@ async function bqAiMatch(m) { // fragt die KI (nur Namen, keine Preise, kein Fot
   const parsed = parseReceipt(m.text), unk = [...new Set(parsed.items.filter(i => i.kind === 'item' && !i.pid).map(i => i.name))].slice(0, 25);
   if (!unk.length) { m.aiDone = true; return; }
   const prompt = `German supermarket receipt, store: ${bonStoreName(parsed.store || 'unbekannt')}. The names on the receipt are abbreviated and may be only a brand name. Our product list: ${PRODUCTS.filter(p => !p.custom).map(p => p.name).join('; ')}.\n` +
-    `For each receipt name decide which product from the list it is. If it is none of them, set "p" to null. Answer ONLY with a JSON array, no other text: [{"n":"<name exactly as given>","p":"<exact product name from the list or null>","c":"high|medium|low","w":"<what it is in German, max 5 words>"}].\nNames: ${JSON.stringify(unk)}`;
+    `For each receipt name decide which product from the list it is. If it is none of them, set "p" to null and give in "g" a short generic German product name (1 to 3 words, no brand, no size, e.g. "Hähnchenflügel", "Flüssigseife", "Einmalhandschuhe"). Answer ONLY with a JSON array, no other text: [{"n":"<name exactly as given>","p":"<exact product name from the list or null>","c":"high|medium|low","w":"<what it is in German, max 5 words>","g":"<generic name or empty>"}].\nNames: ${JSON.stringify(unk)}`;
   try {
     const out = await aiAsk([], prompt, 1500), arr = JSON.parse((out.match(/\[[\s\S]*\]/) || ['[]'])[0]); m.ai = m.ai || {};
     arr.forEach(r => {
       if (!r || typeof r.n !== 'string') return;
       const p = typeof r.p === 'string' ? PRODUCTS.find(x => x.name.toLowerCase() === r.p.toLowerCase()) : null;
-      m.ai[bonKey(r.n)] = { pid: p ? p.id : null, c: ['high', 'medium', 'low'].includes(r.c) ? r.c : 'low', w: String(r.w || '').slice(0, 40) };
+      m.ai[bonKey(r.n)] = { pid: p ? p.id : null, c: ['high', 'medium', 'low'].includes(r.c) ? r.c : 'low', w: String(r.w || '').slice(0, 40), g: p ? '' : String(r.g || '').replace(/[^\p{L}\s-]/gu, '').trim().slice(0, 30) };
     });
     m.aiDone = true; await bqSaveMeta(m); bqChanged();
   } catch (e) { /* Vorschlag ist nur ein Zusatz: bei Fehler bleibt es beim manuellen Zuordnen */ }

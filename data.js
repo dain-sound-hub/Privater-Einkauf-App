@@ -62,7 +62,7 @@ window.PRODUCTS = [
   { id: 'pinienkerne', cat: 'Öle & Grundnahrung', name: 'Pinienkerne', kw: 'pinienkern', base: 'kg', stock: 1 },
   { id: 'rinderhack', cat: 'Fleisch', name: 'Rinderhack (rein)', kw: 'rinder.?hack|hackfleisch.*rind|rinder-hack', base: 'kg', meat: 1, stock: 1, prio: 2, ref: 9.99, refNote: 'Netto Gut Ponholz 9,99 €/kg (historisch); Penny/Kaufland 9,98 €/kg', note: 'Für Burger rein Rind' },
   { id: 'gemhack', cat: 'Fleisch', name: 'Gemischtes Hack', kw: 'gemischtes hack|hackfleisch gemischt|hack.*gemischt|^hackfleisch', base: 'kg', meat: 1, stock: 1, note: 'Einzige Schweinefleisch-Ausnahme' },
-  { id: 'haehnchen', cat: 'Fleisch', name: 'Hähnchen', kw: 'hähnchen|hühnchen|hendl|geflügel(?!wurst)', base: 'kg', meat: 1, stock: 1 },
+  { id: 'haehnchen', cat: 'Fleisch', name: 'Hähnchen', kw: 'hähnchen|hühnchen|hendl|geflügel(?!wurst)', kwBon: 'chicken|\\bwings?\\b', base: 'kg', meat: 1, stock: 1 },
   { id: 'pute', cat: 'Fleisch', name: 'Pute / Geflügel', kw: '\\bpute|\\bputen', base: 'kg', meat: 1, stock: 1 },
   { id: 'rind', cat: 'Fleisch', name: 'Rind allgemein', kw: 'rindersteak|rumpsteak|entrecôte|rinderfilet|rindergulasch|rinderbraten|rinderroulade|tafelspitz|\\brindfleisch|\\brind(?!er.?hack)(?!e(?!r))', base: 'kg', meat: 1, stock: 1 },
   { id: 'lammkalb', cat: 'Fleisch', name: 'Lamm / Kalb / Ente', kw: '\\blamm|\\bkalb(?!s?leber)|\\benten?(?![a-zäöü])|\\benten(?=brust|keule)|\\bgans\\b|\\bgänse|hirsch|\\bwild(?:fleisch|gulasch|braten)', base: 'kg', meat: 1, stock: 1 },

@@ -1,4 +1,4 @@
-// Zusatzfunktionen: Darstellung hell/dunkel, Artikel direkt in der Liste ergänzen (+), Artikel halten und in einen anderen Laden ziehen, Kurzeinkauf.
+// Zusatzfunktionen: Darstellung hell/dunkel, Artikel direkt in der Liste ergänzen (+), Artikel halten und in einen anderen Laden ziehen, Schnelleinkauf.
 // Wird vor app.js geladen und nutzt dessen Funktionen erst beim Aufruf.
 
 /* ---------- Darstellung: automatisch (wie das Handy), hell oder dunkel ---------- */
@@ -20,16 +20,23 @@ function rowInfo(it) {
 /* ---------- Plus: Eingabefenster zum Ergänzen (Tippen oder Einsprechen) ---------- */
 function iaOpen() { // Plus: Eingabefenster auf oder zu
   const d = $('#dock'); if (!d) return; if (d.classList.contains('open')) return dockClose();
-  d.classList.add('open'); const f = $('#navfab'); if (f) f.classList.add('open'); const x = $('#ni'); if (x) x.focus();
+  d.classList.add('open'); const f = $('#navfab'); if (f) f.classList.add('open'); dockPos(); const x = $('#ni'); if (x) { try { x.focus({ preventScroll: true }); } catch (e) { x.focus(); } } setTimeout(dockPos, 120); setTimeout(dockPos, 400);
 }
 let TT_T = 0;
 function miniToast(t) { const el = $('#tt'); if (!el) return; el.textContent = t; el.classList.add('show'); clearTimeout(TT_T); TT_T = setTimeout(() => el.classList.remove('show'), 4500); }
-function dockClose() { const d = $('#dock'); if (d) d.classList.remove('open'); UI.recent = []; ['heard', 'recent'].forEach(i => { const x = $('#' + i); if (x) { x.hidden = true; x.innerHTML = ''; } }); const f = $('#navfab'); if (f) f.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
+function dockClose() { const d = $('#dock'); if (d) { d.classList.remove('open'); d.style.bottom = ''; d.classList.remove('kb'); } UI.recent = []; ['heard', 'recent'].forEach(i => { const x = $('#' + i); if (x) { x.hidden = true; x.innerHTML = ''; } }); const f = $('#navfab'); if (f) f.classList.remove('open'); if (typeof hideSug === 'function') hideSug(); if (typeof MIC !== 'undefined' && MIC) mic(); }
+// Fenster sitzt fest direkt über der Tastatur (Seite dahinter bewegt sich nicht)
+function dockPos() {
+  const d = $('#dock'); if (!d) return; const v = window.visualViewport; let kb = 0;
+  if (v && d.classList.contains('open')) kb = Math.max(0, innerHeight - (v.height + v.offsetTop));
+  d.style.bottom = kb > 100 ? (kb + 10) + 'px' : ''; d.classList.toggle('kb', kb > 100);
+}
+if (window.visualViewport) { visualViewport.addEventListener('resize', dockPos); visualViewport.addEventListener('scroll', dockPos); }
 const iaRow = () => '';
 const plusBtn = () => '<div class="fabrow"><button class="plus2" onclick="iaOpen()" aria-label="Artikel hinzufügen" title="Artikel hinzufügen">+</button></div>';
 function planKeys(all) { const pl = planRoute(all), m = {}; pl.stops.forEach(s => s.items.forEach(x => { m[x.it.id] = s.store.id; })); pl.favs.forEach(x => { m[x.it.id] = 'fav'; }); return m; } // in welchem Laden steht der Artikel (wie in der Route)
 function listHead(title, sub) {
-  const short = shortOn() ? '' : (S.list.filter(i => !i.done).length >= 2 ? '<button class="klnk" onclick="shortOpen()" aria-label="Kurzeinkauf starten" title="Kurzeinkauf: nur einen Teil der Liste zeigen">⚡ Kurzeinkauf</button>' : '');
+  const short = shortOn() ? '' : (S.list.filter(i => !i.done).length >= 2 ? '<button class="klnk" onclick="shortOpen()" aria-label="Schnelleinkauf starten" title="Schnelleinkauf: nur einen Teil der Liste zeigen">⚡ Schnelleinkauf</button>' : '');
   return `<div class="lhead"><b>${title}</b><span class="lact">${short}</span><span class="sub">${sub}</span></div>`;
 }
 
@@ -128,7 +135,7 @@ document.addEventListener('mousemove', dragMove);
 document.addEventListener('mouseup', dragEnd);
 document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.crow')) e.preventDefault(); });
 
-/* ---------- Kurzeinkauf: eine Kurzliste neben der Hauptliste, hin- und herschaltbar ---------- */
+/* ---------- Schnelleinkauf: eine Kurzliste neben der Hauptliste, hin- und herschaltbar ---------- */
 // S.short = { on: Kurzliste gibt es, view: 'short' | 'all', later: Artikel, die NICHT in der Kurzliste sind, known: bekannte Artikel }
 const shortOn = () => !!(S.short && S.short.on);
 const hiddenShort = it => shortOn() && S.short.view !== 'all' && S.short.later.includes(it.id); // in der Kurzliste-Ansicht ausgeblendet
@@ -150,7 +157,7 @@ function shortSheet() {
   const old = document.querySelector('#sheetbox .sbox'), sc = old ? old.scrollTop : 0;
   const pk = planKeys(true), rows = S.list.filter(i => !i.done).map(i => ({ ...rowInfo(i), key: pk[i.id] || '_none' })), sel = UI.shortSel || new Set();
   const keys = [...new Set(rows.map(r => r.key))].filter(k => k !== '_none');
-  $('#sheetbox').innerHTML = `<div class="row sp"><h3>⚡ Kurzeinkauf</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
+  $('#sheetbox').innerHTML = `<div class="row sp"><h3>⚡ Schnelleinkauf</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
     <div class="mute small">Was brauchst du jetzt? Der Rest wartet in der Hauptliste, bis du fertig bist.</div>
     <div class="chips" style="margin:8px 0">${keys.map(k => `<button class="chip" onclick="shortStore('${k}')">Alles bei ${esc(STORE(k).short)} (${rows.filter(r => r.key === k).length})</button>`).join('')}<button class="chip" onclick="UI.shortSel=new Set(S.list.filter(i=>!i.done).map(i=>i.id));shortSheet()">Alle</button><button class="chip" onclick="UI.shortSel=new Set();shortSheet()">Keine</button></div>
     <div class="sbox" style="max-height:40vh;overflow:auto">${rows.map(r => `<label class="crow" style="cursor:pointer"><input type="checkbox" ${sel.has(r.it.id) ? 'checked' : ''} onchange="shortTog('${r.it.id}')" style="width:22px;height:22px;flex:none"><span class="em" aria-hidden="true">${iconFor(r.p, r.it.name)}</span><span class="nm">${esc(r.it.name)}</span><span class="mute small">${r.key === '_none' ? '' : esc(STORE(r.key).short)}</span></label>`).join('')}</div>
@@ -162,10 +169,10 @@ function shortStore(k) { const s = UI.shortSel = UI.shortSel || new Set(); const
 function shortStart() {
   const sel = UI.shortSel || new Set(); if (!sel.size) return feedbackText('Wähle zuerst aus, was du jetzt brauchst.', true);
   S.short = { on: true, view: 'short', later: S.list.filter(i => !i.done && !sel.has(i.id)).map(i => i.id), known: S.list.map(i => i.id) }; save(); closeSheet(); render();
-  toast('⚡ Kurzeinkauf: ' + sel.size + ' Artikel. Der Rest wartet in der Hauptliste.');
+  toast('⚡ Schnelleinkauf: ' + sel.size + ' Artikel. Der Rest wartet in der Hauptliste.');
 }
 function shortEnd() { S.short = { on: false, view: 'short', later: [], known: [] }; save(); render(); toast('Kurzliste gelöscht. Alles steht in der Hauptliste.'); }
-function shortCheckEnd() { // alles Gewählte im Wagen oder gelöscht: Kurzeinkauf ist fertig
+function shortCheckEnd() { // alles Gewählte im Wagen oder gelöscht: Schnelleinkauf ist fertig
   if (shortOn() && !S.list.some(i => !i.done && !S.short.later.includes(i.id))) { S.short = { on: false, view: 'short', later: [], known: [] }; toast('⚡ Kurzliste erledigt. Alles steht wieder in der Hauptliste.'); } // erst wenn alles aus der Kurzliste erledigt ist
 }
 
