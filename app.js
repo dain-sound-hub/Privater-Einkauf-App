@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 70, t: '09.10. 14:46' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 72, t: '09.10. 14:53' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -330,11 +330,11 @@ const aisleCmp = (a, b) => { const pa = a.it.pos, pb = b.it.pos; if (pa != null 
 function cRow(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, open = UI.open.has(id), heavy = c.heavy !== undefined ? c.heavy : itemHeavy(it, p), route = c.ctx === 'route';
   const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>` : '';
-  return `${askStrip(id, it)}<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
+  return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${askOpen(id, it) ? ' asking' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
     <button class="rm" onclick="event.stopPropagation();askDel('${id}')" aria-label="Entfernen">✕</button><span class="chev" aria-hidden="true">▾</span>
     ${b && b.img ? thumb(b.img, iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
     <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.store ? ' <span class="mv" title="Von dir in diesen Laden verschoben">📍</span>' : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${c.rec ? ` <span class="rec">Empfehlung: ${esc(c.rec)}</span>` : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
-    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span>${it.done ? '' : `<button class="star${it.fav ? ' on' : ''}" onclick="event.stopPropagation();toggleFav('${id}')" aria-label="${it.fav ? 'Stern entfernen' : 'Im Blick behalten, in mehreren Läden schauen'}" title="Im Blick behalten">${it.fav ? '★' : '☆'}</button>`}<button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button></div>${open ? cDetail(c) : ''}`;
+    <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span>${it.done ? '' : `<button class="star${it.fav ? ' on' : ''}" onclick="event.stopPropagation();toggleFav('${id}')" aria-label="${it.fav ? 'Stern entfernen' : 'Im Blick behalten, in mehreren Läden schauen'}" title="Im Blick behalten">${it.fav ? '★' : '☆'}</button>`}<button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button>${askOv(id, it)}</div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);

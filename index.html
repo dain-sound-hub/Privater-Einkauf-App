@@ -309,6 +309,14 @@ header{min-height:116px;display:flex;flex-direction:column;background-position:0
 .askit.on{border-color:var(--acc);background:var(--acc2)}
 .askit .askn{font-family:var(--hand);font-size:21px;text-transform:uppercase;letter-spacing:.3px;line-height:1.1}
 .askit .chk{flex:none;pointer-events:none}
+/* Schon gekauft?: Auflage auf der rechten Seite, der Eintrag bleibt dunkler sichtbar */
+.crow.asking{pointer-events:none;background:color-mix(in srgb,var(--ink) 9%,transparent);border-radius:12px}
+.crow.asking>*:not(.askov){opacity:.5}
+.crow .askov{pointer-events:auto;position:absolute;right:0;top:0;bottom:0;width:168px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px;padding:2px 6px 2px 18px;background:linear-gradient(90deg,transparent,var(--card) 22%);border-radius:0 12px 12px 0;z-index:2;cursor:default}
+.crow .askov small{font-size:11px;font-weight:800;color:var(--warn);white-space:nowrap}
+.crow .askov .askbtns{display:flex;gap:5px}
+.crow .askov .btn.sm{min-height:30px;min-width:0;padding:3px 7px;font-size:12px;border-radius:10px;white-space:nowrap;line-height:1.1;box-shadow:0 2px 0 var(--line)}
+.crow .askov .btn.sm.pri{box-shadow:0 2px 0 var(--acc-d)}
 </style>
 </head>
 <body>

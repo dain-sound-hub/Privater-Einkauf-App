@@ -398,9 +398,10 @@ function askBoughtCard() { // prüft im Hintergrund und zeigt beim Betreten von 
   if (S.ask.length) { const sh = askShown(); if (S.ask.some(x => !sh.has(x.id))) setTimeout(askPopup, 350); } // Fenster nur für Fragen, die du noch nie im Fenster gesehen hast
   return '';
 }
-function askStrip(id, it) { // Frage direkt über dem Produkt in Liste und Route, bis sie beantwortet ist
+const askOpen = (id, it) => !it.done && (S.ask || []).some(x => x.id === id); // wartet dieser Eintrag auf eine Antwort?
+function askOv(id, it) { // Auflage auf der rechten Seite des Eintrags: „Schon gekauft?“ mit zwei Knöpfen. Der Rest des Eintrags bleibt sichtbar (abgedunkelt).
   const a = (S.ask || []).find(x => x.id === id); if (!a || it.done) return '';
-  return `<div class="askstrip"><span>🧾 Auf dem Bon: <b>${esc(a.bon)}</b>. Schon gekauft?</span><span class="row" style="gap:6px;flex:none"><button class="btn sm pri" onclick="event.stopPropagation();askBought('${id}',true)">✓ Gekauft</button><button class="btn sm" onclick="event.stopPropagation();askBought('${id}',false)">Bleibt</button></span></div>`;
+  return `<div class="askov" title="Auf dem Bon: ${esc(a.bon)}"><small>🧾 Schon gekauft?</small><span class="askbtns"><button class="btn sm pri" onclick="event.stopPropagation();askBought('${id}',true)">✓ Gekauft</button><button class="btn sm" onclick="event.stopPropagation();askBought('${id}',false)">Bleibt</button></span></div>`;
 }
 function askSheetHtml() {
   UI.askOff = UI.askOff || new Set();

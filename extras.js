@@ -45,7 +45,7 @@ const DRAG = { id: null, on: false, timer: 0, x: 0, y: 0, cx: 0, cy: 0, ox: 0, o
 const dragPt = e => (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
 function dragStart(e) {
   if (DRAG.on || (e.type === 'mousedown' && e.button !== 0)) return;
-  const row = e.target.closest && e.target.closest('.crow[data-id]');
+  const row = e.target.closest && e.target.closest('.crow[data-id]:not(.asking)'); // Einträge mit offener Frage lassen sich nicht ziehen
   if (!row || row.classList.contains('done') || e.target.closest('button,a,input,label,[role=button]')) return;
   const pt = dragPt(e), r = row.getBoundingClientRect();
   Object.assign(DRAG, { trusted: e.isTrusted, id: row.dataset.id, x: pt.clientX, y: pt.clientY, cx: pt.clientX, cy: pt.clientY, ox: pt.clientX - r.left, oy: pt.clientY - r.top });
