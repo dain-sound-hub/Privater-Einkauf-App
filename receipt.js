@@ -21,6 +21,15 @@ function detectDate(lines) {
   }
   return null;
 }
+function detectTime(lines) { // Uhrzeit aus der Zeile mit dem Datum („08.10.26 19:21“)
+  for (let i = 0; i < lines.length; i++) {
+    if (!/\d{1,2}\.\s?\d{1,2}\.\s?(?:\d{4}|\d{2})\b/.test(lines[i]) || /uhr\s*-/i.test(lines[i])) continue;
+    const m = (lines[i] + ' ' + (lines[i + 1] || '')).match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/); if (m) return m[1].padStart(2, '0') + ':' + m[2];
+  }
+  return null;
+}
+const bonTs = (date, time) => new Date(date + 'T' + (/^\d{1,2}:\d{2}$/.test(time || '') ? String(time).padStart(5, '0') : '23:59') + ':59').getTime(); // Zeitpunkt des Einkaufs (ohne Uhrzeit: Ende des Tages)
+const addedAfter = (l, ts) => !!(l.t && l.t > ts); // Eintrag wurde erst nach dem Einkauf eingetragen
 function cleanBonName(s) {
   let n = String(s).replace(/^\d{5,}\s+/, '').replace(/\s+/g, ' ').trim();
   if (n && n === n.toUpperCase()) n = n.toLowerCase().replace(/(^|[\s\-/])([a-zäöüß])/g, (_, a, b) => a + b.toUpperCase());
@@ -43,7 +52,7 @@ function classifyBon(name, price) {
 const cleanTranscript = s => String(s || '').replace(/\r/g, '').replace(/```[a-z]*/gi, '').replace(/\*\*|__/g, '').replace(/\|/g, ' ').replace(/^[ \t]*[-•]\s+/gm, '');
 function parseReceipt(text) {
   const lines = cleanTranscript(text).split('\n').map(s => s.replace(/[ \t]+/g, ' ').trim().slice(0, 160).replace(/(?:^|(?<=\s))(?:[A-Za-zÄÖÜäöü] ){2,}[A-Za-zÄÖÜäöü](?=\s|$)/g, m => m.replace(/ /g, ''))).filter(Boolean).slice(0, 400);
-  const out = { store: detectStore(lines.slice(0, 14).join('\n')) || detectStore(lines.join('\n')), date: detectDate(lines), total: null, count: null, taxMap: {}, items: [], skipped: [] };
+  const out = { store: detectStore(lines.slice(0, 14).join('\n')) || detectStore(lines.join('\n')), date: detectDate(lines), time: detectTime(lines), total: null, count: null, taxMap: {}, items: [], skipped: [] };
   let pending = null, last = null;
   const push = (name, qty, price, unit, tax) => { const it = { raw: name, name: cleanBonName(name), qty, price, unit: unit || null, tax: tax && /[A-Za-z]/.test(tax) ? tax.toUpperCase() : null, kind: classifyBon(name, price), include: true, pid: null, how: '' }; it.pack = packOf(it.name); out.items.push(it); last = it; pending = null; };
   for (const L of lines) {
@@ -278,7 +287,7 @@ function bonCommit(b, items, store, date, qid, opt) {
   const partial = bonComplete(b) === false || !!opt.lowRead;
   const oldTip = new Set(savingTips().map(t => t.p.id)), before = {};
   items.forEach(i => { if (i.pid) before[i.pid] = stammladen(i.pid); });
-  const rec = { id: uid(), date, store, total: b.total, items: items.map(i => ({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null })), ...(partial ? { partial: true } : {}) };
+  const rec = { id: uid(), date, store, total: b.total, items: items.map(i => ({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null })), ...(partial ? { partial: true } : {}), ...(b.time ? { time: b.time } : {}) };
   S.bons.unshift(rec); S.bons = bonsSorted().slice(0, 60);
   const lines = [], spont = [], favNew = [];
   const seen = new Set();
@@ -295,9 +304,9 @@ function bonCommit(b, items, store, date, qid, opt) {
   TIPS = null;
   const total = items.reduce((s, i) => s + netPrice(i), 0);
   lines.push(`<b>${items.length} Positionen</b> bei <b>${esc(bonStoreName(store))}</b> am ${esc(fmtD(date))}, zusammen ${eur(total)}${partial ? ' (nur teilweise gelesen)' : ''}.`);
-  const cand = []; // noch offene Listen-Artikel, die auf dem Bon waren (und schon vor dem Bon-Datum auf der Liste standen)
-  S.list.filter(l => !l.done).forEach(l => { if (l.t && isoDay(new Date(l.t)) > date) return; const hit = bonMatchList(l, items); if (hit) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: hit.name }); });
-  (opt.pairs || []).forEach(p => { const l = S.list.find(x => !x.done && x.name.toLowerCase() === p.l.toLowerCase() && !(x.t && isoDay(new Date(x.t)) > date) && !cand.some(c => c.id === x.id)); if (l) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: p.b }); }); // Paare, die die KI erkannt hat
+  const bts = bonTs(date, b.time), cand = []; // noch offene Listen-Artikel, die auf dem Bon waren (und schon vor dem Bon-Datum auf der Liste standen)
+  S.list.filter(l => !l.done).forEach(l => { if (addedAfter(l, bts)) return; const hit = bonMatchList(l, items); if (hit) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: hit.name }); });
+  (opt.pairs || []).forEach(p => { const l = S.list.find(x => !x.done && x.name.toLowerCase() === p.l.toLowerCase() && !addedAfter(x, bts) && !cand.some(c => c.id === x.id)); if (l) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: p.b }); }); // Paare, die die KI erkannt hat
   if (spont.length) lines.push(`🛍️ Spontan gekauft (stand nicht auf der Liste): ${spont.slice(0, 8).map(esc).join(', ')}. Was öfter vorkommt, wird automatisch zum Hauptprodukt.`);
   if (neu.length) lines.push(`🆕 Neue Produkte gemerkt: ${neu.slice(0, 6).map(esc).join(', ')}. Beim nächsten Bon erkennt die App sie von selbst.`);
   if (favNew.length) lines.push(`⭐ Neu in deinen Hauptprodukten: ${favNew.map(esc).join(', ')}.`);
@@ -316,7 +325,7 @@ async function bqAutoSave(m) {
   const store = b.store, date = b.date || isoDay(new Date(m.created));
   if (!store) { m.hold = 'Laden nicht erkannt: bitte Laden wählen'; await bqSaveMeta(m); return false; }
   const items = b.items.filter(i => i.kind === 'item' && i.include); if (!items.length) { m.hold = 'keine Artikel erkannt'; await bqSaveMeta(m); return false; }
-  const pairs = await bqAiPair(items, date).catch(() => []);
+  const pairs = await bqAiPair(items, date, b.time).catch(() => []);
   const res = bonCommit(b, items, store, date, m.id, { lowRead: m.lowRead || 0, pairs });
   if (res.cand.length) bonAskAdd(res.cand);
   save();
@@ -338,9 +347,9 @@ function bonMatchList(l, items) { // passt ein Bon-Artikel zu diesem Listen-Eint
   }) || null;
 }
 // Die KI findet Paare, die sich nicht am Namen erkennen lassen (nur Namen, keine Preise)
-async function bqAiPair(items, date) {
+async function bqAiPair(items, date, time) {
   if (!aiKey() || navigator.onLine === false) return [];
-  const open = S.list.filter(l => !l.done && !(l.t && isoDay(new Date(l.t)) > date) && !bonMatchList(l, items)).map(l => l.name).slice(0, 25);
+  const bts = bonTs(date, time), open = S.list.filter(l => !l.done && !addedAfter(l, bts) && !bonMatchList(l, items)).map(l => l.name).slice(0, 25);
   if (!open.length) return [];
   const names = [...new Set(items.map(i => i.newName ? i.name + ' (' + i.newName + ')' : i.name))].slice(0, 40);
   const prompt = `A German shopping list and a supermarket receipt. Which of the open list entries were bought according to the receipt? Only name a pair if you are sure it is the same kind of product (example: "Einweghandschuhe" = "Einweg Nitril 100"). Answer ONLY with a JSON array: [{"l":"<list entry exactly as given>","b":"<receipt name exactly as given>"}]. Use an empty array if there is none.\nList: ${JSON.stringify(open)}\nReceipt: ${JSON.stringify(names)}`;
@@ -351,11 +360,11 @@ const askDoneAdd = ids => { try { const s = askDone(); ids.forEach(i => s.add(i)
 let RECHK = '';
 function bonRecheck() { // schaut in die Bons der letzten 7 Tage: steht davon noch etwas offen auf der Liste?
   const key = S.bons.length + ':' + S.list.map(l => l.id + (l.done ? 'd' : '')).join(','); if (key === RECHK) return; RECHK = key;
-  const done = askDone(), have = new Set((S.ask || []).map(x => x.id)), limit = isoDay(new Date(Date.now() - 7 * 864e5)); let added = false;
+  const done = askDone(), have = new Set((S.ask || []).map(x => x.id)), now = Date.now(); let added = false;
   for (const b of S.bons) {
-    if (b.date < limit) continue;
+    const ts = bonTs(b.date, b.time), age = (now - ts) / 864e5; if (age > 30) continue; // ältere Bons nicht mehr
     const items = b.items.map(i => ({ name: i.n, pid: i.pid }));
-    S.list.filter(l => !l.done && !done.has(l.id) && !have.has(l.id)).forEach(l => { if (l.t && isoDay(new Date(l.t)) > b.date) return; const hit = bonMatchList(l, items); if (hit) { bonAskAdd([{ id: l.id, name: l.name, qty: l.qty, bon: hit.name }]); have.add(l.id); added = true; } });
+    S.list.filter(l => !l.done && !done.has(l.id) && !have.has(l.id)).forEach(l => { if (l.t ? l.t > ts : age > 3) return; /* ohne Eintragszeit nur bei ganz frischen Bons */ const hit = bonMatchList(l, items); if (hit) { bonAskAdd([{ id: l.id, name: l.name, qty: l.qty, bon: hit.name }]); have.add(l.id); added = true; } });
   }
   if (added) save();
 }
