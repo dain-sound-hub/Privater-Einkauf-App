@@ -274,16 +274,39 @@ function bonNewName(i) {
   if (!/\p{L}{3}/u.test(n)) return '';
   return n.charAt(0).toUpperCase() + n.slice(1, 40);
 }
-// Bon verbuchen (von Hand oder automatisch): lernt Produkte, Preise, Stammladen und meldet, was auf der Liste schon gekauft ist
-function bonCommit(b, items, store, date, qid, opt) {
-  opt = opt || {};
+function bonResolveNew(items) { // unbekannte Zeilen: KI-Vorschlag übernehmen oder als neues Produkt anlegen. So kennt die App es beim nächsten Mal von selbst.
   const neu = [];
-  items.forEach(i => { // unbekannte Zeilen: KI-Vorschlag übernehmen oder als neues Produkt anlegen. So kennt die App es beim nächsten Mal von selbst.
+  items.forEach(i => {
     if (i.pid) return;
     if (i.sugPid && PROD(i.sugPid) && i.sugC !== 'low') { i.pid = i.sugPid; i.how = 'ähnlich'; return; }
     const nm = bonNewName(i); if (!nm) return;
     const a = parseAdd(nm); i.pid = a.pid || mkCustom(a.name).id; i.how = 'neu'; if (!a.pid) neu.push(a.name);
   });
+  return neu;
+}
+// Doppelt gescannter Bon: fehlende Artikel im gespeicherten Bon ergänzen und „Schon gekauft?“ trotzdem prüfen (der erste Scan kann Zeilen verpasst haben)
+async function bqDupMerge(m) {
+  if (!m.text || m.merged) return 0;
+  const b = parseReceipt(m.text); if (m.ai) bonApplyAi(b.items, m.ai);
+  const items = b.items.filter(i => i.kind === 'item' && i.include), date = b.date || isoDay(new Date(m.created));
+  const rec = S.bons.find(x => x.store === b.store && x.date === date && b.total != null && x.total != null && Math.abs(x.total - b.total) < 0.005);
+  let add = 0;
+  if (rec) {
+    const have = new Set(rec.items.map(i => bonNorm(i.n))), fresh = items.filter(i => !have.has(bonNorm(i.name))); bonResolveNew(fresh);
+    fresh.forEach(i => { rec.items.push({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null }); if (i.aliasKey && i.pid) S.aliases[i.aliasKey] = i.pid; add++; });
+    if (!rec.time && b.time) rec.time = b.time;
+    if (add) TIPS = null;
+  }
+  const bts = bonTs(date, b.time), cand = [];
+  S.list.filter(l => !l.done && !addedAfter(l, bts)).forEach(l => { const hit = bonMatchList(l, items); if (hit) cand.push({ id: l.id, name: l.name, qty: l.qty, bon: hit.name }); });
+  const done = askDone(); bonAskAdd(cand.filter(c => !done.has(c.id)));
+  m.merged = true; await bqSaveMeta(m); save();
+  return add;
+}
+// Bon verbuchen (von Hand oder automatisch): lernt Produkte, Preise, Stammladen und meldet, was auf der Liste schon gekauft ist
+function bonCommit(b, items, store, date, qid, opt) {
+  opt = opt || {};
+  const neu = bonResolveNew(items);
   const partial = bonComplete(b) === false || !!opt.lowRead;
   const oldTip = new Set(savingTips().map(t => t.p.id)), before = {};
   items.forEach(i => { if (i.pid) before[i.pid] = stammladen(i.pid); });
@@ -320,7 +343,7 @@ async function bqAutoSave(m) {
   if (m.status !== 'gelesen' || !m.text) return false;
   const b = parseReceipt(m.text); if (m.ai) bonApplyAi(b.items, m.ai);
   if (!m.allowDup) { m.warn = ''; bqDupCheck(m, b); } // vor dem Speichern noch einmal: ist das ein Bon, den es schon gibt?
-  if (m.status === 'doppelt') { await bqSaveMeta(m); feedbackText('🔁 Dieser Bon ist doppelt (' + esc(m.dupText || 'schon vorhanden') + '). Er wird nicht mitgerechnet.'); return true; }
+  if (m.status === 'doppelt') { await bqSaveMeta(m); const add = await bqDupMerge(m).catch(() => 0); feedbackText('🔁 Dieser Bon ist doppelt (' + esc(m.dupText || 'schon vorhanden') + '). Er wird nicht mitgerechnet.' + (add ? ' Ich habe ' + add + ' fehlende Artikel im gespeicherten Bon ergänzt.' : '')); return true; }
   if (m.warn) { m.hold = 'evtl. doppelt'; await bqSaveMeta(m); return false; }
   const store = b.store, date = b.date || isoDay(new Date(m.created));
   if (!store) { m.hold = 'Laden nicht erkannt: bitte Laden wählen'; await bqSaveMeta(m); return false; }
@@ -585,7 +608,7 @@ async function bonAblegen() {
 }
 async function bqSweep() { // schon gelesene Bons, die noch warten, werden jetzt automatisch gespeichert
   if (BQ.sweeping) return; BQ.sweeping = true;
-  try { for (const m of BQ.list.filter(x => x.status === 'gelesen' && x.text && !x.hold && !x.allowDup)) { if (!m.aiDone && aiKey() && navigator.onLine !== false) await bqAiMatch(m); await bqAutoSave(m); } } catch (e) { } finally { BQ.sweeping = false; bqChanged(); }
+  try { for (const m of BQ.list.filter(x => x.status === 'doppelt' && x.text && !x.merged)) await bqDupMerge(m); for (const m of BQ.list.filter(x => x.status === 'gelesen' && x.text && !x.hold && !x.allowDup)) { if (!m.aiDone && aiKey() && navigator.onLine !== false) await bqAiMatch(m); await bqAutoSave(m); } } catch (e) { } finally { BQ.sweeping = false; bqChanged(); }
 }
 async function bqRun(force) {
   if (BQ.running || !BQ.ready) return;
@@ -608,7 +631,7 @@ async function bqRun(force) {
           try { const t2 = await aiAsk(fotos, AI_PROMPT + ' Do not stop early: the transcription must include the last lines (SUMME/total, payment and date).', 2500, aiAsk.meta && aiAsk.meta.model), p2 = parseReceipt(t2); if (p2.total != null || p2.items.length > parsed.items.length) { text = t2; parsed = p2; } } catch (e) { /* erstes Ergebnis behalten */ }
         }
         Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '', warn: '', hold: '' }); bqDupCheck(m, parsed);
-        if (m.status === 'doppelt') feedbackText('🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.');
+        if (m.status === 'doppelt') { const add = await bqDupMerge(m).catch(() => 0); feedbackText('🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.' + (add ? ' Ich habe ' + add + ' fehlende Artikel im gespeicherten Bon ergänzt.' : '')); }
       } catch (e) {
         if (e.fatal) { m.status = 'fehler'; m.err = e.message; }
         else { m.status = 'wartet'; m.err = e.message; stop = true; if (/Schlüssel|Guthaben|eingerichtet/.test(e.message)) BQ.keyProblem = e.message; else BQ.cool = Date.now(); }
