@@ -736,7 +736,7 @@ function laterBlock() {
 }
 
 // ---- ⓘ Preisvergleich: alle Läden für ein Produkt, diese und nächste Woche ----
-function closeSheet() { const s = $('#sheet'); if (s) s.hidden = true; }
+function closeSheet() { const s = $('#sheet'); if (s) s.hidden = true; UI.askSheet = false; }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 function compare(pid) {
   const p = PROD(pid); if (!p) return;
