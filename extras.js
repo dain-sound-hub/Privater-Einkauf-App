@@ -254,7 +254,7 @@ function chipInfo(pid) {
       <div class="small"><b>Angebot:</b> ${esc(b.name.slice(0, 60))}${b.desc ? ' · ' + esc(b.desc.slice(0, 80)) : ''}</div>
       <div class="small" style="margin-top:4px"><b>Gültig:</b> ${esc(valid || 'Zeitraum unbekannt')} · ${rest}</div>
       ${b.dubious ? '<div class="small" style="margin-top:4px;color:var(--warn)">⚠ Der Rabatt bezieht sich auf einen Hersteller-Preis. Vermutlich weniger echte Ersparnis.</div>' : ''}${b.bulk ? '<div class="small" style="margin-top:4px">📦 Großpackung. Rechne den Preis pro Stück oder Liter.</div>' : ''}${b.note ? `<div class="small mute" style="margin-top:4px">${esc(b.note)}</div>` : ''}
-      ${dec ? `<div class="small" style="margin-top:8px"><span class="tag ${dec.cls || ''}">${esc(dec.tag)}</span> ${esc(dec.why)}</div>` : ''}`;
+      ${usualBlock(b)}${dec ? `<div class="small" style="margin-top:8px"><span class="tag ${dec.cls || ''}">${esc(dec.tag)}</span> ${esc(dec.why)}</div>` : ''}`;
     const seen = new Set([b.store.id + b.name]), others = i.now.filter(o => { const k = o.store.id + o.name; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3);
     if (others.length) h += `<div class="mute small" style="margin-top:10px">Auch bei:</div><table class="small">${others.map(o => `<tr><td><i class="dot t${o.store.tier}"></i>${esc(o.store.short)}</td><td class="mute">${esc(o.name.slice(0, 26))}</td><td>${eur(o.price)}${o.up ? ` <span class="mute">${eur(o.up.v)}/${unitLbl(o.up.base)}</span>` : ''}</td></tr>`).join('')}</table>`;
     if (i.nextBest) h += `<div class="small nxt" style="margin-top:8px">📅 Nächste Woche: ${eur(i.nextBest.price)} bei ${esc(i.nextBest.store.short)} (ab ${fmtD(i.nextBest.valid[0])})</div>`;

@@ -160,6 +160,60 @@ function tipsBlock() {
   return `<h2>💡 Spartipps aus deinen Käufen</h2><div class="card tight">${tips.map(t => `<div class="item">${thumb(t.best.img, iconFor(t.p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(t.p.name)}</div><div class="small">${esc(tipText(t))}</div></div>${onList(t.p.id) ? '' : `<button class="btn sm pri" onclick="addP('${t.p.id}')">+ Liste</button>`}</div>`).join('')}</div>`;
 }
 
+/* ---------- Dein Standard: was du regelmäßig kaufst (Marke, Laden, Preis) und Vergleich mit Angeboten ---------- */
+function bonBrand(name, p) { // Marke = die Wörter vor dem Produktwort („Meine Metzgerei Hackfleisch“ → „Meine Metzgerei“)
+  if (!p) return '';
+  const toks = String(name).replace(/[^\p{L}\s&-]/gu, ' ').split(/\s+/).filter(Boolean);
+  const hit = s => { try { return rx(p).test(s) || (p.kwBon && new RegExp(p.kwBon, 'i').test(s)); } catch (e) { return false; } };
+  let idx = -1; for (let i = 0; i < toks.length; i++) if (hit(toks[i]) || (toks[i + 1] && hit(toks[i] + ' ' + toks[i + 1]))) { idx = i; break; }
+  if (idx <= 0) return '';
+  const br = toks.slice(0, idx).filter(w => w.length >= 2 && !BRAND_SKIP.has(fold(w)) && !/^(?:bio|frisch\w*|deutsch\w*|vom|von|der|die|das)$/i.test(w));
+  if (!br.length || br.length > 3) return '';
+  const s = br.join(' '); return s === s.toUpperCase() ? s.toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) : s;
+}
+// Standard: mindestens 3 Käufe an verschiedenen Tagen innerhalb von 31 Tagen (gleiche Marke, sonst gleicher Laden). Der Neueste, der das erfüllt, bleibt, bis etwas Neues dazukommt.
+function usualOf(pid) {
+  const log = [];
+  for (const b of S.bons) for (const it of b.items) if (it.pid === pid && it.p > 0) {
+    const q = it.q || 1, pk = it.k && it.a;
+    log.push({ date: b.date, store: b.store, brand: it.b || '', name: it.n, paid: it.p / q, base: pk ? it.k : null, pack: pk ? it.a : null, up: pk ? it.p / (it.a * q) : null });
+  }
+  if (log.length < 3) return null;
+  log.sort((a, b) => b.date.localeCompare(a.date));
+  const key = l => l.brand ? 'b:' + fold(l.brand) : 's:' + l.store, groups = {};
+  log.forEach(l => (groups[key(l)] = groups[key(l)] || []).push(l));
+  let best = null;
+  for (const g0 of Object.values(groups)) {
+    const g = g0.filter((l, i, a) => a.findIndex(x => x.date === l.date) === i); // ein Kauf pro Tag
+    for (let i = 0; i + 2 < g.length; i++) if ((new Date(g[i].date) - new Date(g[i + 2].date)) / 864e5 <= 31) { if (!best || g[i].date > best.last) best = { g, last: g[i].date }; break; }
+  }
+  if (!best) return null;
+  const win = best.g.filter(l => (new Date(best.last) - new Date(l.date)) / 864e5 <= 31), latest = win[0];
+  const ups = win.filter(l => l.up && l.base === latest.base).map(l => l.up).sort((a, b) => a - b), cs = {}; win.forEach(l => cs[l.store] = (cs[l.store] || 0) + 1);
+  return { brand: latest.brand, name: latest.name, store: Object.entries(cs).sort((a, b) => b[1] - a[1])[0][0], base: latest.base, pack: latest.pack, paid: latest.paid, up: ups.length ? ups[Math.floor(ups.length / 2)] : null, n: win.length, last: best.last };
+}
+function usualBlock(o, mini, p0) { // Vergleich eines Angebots mit deinem Standard (o = Angebot) oder nur der Standard (o leer, p0 = Produkt)
+  const p = o ? o.p : p0; if (!p) return ''; const u = usualOf(p.id); if (!u) return '';
+  const obr = o ? bonBrand(o.name, o.p) : '', same = u.brand && obr && fold(u.brand) === fold(obr);
+  let v = '', cls = 'mute';
+  if (o) {
+    let d = null, e = null, note = '';
+    if (o.up && u.up && o.up.base === u.base && u.up > 0) { d = (o.up.v - u.up) / u.up; e = (o.up.v - u.up) * (qtyBase(o) || u.pack || 1); }
+    else if (o.price && u.paid) { d = (o.price - u.paid) / u.paid; e = o.price - u.paid; note = ' (Packungsgröße unklar)'; }
+    if (d != null) {
+      const pct = Math.round(Math.abs(d) * 100), eu = Math.abs(e) >= 0.05 ? eur(Math.abs(e)) : '';
+      if (Math.abs(d) < 0.03) v = 'etwa gleich teuer' + note;
+      else if (d < 0) { v = pct + ' % günstiger' + (eu ? ' (spart ' + eu + ')' : '') + note; cls = 'ok'; }
+      else { v = pct + ' % teurer' + (eu ? ' (' + eu + ' mehr)' : '') + note; cls = 'warn'; }
+    }
+  }
+  let un = u.name.replace(/\s+\d[\d.,]*\s?(?:kg|g|ml|l|er|stk)\b.*/i, '').trim(); // ohne Packungsgröße
+  if (u.brand && fold(un).startsWith(fold(u.brand))) un = un.slice(u.brand.length).trim(); // Marke nicht doppelt
+  const std = (u.brand ? esc(u.brand) + ' ' : '') + esc(un.slice(0, 32)) + ' bei ' + esc(bonStoreName(u.store));
+  if (mini) return v ? `<div class="small usl2 ${cls}">↔ Dein Standard (${std}): <b>${v}</b></div>` : '';
+  return `<div class="usl">🛒 <b>Dein Standard:</b> ${std} · ${u.up ? eur(u.up) + '/' + unitLbl(u.base) : eur(u.paid)} (zuletzt ${eur(u.paid)}${u.pack ? ' für ' + packLabel(u.base, u.pack) : ''}), ${u.n}× in einem Monat gekauft</div>${v ? `<div class="usl2 ${cls}">Dieses Angebot${same ? ' (gleiche Marke)' : obr ? ' (' + esc(obr) + ')' : ''}: <b>${v}</b></div>` : ''}`;
+}
+
 /* ---------- Bildschirm „Bon einlesen" ---------- */
 let BON = { text: '', parsed: null, done: null, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' };
 const BON_SAMPLE = `REWE Markt GmbH
@@ -293,7 +347,7 @@ async function bqDupMerge(m) {
   let add = 0;
   if (rec) {
     const have = new Set(rec.items.map(i => bonNorm(i.n))), fresh = items.filter(i => !have.has(bonNorm(i.name))); bonResolveNew(fresh);
-    fresh.forEach(i => { rec.items.push({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null }); if (i.aliasKey && i.pid) S.aliases[i.aliasKey] = i.pid; add++; });
+    fresh.forEach(i => { rec.items.push({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null, b: bonBrand(i.name, i.pid ? PROD(i.pid) : null) }); if (i.aliasKey && i.pid) S.aliases[i.aliasKey] = i.pid; add++; });
     if (!rec.time && b.time) rec.time = b.time;
     if (add) TIPS = null;
   }
@@ -310,7 +364,7 @@ function bonCommit(b, items, store, date, qid, opt) {
   const partial = bonComplete(b) === false || !!opt.lowRead;
   const oldTip = new Set(savingTips().map(t => t.p.id)), before = {};
   items.forEach(i => { if (i.pid) before[i.pid] = stammladen(i.pid); });
-  const rec = { id: uid(), date, store, total: b.total, items: items.map(i => ({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null })), ...(partial ? { partial: true } : {}), ...(b.time ? { time: b.time } : {}) };
+  const rec = { id: uid(), date, store, total: b.total, items: items.map(i => ({ n: i.name.slice(0, 60), q: i.qty, p: netPrice(i), pid: i.pid || null, k: i.pack ? i.pack.base : null, a: i.pack ? +i.pack.amount.toFixed(3) : null, b: bonBrand(i.name, i.pid ? PROD(i.pid) : null) })), ...(partial ? { partial: true } : {}), ...(b.time ? { time: b.time } : {}) };
   S.bons.unshift(rec); S.bons = bonsSorted().slice(0, 60);
   const lines = [], spont = [], favNew = [];
   const seen = new Set();
