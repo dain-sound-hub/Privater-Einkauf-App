@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 113, t: '10.10. 18:40' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 114, t: '10.10. 19:51' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -454,7 +454,7 @@ function cRow(c) {
   return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${askOpen(id, it) ? ' asking' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
     <button class="rm" onclick="event.stopPropagation();askDel('${id}')" aria-label="Entfernen">✕</button><span class="chev" aria-hidden="true">▾</span>
     ${imgFor(it, b) ? thumb(imgFor(it, b), iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
-    <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.store ? ' <span class="mv" title="Von dir in diesen Laden verschoben">📍</span>' : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${c.rec ? ` <span class="rec">Empfehlung: ${esc(c.rec)}</span>` : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
+    <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.done && onBonOf(it) ? ` <span class="onbon" title="${esc('Bon vom ' + fmtD(onBonOf(it).date) + ' bei ' + bonStoreName(onBonOf(it).store) + ': ' + onBonOf(it).name)}">🧾 auf dem Bon</span>` : ''}${it.store ? ' <span class="mv" title="Von dir in diesen Laden verschoben">📍</span>' : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${c.rec ? ` <span class="rec">Empfehlung: ${esc(c.rec)}</span>` : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
     <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span>${it.done ? '' : `<button class="star${it.fav ? ' on' : ''}" onclick="event.stopPropagation();toggleFav('${id}')" aria-label="${it.fav ? 'Stern entfernen' : 'Im Blick behalten, in mehreren Läden schauen'}" title="Im Blick behalten">${it.fav ? '★' : '☆'}</button>`}<button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button>${askOv(id, it)}</div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
@@ -498,7 +498,7 @@ V.list = () => {
   const head = listHead('🛒 Meine Liste', open.length ? `${open.length} Artikel offen · Reihenfolge wie im Laden` : 'noch leer') + kurz + dragTip;
   const favHtml = favs.length ? `<h2 class="sh" data-store="fav" style="--sc:#e8a317">★ Im Blick <span class="mute small">· du entscheidest, wo</span></h2><div class="card tight favc" data-store="fav" style="--sc:#e8a317">${favs.map(row).join('')}</div>` : '';
   const groupsHtml = favHtml + order.map(k => `<h2 class="sh" data-store="${k}" style="--sc:${storeColor(k)}">${groupHead(k)}</h2><div class="card tight main" data-store="${k}">${groups[k].map(row).join('')}</div>`).join('');
-  const wagen = done.length ? `<h2 class="sh">✓ Erledigt</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Fertig (${done.length})</button><div class="mute small" style="text-align:center;margin-top:4px">Räumt das Erledigte weg. Die App lernt daraus, was du oft kaufst.</div>` : '';
+  const nBon = done.filter(r => onBonOf(r.it)).length, wagen = done.length ? `<h2 class="sh">✓ Erledigt${nBon ? ` <span class="mute small">· ${nBon} von ${done.length} auf dem Bon</span>` : ''}</h2><div class="card tight">${done.map(row).join('')}</div><button class="btn pri" style="width:100%;margin-top:4px" onclick="finish()">✅ Fertig (${done.length})</button><div class="mute small" style="text-align:center;margin-top:4px">Räumt das Erledigte weg. Die App lernt daraus, was du oft kaufst.</div>` : '';
   const live = !SRC.live ? `<div class="banner">Noch keine echten Angebote geladen. Tippe oben auf <b>Angebote suchen</b>.</div>` : '';
   const bon = `<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>`;
   // Liste zuerst. Ist sie leer, kommen Anleitung und Schnell-Hinzufügen gleich darunter.
