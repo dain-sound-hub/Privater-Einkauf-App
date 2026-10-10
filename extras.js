@@ -109,6 +109,9 @@ function dragReset() {
 const dragDone = () => { if (!S.set.noDragTip) { S.set.noDragTip = true; } };
 function moveItem(id, store) { // in einen anderen Laden (nur heute); „auto“ hebt die Verschiebung auf
   const it = byId(id); if (!it) return;
+  if (store === 'fav' && it.fav) return feedbackText(`„${esc(it.name)}“ ist schon ★ Im Blick.`);
+  if (store === 'auto' && !it.store && !it.fav) return feedbackText(`„${esc(it.name)}“ wird schon automatisch einsortiert.`);
+  if (it.store === store && !it.fav) return feedbackText(`„${esc(it.name)}“ kaufst du heute schon bei <b>${esc(STORE(store).short)}</b>.`); // kein Eintrag im Rückgängig, nichts geändert
   UI.undoMove = { prev: [{ id, store: it.store, pos: it.pos, fav: it.fav }] }; UI.open.delete(id);
   if (store === 'fav') { if (it.fav) return; it.fav = true; delete it.store; delete it.pos; } else if (store === 'auto') { delete it.store; delete it.fav; } else if (STORES.some(s => s.id === store)) { it.store = store; delete it.pos; delete it.fav; } else return;
   dragDone(); save(); render();
@@ -185,10 +188,11 @@ function askDel(id) {
 /* ---------- Löschen mit Rückgängig ---------- */
 function delUndo(id) {
   const i = S.list.findIndex(x => x.id === id); if (i < 0) return;
-  const it = S.list[i]; UI.undo = { it, i }; S.list.splice(i, 1); shortCheckEnd(); save(); render();
+  const it = S.list[i]; pushUndo([{ it, i }]); S.list.splice(i, 1); shortCheckEnd(); save(); render();
   feedbackText('„' + esc(it.name) + '“ entfernt. <button class="lnk" onclick="undoDel()">Rückgängig</button>');
 }
-function undoDel() { const u = UI.undo; if (!u) return; UI.undo = null; S.list.splice(Math.min(u.i, S.list.length), 0, u.it); save(); render(); feedbackText('✓ Wieder da.'); }
+function pushUndo(entries) { UI.undo = Array.isArray(UI.undo) ? UI.undo : []; UI.undo.push(entries); if (UI.undo.length > 10) UI.undo.shift(); } // mehrere Löschungen hintereinander lassen sich nacheinander zurücknehmen
+function undoDel() { const u = Array.isArray(UI.undo) ? UI.undo.pop() : null; if (!u) return; u.slice().sort((a, b) => a.i - b.i).forEach(x => S.list.splice(Math.min(x.i, S.list.length), 0, x.it)); save(); render(); feedbackText('✓ Wieder da.'); }
 
 /* ---------- Zurück-Taste (Android): erst Fenster zu, dann ein Menü zurück, dann zur Liste, dann beenden ---------- */
 let BACK_T = 0;
@@ -257,7 +261,7 @@ function chipInfo(pid) {
       ${usualBlock(b)}${dec ? `<div class="small" style="margin-top:8px"><span class="tag ${dec.cls || ''}">${esc(dec.tag)}</span> ${esc(dec.why)}</div>` : ''}`;
     const seen = new Set([b.store.id + b.name]), others = i.now.filter(o => { const k = o.store.id + o.name; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3);
     if (others.length) h += `<div class="mute small" style="margin-top:10px">Auch bei:</div><table class="small">${others.map(o => `<tr><td><i class="dot t${o.store.tier}"></i>${esc(o.store.short)}</td><td class="mute">${esc(o.name.slice(0, 26))}</td><td>${eur(o.price)}${o.up ? ` <span class="mute">${eur(o.up.v)}/${unitLbl(o.up.base)}</span>` : ''}</td></tr>`).join('')}</table>`;
-    if (i.nextBest) h += `<div class="small nxt" style="margin-top:8px">📅 Nächste Woche: ${eur(i.nextBest.price)} bei ${esc(i.nextBest.store.short)} (ab ${fmtD(i.nextBest.valid[0])})</div>`;
+    const nh = nextHint(i); if (nh) h += nextLine(nh);
     const tip = tipFor(pid); if (tip) h += `<div class="small nxt">💡 ${esc(tipText(tip))}</div>`;
   }
   h += `<div class="row" style="margin-top:14px;gap:10px"><button class="btn pri" style="flex:1" onclick="closeSheet();toggleP('${pid}')">${on ? '− Von der Liste nehmen' : '+ Auf die Liste'}</button><button class="btn" onclick="closeSheet()">Abbrechen</button></div>`;
@@ -268,6 +272,8 @@ function chipInfo(pid) {
 (function () {
   function setup() {
     const el = document.getElementById('ni'); if (!el || el._ok) return; el._ok = true;
+    try { const probe = document.createElement('div'); probe.contentEditable = 'plaintext-only'; if (probe.contentEditable !== 'plaintext-only') el.setAttribute('contenteditable', 'true'); } catch (e) { el.setAttribute('contenteditable', 'true'); } // Firefox vor 136 kennt „plaintext-only“ nicht: dann normales Feld, Einfügen und Ablegen bleiben reiner Text
+    el.addEventListener('drop', e => e.preventDefault());
     const caretEnd = () => { try { const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch (e) { } };
     Object.defineProperty(el, 'value', { get() { return el.textContent.replace(/\u00a0/g, ' '); }, set(v) { el.textContent = v == null ? '' : String(v); if (document.activeElement === el) caretEnd(); } });
     Object.defineProperty(el, 'placeholder', { get() { return el.dataset.placeholder || ''; }, set(v) { el.dataset.placeholder = v; } });
@@ -277,3 +283,88 @@ function chipInfo(pid) {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup); else setup();
 })();
+
+/* ---------- Speicherschutz und Wiederherstellung (Mehr) ---------- */
+setTimeout(() => { // Browser bitten, die Daten nicht von selbst zu löschen, und das Ergebnis merken
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(() => navigator.storage.persisted()).then(p => { UI.persist = p; if (typeof cur !== 'undefined' && cur === 'more') render(); }).catch(() => { }); } catch (e) { }
+}, 800);
+function storageCard() {
+  const p = UI.persist; let old = null, bad = false;
+  try { const r = localStorage.getItem(LS + '.vorImport'); if (r) { const o = JSON.parse(r); old = { t: o && o.t }; } bad = !!localStorage.getItem(LS + '.defekt'); } catch (e) { }
+  const when = old && old.t ? ' (vom ' + new Date(old.t).toLocaleDateString('de-DE') + ')' : '';
+  return `<div class="card small">${p === true ? '🔒 <b>Speicher geschützt.</b> Android löscht die Daten dieser App nicht von selbst.' : p === false ? '⚠ <b>Speicher nicht geschützt.</b> Bei Platzmangel kann Android Daten dieser App löschen. Mach regelmäßig eine Sicherung (⬆ Exportieren).' : '🔒 Speicherschutz wird geprüft …'}${old ? `<div style="margin-top:6px"><button class="btn sm" onclick="restorePreImport()">↩ Stand vor dem Import wiederherstellen${when}</button></div>` : ''}${bad ? '<div style="margin-top:6px"><button class="btn sm" onclick="exportDefekt()">⬆ Gerettete Daten (beschädigter Stand) exportieren</button></div>' : ''}</div>`;
+}
+function exportDefekt() { // die beschädigte Rohdatei als Datei sichern, damit nichts verloren geht
+  let raw = null; try { raw = localStorage.getItem(LS + '.defekt'); } catch (e) { } if (!raw) return;
+  const f = new File([raw], 'einkauf-gerettet-' + isoDay(TODAY) + '.txt', { type: 'text/plain' }), a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function restorePreImport() {
+  let o = null; try { o = JSON.parse(localStorage.getItem(LS + '.vorImport')); } catch (e) { }
+  const d = o && (o.daten || (Array.isArray(o.list) ? o : null)); if (!d) return alert('Die Kopie konnte nicht gelesen werden.');
+  if (!confirm('Den Stand vor dem Import wiederherstellen? Der jetzige Stand wird ersetzt.')) return;
+  try { S = sanitize(d); S.custom.forEach(regCustom); repairRefs(); CACHE = null; UI.undo = null; UI.undoMove = null; if (save()) { localStorage.removeItem(LS + '.vorImport'); render(); toast('✓ Stand wiederhergestellt'); } } catch (e) { alert('Die Kopie konnte nicht gelesen werden.'); }
+}
+
+/* ---------- Liste teilen (als Text, z. B. WhatsApp) ---------- */
+function listText() {
+  const plan = planRoute(true), line = it => { const q = String(it.qty || '').trim(); return '- ' + (q ? (/^\d+(?:[.,]\d+)?$/.test(q) ? q + 'x ' : q + ' ') : '') + it.name; };
+  const out = [], n = plan.stops.reduce((a, s) => a + s.items.length, 0) + plan.favs.length; if (!n) return '';
+  plan.stops.forEach(s => { out.push('', s.store.short + ':'); s.items.forEach(x => out.push(line(x.it))); });
+  if (plan.favs.length) { out.push('', 'Im Blick:'); plan.favs.forEach(x => out.push(line(x.it))); }
+  return 'Einkaufsliste ' + new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + '\n' + out.join('\n');
+}
+const shareBtn = () => '<div style="text-align:center;margin:0 0 10px"><button class="btn sm" onclick="shareList()">📤 Liste teilen</button></div>';
+async function shareList() {
+  const t = listText(); if (!t) return feedbackText('Die Liste ist leer.', true);
+  if (navigator.share) { try { await navigator.share({ title: 'Einkaufsliste', text: t }); return; } catch (e) { if (e && e.name === 'AbortError') return; } } // abgebrochen = nichts weiter
+  try { await navigator.clipboard.writeText(t); return feedbackText('✓ Liste kopiert. Jetzt in WhatsApp oder eine Nachricht einfügen.'); } catch (e) { }
+  $('#sheetbox').innerHTML = `<div class="row sp"><h3>📤 Liste teilen</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div><div class="mute small" style="margin:4px 0 8px">Text markieren, kopieren und in WhatsApp oder eine Nachricht einfügen.</div><textarea readonly style="width:100%;min-height:180px" onfocus="this.select()" aria-label="Einkaufsliste als Text">${esc(t)}</textarea>`;
+  $('#sheet').hidden = false;
+}
+
+/* ---------- Wiederkehrend: „jeden Samstag Milch“ ---------- */
+// S.repeat = [{ id, name, qty, pid, every (1, 2 oder 4 Wochen), dow (0 = Sonntag … 6 = Samstag), anchor (erster Termin), last (zuletzt eingetragener Termin) }]
+const REP_DAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'], REP_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const repKey = s => { const f = fold(String(s).slice(0, 60)); return f.length > 4 ? f.replace(/(?:en|n|e|s)$/, '') : f; }; // Möhre = Möhren, auch bei sehr langen Namen
+const repLabel = r => (r.every === 1 ? 'jeden ' + REP_DAYS[r.dow] : 'alle ' + r.every + ' Wochen, ' + REP_DAYS[r.dow]);
+function repeatCheck() { // beim Öffnen der App: ist ein Termin fällig? Dann steht der Artikel auf der Liste (höchstens einmal pro Termin, nie doppelt)
+  const rules = S.repeat || []; if (!rules.length) return;
+  const today = new Date(); today.setHours(12, 0, 0, 0); const added = []; let ch = false;
+  for (const r of rules) {
+    const a = new Date(r.anchor + 'T12:00:00'), per = 7 * r.every, k = Math.floor(Math.round((today - a) / 864e5) / per);
+    if (k < 0) continue;
+    const dueIso = isoDay(new Date(a.getTime() + k * per * 864e5)); if (r.last && r.last >= dueIso) continue;
+    r.last = dueIso; ch = true;
+    if (S.list.some(i => !i.done && repKey(i.name) === repKey(r.name))) continue; // steht schon auf der Liste
+    const al = parseAdd(r.name), pid = r.pid && PROD(r.pid) ? r.pid : (al.pid || (al.name.length >= 3 ? mkCustom(al.name).id : null));
+    S.list.push({ id: uid(), pid, name: r.name, qty: r.qty || '', urgent: false, done: false, t: Date.now() }); added.push(r.name);
+  }
+  if (ch) { CACHE = null; save(); }
+  if (added.length) setTimeout(() => feedbackText('🔁 Wiederkehrend auf die Liste gesetzt: <b>' + added.map(esc).join(', ') + '</b>'), 600);
+}
+function repOpen(id) {
+  const it = byId(id); if (!it) return; const ex = (S.repeat || []).find(r => repKey(r.name) === repKey(it.name));
+  UI.rep = { id, every: ex ? ex.every : 1, dow: ex ? ex.dow : 6, has: !!ex }; repSheet();
+}
+function repSheet() {
+  const u = UI.rep, it = u && byId(u.id); if (!it) return;
+  $('#sheetbox').innerHTML = `<div class="row sp"><h3>🔁 Wiederkehrend</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
+    <div class="mute small" style="margin:4px 0 8px;overflow-wrap:anywhere">„${esc(it.name)}“ kommt von selbst auf die Liste, sobald du die App an diesem Tag (oder später) öffnest.</div>
+    <div class="mute">Wie oft?</div><div class="chips">${[[1, 'Jede Woche'], [2, 'Alle 2 Wochen'], [4, 'Alle 4 Wochen']].map(([v, l]) => `<button class="chip ${u.every === v ? 'on' : ''}" onclick="UI.rep.every=${v};repSheet()">${l}</button>`).join('')}</div>
+    <div class="mute" style="margin-top:8px">Welcher Tag?</div><div class="chips">${REP_ORDER.map(d => `<button class="chip ${u.dow === d ? 'on' : ''}" onclick="UI.rep.dow=${d};repSheet()">${REP_DAYS[d].slice(0, 2)}</button>`).join('')}</div>
+    <div class="row" style="margin-top:12px;gap:10px"><button class="btn pri" style="flex:1" onclick="repSave()">Speichern</button>${u.has ? `<button class="btn" onclick="repDel('${((S.repeat || []).find(r => repKey(r.name) === repKey(it.name)) || {}).id}')">Nicht mehr</button>` : ''}</div>`;
+  $('#sheet').hidden = false;
+}
+function repSave() {
+  const u = UI.rep, it = u && byId(u.id); if (!it) { closeSheet(); return feedbackText('Der Artikel steht nicht mehr auf der Liste.', true); } S.repeat = S.repeat || [];
+  const t = new Date(); t.setHours(12, 0, 0, 0); const anchor = new Date(t.getTime() + ((u.dow - t.getDay() + 7) % 7) * 864e5), a = isoDay(anchor);
+  let r = S.repeat.find(x => repKey(x.name) === repKey(it.name));
+  if (!r) { if (S.repeat.length >= 50) return feedbackText('Mehr als 50 wiederkehrende Artikel gehen nicht.', true); r = { id: uid(), name: it.name.slice(0, 60), qty: it.qty || '', pid: it.pid || null }; S.repeat.push(r); }
+  Object.assign(r, { every: u.every, dow: u.dow, anchor: a, last: '', qty: it.qty || '' });
+  closeSheet(); repeatCheck(); save(); render(); feedbackText('🔁 „' + esc(it.name) + '“: ' + repLabel(r));
+}
+function repDel(id) { S.repeat = (S.repeat || []).filter(r => r.id !== id); closeSheet(); save(); render(); feedbackText('Wiederkehrend beendet.'); }
+function repeatBlock() {
+  const rs = S.repeat || [];
+  return `<h2>🔁 Wiederkehrend</h2><div class="card">${rs.length ? rs.map(r => `<div class="row sp" style="padding:4px 0"><div class="grow" style="min-width:0;overflow-wrap:anywhere"><b>${esc(r.name)}</b><div class="mute small">${esc(repLabel(r))}</div></div><button class="btn sm" onclick="repDel('${r.id}')">Entfernen</button></div>`).join('') : '<div class="small">Noch nichts. Tippe bei einem Artikel auf deiner Liste auf „🔁 Wiederkehrend“, zum Beispiel für Milch jeden Samstag.</div>'}</div>`;
+}

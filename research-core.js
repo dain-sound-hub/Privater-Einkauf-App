@@ -1,6 +1,7 @@
 // Angebotssuche (kaufDA). Wird vom lokalen Server UND vom automatischen Aktualisieren (GitHub) benutzt.
 const UA = 'Einkaufsliste-PrivateApp/1.0 (persoenlicher Preisvergleich, 1x taeglich, 2 Sekunden Pause zwischen Abfragen)';
 const RETAILER = [[/netto marken/i, 'netto'], [/^rewe/i, 'rewe'], [/aldi s/i, 'aldi'], [/^dm/i, 'dm'], [/^lidl/i, 'lidl'], [/^metro/i, 'metro'], [/selgros/i, 'selgros'], [/handelshof/i, 'handelshof']]; // Penny bewusst nicht dabei
+const kwRx = p => new RegExp('(?:' + p.kw + ')(?:e|en|n|s|es|er|ern|nen)?(?![a-zäöüß])', 'i'); // Stichwort mit Wortende, wie in der App (kein Treffer mitten im Wort)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const berlinDay = iso => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
 
@@ -24,6 +25,8 @@ function parseUnit(pb) { // z. B. "(3.96 / kg)", "1 kg = 5.95", "EUR 99,5 / 1 l"
   return { v, base };
 }
 function parseAmount(desc) {
+  const nx = /(\d+)\s?[x×]\s?(\d+(?:[.,]\d+)?)[\s-]*(kg|g|ml|l)\b/i.exec(desc || ''); // „6 x 1,5 l“ sind 9 l
+  if (nx) return { amount: +nx[1] * parseFloat(nx[2].replace(',', '.')), unit: nx[3].toLowerCase() };
   const all = [...(desc || '').matchAll(/(\d+(?:[.,]\d+)?)[\s-]?(kg|g|ml|l)\b/gi)];
   if (!all.length) return {};
   const m = all[all.length - 1];
@@ -31,8 +34,8 @@ function parseAmount(desc) {
 }
 function parseCount(desc) { // Waschladungen, Rollen, Stück
   let m;
-  if ((m = desc.match(/(\d+)\s?(?:wl|waschl\w*|anw\w*|wäschen)/i))) return +m[1];
-  if ((m = desc.match(/(\d+)\s*x\s*\d+\s*blatt/i))) return +m[1];
+  if ((m = desc.match(/(\d+)[\s-]?(?:wl|waschl\w*|anw\w*|wäschen)/i))) return +m[1];
+  if ((m = desc.match(/(\d+)\s*x\s*\d+[\s-]*blatt/i))) return +m[1];
   if ((m = desc.match(/(\d+)\s*(?:rollen|rolle)\b/i))) return +m[1];
   if ((m = desc.match(/(\d+)\s*(?:stück|st\.|stk|tücher)/i))) return +m[1];
   return null;
@@ -44,7 +47,7 @@ function normalize(it, products, exclude, noise, srcUrl) {
   const text = [name, desc, ...(it.categories || [])].join(' ');
   let pid = null, len = 0;
   const isNoise = noise && new RegExp(noise, 'i').test(text);
-  for (const p of isNoise ? [] : products) { const m = new RegExp(p.kw, 'i').exec(text); if (m && m[0].length > len) { pid = p.id; len = m[0].length; } }
+  for (const p of isNoise ? [] : products) { const m = kwRx(p).exec(text); if (m && m[0].length > len) { pid = p.id; len = m[0].length; } }
   if (exclude && new RegExp(exclude, 'i').test(text)) return null; // Schwein/Wurst/Salami nie
   const pr = it.prices, up = parseUnit(pr.priceByBaseUnit), am = parseAmount(desc);
   const conds = (pr.conditions || []).map(c => c.other).filter(c => c && c.trim());
@@ -82,7 +85,7 @@ function parseAldiTiles(html, srcUrl, products, exclude, noise, opt = {}) { // o
     const isNoise = noise && new RegExp(noise, 'i').test(text);
     if (exclude && new RegExp(exclude, 'i').test(text)) continue;
     let pid = null, len = 0;
-    for (const p of isNoise ? [] : products) { const m = new RegExp(p.kw, 'i').exec(text); if (m && m[0].length > len) { pid = p.id; len = m[0].length; } }
+    for (const p of isNoise ? [] : products) { const m = kwRx(p).exec(text); if (m && m[0].length > len) { pid = p.id; len = m[0].length; } }
     const up = parseUnit(cmp), am = parseAmount(size);
     const img = (/<img[^>]* src="(https:\/\/dm\.emea\.cms\.aldi\.cx[^"]+)"/.exec(tile) || [])[1];
     out.push({

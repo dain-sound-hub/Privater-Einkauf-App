@@ -102,7 +102,7 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mu
 .dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));width:min(560px,calc(100% - 20px));z-index:11;background:color-mix(in srgb,var(--card) 90%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh2),var(--hi);padding:6px}
 .dockrow{display:flex;gap:6px}.dockrow input{flex:1;padding:9px 12px;border-radius:14px;font-size:15px}.dockrow .btn{padding:8px 13px;border-radius:14px;box-shadow:0 3px 0 var(--line)}.dockrow .btn.pri{box-shadow:0 3px 0 var(--acc-d)}
 .fb{font-size:13px;padding:3px 6px 7px;color:var(--ink);line-height:1.3}.fb.warn{color:var(--warn)}.fb[hidden]{display:none}.lnk{border:0;background:none;color:var(--blue);font-weight:700;text-decoration:underline;padding:0 2px;font-size:13px}
-.bdg{position:absolute;top:-4px;right:-10px;background:var(--red);color:#fff;border-radius:999px;font-size:10px;line-height:1;padding:3px 5px;font-weight:800}nav.bottom button span{position:relative}
+.bdg{position:absolute;top:-4px;right:-10px;background:var(--red);color:#fff;border-radius:999px;font-size:11px;line-height:1;padding:3px 5px;font-weight:800}nav.bottom button span{position:relative}
 .item.flash{animation:fl 2.2s ease-out}@keyframes fl{0%,35%{background:var(--acc2);box-shadow:0 0 0 3px var(--glow)}100%{background:transparent;box-shadow:none}}
 .chips.scroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:6px}.chips.scroll::-webkit-scrollbar{display:none}.chips.scroll .chip{flex:none}
 .seg3 button{padding:10px 4px;font-size:13px;min-width:0}.seg3 button small{display:block;font-size:11px;margin:0}
@@ -134,7 +134,7 @@ h2.sh{margin:14px 4px 6px;font-size:13px}
 .card.main{border:2px solid color-mix(in srgb,var(--acc) 40%,var(--line));box-shadow:0 8px 22px var(--glow),var(--hi)}
 .crow{display:flex;align-items:center;gap:8px;min-height:46px;padding:4px 0;border-bottom:1px solid var(--line);cursor:pointer}
 .card .crow:last-of-type{border-bottom:0}
-.crow .chk{width:30px;height:30px;flex:none}
+.crow .chk{width:38px;height:38px;flex:none}
 .crow .em{font-size:20px;width:26px;text-align:center;flex:none}
 .crow .nm{flex:1;min-width:0;padding:0;min-height:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .crow .pr{flex:none;text-align:right;line-height:1.15;font-size:14px}.crow .pr small{display:block;color:var(--mute);font-size:11.5px;font-weight:600}
@@ -145,7 +145,7 @@ h2.sh{margin:14px 4px 6px;font-size:13px}
 .crow.flash{animation:fl 2.2s ease-out}
 .cdet{background:var(--bg);border-radius:14px;padding:11px;margin:2px 0 8px;font-size:13px;box-shadow:inset 0 2px 5px rgba(15,40,28,.08)}.cdet table{width:100%;border-collapse:collapse}.cdet td{padding:3px 4px}.cdet td:last-child{text-align:right}
 .stop .crow:last-of-type{border-bottom:0}
-@media (pointer:coarse){.crow .chk{width:34px;height:34px}.crow .chev{height:40px;width:30px}}
+
 .qa .chips{gap:5px;margin:3px 0 2px}.qa .chip{padding:3px 10px;font-size:13px;min-height:32px;box-shadow:none}.qa .chip:hover{transform:none}.qa .qh{margin:0 2px 1px}.qa .chip.arrow{padding:3px 10px}
 /* ===== Design „Notizzettel & Prospekt“: Liste wie ein Einkaufszettel, Preise und Rabatte wie im Prospekt ===== */
 @font-face{font-family:"PatrickHand";src:url("PatrickHand.ttf") format("truetype");font-display:swap}@font-face{font-family:"Bangers";src:url("Bangers.ttf") format("truetype");font-display:swap}
@@ -183,7 +183,7 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .pct:not(.dub){background:var(--sale);box-shadow:0 3px 8px rgba(214,47,63,.35);transform:rotate(3deg)}
 .stop{border-left:8px solid var(--sc,var(--acc))}
 .stop h3{font-family:var(--comic);font-size:22px;font-weight:400;letter-spacing:1px;text-transform:uppercase}
-.crow .chev{width:22px;height:40px;margin-right:-2px}.crow .chk{margin-left:2px}
+.crow .chev{height:40px}
 /* größere Produktbilder */
 .thumb{width:104px;height:104px;border-radius:20px}.thumb .em{font-size:44px}.thumb img{padding:3px}
 .thumb.md{width:92px;height:92px;border-radius:18px}.thumb.md .em{font-size:40px}
@@ -211,8 +211,8 @@ h2.sh .tag{font-family:system-ui,sans-serif;font-size:11.5px}
 .lhead b{font-size:34px}
 .crow .rm{flex:none;border:0;background:none;color:var(--mute);opacity:.65;font-size:15px;width:26px;height:38px;padding:0;margin-left:-2px}.crow .rm:active{opacity:1;color:var(--sale)}
 .crow{gap:6px}
-.crow{gap:5px}.crow .nm{font-size:19px;letter-spacing:.2px}.crow .chev{width:18px;margin-right:-4px}.crow .chk{width:32px;height:32px}.crow .rm{width:22px;margin-left:-3px}.crow .pr{font-size:13.5px}
-@media (pointer:coarse){.crow .chk{width:32px;height:32px}}
+.crow{gap:5px}.crow .nm{font-size:19px;letter-spacing:.2px}.crow .chev{width:18px;margin-right:-4px}.crow .rm{width:22px;margin-left:-3px}.crow .pr{font-size:13.5px}
+
 .crow .rm{margin-left:0;margin-right:-1px}.crow .chk{margin-left:0}
 /* Eingabefenster (Plus), Kurzliste-Umschalter, Plus-Knopf unter der Liste */
 .dock:not(.open) .dockhead,.dock:not(.open) .dockrow,.dock:not(.open) .sug,.dock:not(.open) .dockhint{display:none!important}
@@ -258,7 +258,7 @@ nav.bottom .navfab.open{transform:translateX(-50%) rotate(45deg);background:line
 .qa .chip{background:color-mix(in srgb,var(--note) 55%,var(--card));color:color-mix(in srgb,var(--note-ink) 80%,var(--card));-webkit-text-stroke:0;box-shadow:0 1px 2px rgba(0,0,0,.12);font-size:16px}
 .qa .chip.on{background:color-mix(in srgb,var(--acc) 70%,var(--card));color:#fff}
 .qa .chip b{opacity:.85}.qa .qh .mute{opacity:.85}.qa .chips{opacity:.93}
-.fabslot{width:56px}nav.bottom #tabs button{font-size:9.8px;letter-spacing:-.2px;padding-left:0;padding-right:0}nav.bottom #tabs button span{font-size:21px}
+.fabslot{width:56px}nav.bottom #tabs button{font-size:10.5px;letter-spacing:-.2px;padding-left:0;padding-right:0}nav.bottom #tabs button span{font-size:21px}
 .plus2{border:0;background:none;color:var(--mute);font-size:36px;line-height:1;font-weight:300;padding:4px 22px 8px;opacity:.8}.plus2:active{opacity:1;color:var(--acc)}.fabrow{margin:6px 0 2px}
 /* kleines graues Plus unter der Liste: halb so groß, etwas dünner, heller */
 .plus2{position:relative;width:44px;height:36px;padding:0;font-size:0;line-height:0;opacity:.64;color:var(--mute)}
@@ -330,6 +330,20 @@ header{min-height:116px;display:flex;flex-direction:column;background-position:0
 .usl{font-size:13px;margin-top:8px;padding:6px 8px;border-radius:10px;background:var(--acc2)}
 .usl2{font-size:13px;margin-top:4px}
 .usl2.ok{color:var(--acc-d)}.usl2.warn{color:var(--warn)}
+/* Dauerhafte Warnung, wenn nicht gespeichert werden kann */
+#savewarn{position:fixed;left:8px;right:8px;top:8px;z-index:70;background:var(--warn2);color:var(--ink);border:2px solid var(--warn);border-radius:14px;padding:10px 12px;font-size:13px;box-shadow:var(--sh2)}
+/* Paket 10: Bedienung am Handy */
+.bonfab{right:auto;left:10px;width:44px;height:44px;font-size:21px;opacity:.78}.crow .star{width:34px;margin:0 4px 0 -2px}.crow .rm{min-width:30px}
+.crow .askov{width:200px}.crow .askov .askbtns{gap:8px}
+.crow .askov .btn.sm{min-height:40px;padding:6px 12px;font-size:13px}
+.crow .askov .btn.sm:not(.pri){background:var(--card);color:var(--ink);border:2px solid var(--mute);box-shadow:0 2px 0 var(--mute)}
+
+
+.cdet input[type=checkbox]{width:24px!important;height:24px!important;flex:none;margin:0}.cdet label.mute{display:flex;align-items:center;gap:8px;min-height:38px}
+.offer .ohead .grow>.row.nowrap{flex-wrap:wrap;gap:6px}.offer .ohead .grow>.row.nowrap h3{flex:1 1 8em;min-width:8em;overflow-wrap:break-word}
+.fb{cursor:pointer}
+.prolinks a.btn{flex:1 1 calc(50% - 8px);text-align:center;min-height:46px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;white-space:nowrap}
+#heard{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -338,7 +352,7 @@ header{min-height:116px;display:flex;flex-direction:column;background-position:0
   <div class="meta"><span id="rstat" class="rstat"></span><span id="ver" class="ver" title="Version der App und Zeit der letzten Änderung"></span></div>
 </div></header>
 <div class="wrap"><div id="bqs"></div><main id="view"></main></div>
-<div class="dock" id="dock"><div class="dockhead"><b>✍️ Neuer Artikel</b><button class="ico" onclick="dockClose()" aria-label="Schließen">✕</button></div><div id="heard" class="heard" hidden></div><div id="recent" class="recentl" hidden></div><div id="sug" class="sug" hidden></div>
+<div class="dock" id="dock"><div class="dockhead"><b>✍️ Neuer Artikel</b><button class="ico" onclick="dockClose()" aria-label="Schließen">✕</button></div><div id="heard" class="heard" role="status" aria-live="polite" hidden></div><div id="recent" class="recentl" role="status" aria-live="polite" hidden></div><div id="sug" class="sug" hidden></div>
   <div id="fb" class="fb" role="status" aria-live="polite" hidden></div>
   <div class="dockrow"><div id="ni" class="ni" contenteditable="plaintext-only" role="textbox" aria-label="Neuer Artikel" data-placeholder="Was brauchst du? z. B. 2 Milch" spellcheck="true" autocapitalize="sentences" enterkeyhint="done" inputmode="text" oninput="this.classList.remove('sent');suggest()" onkeydown="if(event.key==='Enter'){event.preventDefault();addItem();}else if(event.key==='Escape')hideSug()"></div><button class="btn" id="micb" onclick="mic()" title="Einsprechen" aria-label="Einsprechen">🎤</button><button class="btn pri" onclick="addItem()" title="Hinzufügen" aria-label="Hinzufügen">+</button></div><div class="dockhint">Mehrere mit Komma oder „Punkt“ beim Sprechen.</div></div>
 <div class="sheet" id="sheet" hidden onclick="if(event.target===this&&Date.now()-(window.SHEET_T||0)>700)closeSheet()"><div class="sheetbox" id="sheetbox"></div></div>
@@ -346,7 +360,7 @@ header{min-height:116px;display:flex;flex-direction:column;background-position:0
 <button class="bonfab" id="bonfab" onclick="go('bon')" aria-label="Kassenbon einscannen" title="Kassenbon einscannen" hidden>🧾</button>
 <nav class="bottom"><div id="tabs"></div><button class="navfab" id="navfab" onclick="iaOpen()" aria-label="Artikel eintragen">+</button></nav>
 <script src="data.js"></script>
-<script src="offers.js"></script>
+
 <script src="route.js"></script>
 <script src="receipt.js"></script>
 <script src="extras.js"></script>

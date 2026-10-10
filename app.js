@@ -1,12 +1,12 @@
 'use strict';
-const APP_BUILD = { v: 80, t: '09.10. 15:33' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 113, t: '10.10. 18:40' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 const APP_VERSION = '1.0 · 06.10.2026';
 /* ================= State ================= */
 const LS = 'einkauf.v2';
-const DEF = { hideHelp: false, list: [], later: [], prefs: {}, adds: {}, addDay: {}, rec: {}, short: { on: false, view: 'short', later: [], known: [] }, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
+const DEF = { hideHelp: false, list: [], repeat: [], later: [], prefs: {}, adds: {}, addDay: {}, rec: {}, short: { on: false, view: 'short', later: [], known: [] }, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
 let S;
 // Gespeicherten Stand prüfen und reparieren: eine beschädigte Sicherung oder ein Fehler darf die App nie lahmlegen
 function sanitize(x) {
@@ -14,35 +14,58 @@ function sanitize(x) {
   const arr = v => Array.isArray(v) ? v : [];
   const idOk = v => typeof v === 'string' && /^[\w-]{1,40}$/.test(v);
   const num = (v, d) => Number.isFinite(+v) && +v > 0 ? +v : d;
-  const dateOk = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const dateOk = v => { if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false; const d = new Date(v + 'T12:00:00'); return !isNaN(d) && d.getFullYear() >= 2000 && d.getFullYear() <= 2100 && d.toISOString().slice(0, 10) === v; }; // echter Kalendertag (kein 31.02.)
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  const str = (v, n) => (typeof v === 'string' || typeof v === 'number') ? String(v).slice(0, n) : ''; // Objekte und Listen werden nicht zu "[object Object]"
+  const numOr = (v, d) => ((typeof v === 'number') || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(+v) ? +v : d; // null und leer sind keine 0
+  const uniq = a => { const seen = new Set(); return a.map(x => { if (seen.has(x.id)) x = { ...x, id: Math.random().toString(36).slice(2, 10) }; seen.add(x.id); return x; }); }; // doppelte IDs bekommen eine neue
   const set = (o.set && typeof o.set === 'object') ? o.set : {};
   return {
     hideHelp: !!o.hideHelp,
-    list: arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: String(i.name ?? '').slice(0, 80), qty: String(i.qty ?? '').slice(0, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}), ...(i.fav ? { fav: true } : {}), ...(STORES.some(s => s.id === i.store) ? { store: i.store } : {}), ...(Number.isFinite(+i.pos) && i.pos !== null ? { pos: +i.pos } : {}), ...(Number.isFinite(+i.t) && +i.t > 0 ? { t: +i.t } : {}) })).filter(i => i.name.trim()),
-    ask: arr(o.ask).filter(x => x && typeof x === 'object' && idOk(x.id)).slice(0, 30).map(x => ({ id: x.id, name: String(x.name ?? '').slice(0, 80), qty: String(x.qty ?? '').slice(0, 20), bon: String(x.bon ?? '').slice(0, 80) })),
-    bons: arr(o.bons).filter(b => b && typeof b === 'object' && dateOk(b.date) && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: b.date, store: String(b.store).slice(0, 20), total: Number.isFinite(+b.total) ? +b.total : null, items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: Number.isFinite(+i.p) ? +i.p : 0, pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null), b: String(i.b ?? '').slice(0, 30) })), ...(b.partial ? { partial: true } : {}), ...(/^\d{1,2}:\d{2}$/.test(String(b.time ?? '')) ? { time: b.time } : {}) })),
+    list: uniq(arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: str(i.name, 80), qty: str(i.qty, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}), ...(i.fav ? { fav: true } : {}), ...(STORES.some(s => s.id === i.store) ? { store: i.store } : {}), ...(numOr(i.pos, null) !== null ? { pos: +i.pos } : {}), ...(Number.isFinite(+i.t) && +i.t > 0 ? { t: Math.min(+i.t, Date.now()) } : {}) })).filter(i => i.name.trim())).slice(0, 1000),
+    repeat: uniq(arr(o.repeat).filter(r => r && idOk(r.id) && typeof r.name === 'string' && r.name.trim() && [1, 2, 4].includes(+r.every) && Number.isInteger(+r.dow) && +r.dow >= 0 && +r.dow <= 6 && dateOk(r.anchor)).slice(0, 50).map(r => ({ id: r.id, name: r.name.slice(0, 60), qty: str(r.qty, 20), pid: idOk(r.pid) ? r.pid : null, every: +r.every, dow: +r.dow, anchor: r.anchor, last: dateOk(r.last) && r.last <= today ? r.last : '' }))),
+    ask: arr(o.ask).filter(x => x && typeof x === 'object' && idOk(x.id)).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i).slice(0, 30).map(x => ({ id: x.id, name: str(x.name, 80), qty: str(x.qty, 20), bon: str(x.bon, 80) })),
+    bons: uniq(arr(o.bons).filter(b => b && typeof b === 'object' && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: dateOk(b.date) && b.date <= today ? b.date : today, store: String(b.store).slice(0, 20), total: numOr(b.total, null), items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: numOr(i.p, 0), pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null), b: String(i.b ?? '').slice(0, 30) })), ...(b.partial || b.items.length > 120 ? { partial: true } : {}), ...(b.du || !(dateOk(b.date) && b.date <= today) ? { du: true } : {}), // du = Datum war ungültig: zählt nicht für „Schon gekauft?“ und Standard
+    ...(/^\d{1,2}:\d{2}$/.test(String(b.time ?? '')) ? { time: b.time } : {}), ...(Number.isFinite(+b.saved) && +b.saved > 0 ? { saved: +b.saved } : {}) }))),
     aliases: Object.fromEntries(Object.entries(o.aliases && typeof o.aliases === 'object' && !Array.isArray(o.aliases) ? o.aliases : {}).filter(([k, v]) => k.length <= 60 && idOk(v)).slice(0, 400)),
-    lastBackup: dateOk(o.lastBackup) ? o.lastBackup : '', short: { on: !!(o.short && o.short.on), view: o.short && o.short.view === 'all' ? 'all' : 'short', later: arr(o.short && o.short.later).filter(idOk), known: arr(o.short && o.short.known).filter(idOk) }, rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
+    lastBackup: dateOk(o.lastBackup) && o.lastBackup <= today ? o.lastBackup : '', short: { on: !!(o.short && o.short.on), view: o.short && o.short.view === 'all' ? 'all' : 'short', later: arr(o.short && o.short.later).filter(idOk), known: arr(o.short && o.short.known).filter(idOk) }, rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
     adds: Object.fromEntries(Object.entries(o.adds && typeof o.adds === 'object' && !Array.isArray(o.adds) ? o.adds : {}).filter(([k, n]) => idOk(k) && Number.isFinite(+n) && +n >= 0).map(([k, n]) => [k, Math.min(+n, 9999)])),
     addDay: Object.fromEntries(Object.entries(o.addDay && typeof o.addDay === 'object' && !Array.isArray(o.addDay) ? o.addDay : {}).filter(([k, v]) => idOk(k) && dateOk(v))),
     prefs: Object.fromEntries(Object.entries(o.prefs && typeof o.prefs === 'object' && !Array.isArray(o.prefs) ? o.prefs : {}).filter(([k, v]) => idOk(k) && STORES.some(s => s.id === v))),
     later: arr(o.later).filter(l => l && idOk(l.id) && idOk(l.pid) && dateOk(l.from)).map(l => ({ id: l.id, pid: l.pid, name: String(l.name ?? '').slice(0, 80), qty: String(l.qty ?? '').slice(0, 20), from: l.from })),
     watch: Array.isArray(o.watch) ? o.watch.filter(idOk) : DEF.watch.slice(),
-    custom: arr(o.custom).filter(c => c && idOk(c.id) && typeof c.name === 'string' && c.name.trim()).map(c => ({ id: c.id, name: c.name.slice(0, 80) })),
+    custom: arr(o.custom).filter(c => c && idOk(c.id) && typeof c.name === 'string' && c.name.trim()).slice(0, 500).map(c => ({ id: c.id, name: c.name.slice(0, 80) })),
     manual: arr(o.manual).filter(m => m && typeof m === 'object' && typeof m.name === 'string' && Number(m.price) > 0 && STORES.some(s => s.id === m.store) && Array.isArray(m.valid) && dateOk(m.valid[0]) && dateOk(m.valid[1])).map(m => ({ id: String(m.id ?? 'm' + Date.now()).slice(0, 40), store: m.store, name: m.name.slice(0, 80), price: Number(m.price), regular: num(m.regular, null), amount: num(m.amount, null), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(m.unit) ? m.unit : null, valid: [m.valid[0], m.valid[1]], manual: true })),
     hist: arr(o.hist).filter(h => h && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })),
-    buys: Object.fromEntries(Object.entries(o.buys && typeof o.buys === 'object' && !Array.isArray(o.buys) ? o.buys : {}).filter(([k, n]) => k.length <= 90 && Number.isFinite(+n) && +n >= 0).map(([k, n]) => [k, +n])),
+    buys: Object.fromEntries(Object.entries(o.buys && typeof o.buys === 'object' && !Array.isArray(o.buys) ? o.buys : {}).filter(([k, n]) => k.length <= 90 && Number.isFinite(+n) && +n >= 0).slice(0, 3000).map(([k, n]) => [k, +n])),
     set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20), noDragTip: !!set.noDragTip, theme: ['light', 'dark'].includes(set.theme) ? set.theme : 'auto' }
   };
 }
 const mkRx = src => { try { return new RegExp(src, 'i'); } catch (e) { try { return new RegExp(src.replace(/\(\?<!\[[^\]]*\]\)/g, ''), 'i'); } catch (e2) { return /$^/; } } }; // ältere Browser ohne Lookbehind
+let LAST_RAW = '', SAVE_FAILED = false; // zuletzt gespeicherter Text, und ob das Speichern gerade scheitert
 try {
   const raw = localStorage.getItem(LS), old = localStorage.getItem('einkauf.v1');
+  LAST_RAW = raw || '';
   S = Object.assign({}, DEF, raw ? JSON.parse(raw) : {});
   if (!raw && old) { const o = JSON.parse(old); S.list = (o.list || []).map(x => ({ ...x, id: x.id || Math.random().toString(36).slice(2) })); S.watch = o.favs || S.watch; S.manual = o.manual || []; S.hist = o.hist || []; }
   S = sanitize(S);
-} catch (e) { S = sanitize({}); }
-const save = () => { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { } };
+  if (raw && S.list.length === 0 && (() => { try { const p = JSON.parse(raw); return p && typeof p === 'object' && ((p.list && !Array.isArray(p.list)) || (p.bons && !Array.isArray(p.bons))); } catch (e) { return false; } })()) { try { localStorage.setItem(LS + '.defekt', raw); window.LOAD_BAD = 'kopie'; } catch (e) { window.LOAD_BAD = 'keine'; } } // gültiges JSON, aber falsche Form
+} catch (e) { // nicht lesbar: Rohkopie zur Rettung sichern, bevor etwas Neues darüber gespeichert wird
+  window.LOAD_BAD = 'keine';
+  try { const raw = localStorage.getItem(LS); if (raw) { localStorage.setItem(LS + '.defekt', raw); window.LOAD_BAD = 'kopie'; } } catch (x) { }
+  S = sanitize({});
+}
+// 1) Speichern: scheitert es (Speicher voll oder gesperrt), sagt die App es sichtbar
+const save = () => {
+  try { const j = JSON.stringify(S); localStorage.setItem(LS, j); LAST_RAW = j; if (SAVE_FAILED) { SAVE_FAILED = false; saveWarnBar(false); } return true; }
+  catch (e) { SAVE_FAILED = true; saveWarnBar(true); return false; }
+};
+function saveWarnBar(on) { // bleibt stehen, solange nicht gespeichert werden kann
+  try {
+    let b = document.getElementById('savewarn'); if (!on) { if (b) b.remove(); return; }
+    if (!b && document.body) { b = document.createElement('div'); b.id = 'savewarn'; b.setAttribute('role', 'alert'); b.innerHTML = '⚠ <b>Speichern nicht möglich</b> (Speicher voll oder gesperrt). Neue Eingaben gehen beim Schließen verloren. <button class="btn sm" onclick="exp()">Jetzt sichern</button>'; document.body.appendChild(b); }
+  } catch (x) { }
+}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const eur = n => n == null || isNaN(n) ? '–' : n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -53,8 +76,18 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const translit = s => s.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9 -]/g, '').trim().replace(/\s+/g, '-');
 const STORE = id => STORES.find(s => s.id === id) || { id, name: id, short: id, tier: 'D', car: null };
 const PROD = id => PRODUCTS.find(p => p.id === id);
-const RXC = {}; const rx = p => RXC[p.id] || (RXC[p.id] = mkRx(p.kw));
-const regCustom = c => { if (!PRODUCTS.some(p => p.id === c.id)) PRODUCTS.push({ id: c.id, cat: 'Eigene Produkte', name: c.name, kw: '(?<![a-zäöüß])' + c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (c.name.length <= 3 ? '(?![a-zäöüß])' : ''), base: null, custom: 1, q: [translit(c.name)] }); };
+const WORD_ENDS = 'e|en|n|s|es|er|ern|nen|reis|gel|rolle|rollen|tuch|tücher|tuecher'; // ein Stichwort muss ein Wortende haben: „Kürbiskernbraten“ ist kein Kürbiskern
+const WORD_END_CAT = { 'Haushalt & Wäsche': '|pulver|konzentrat|caps|pods|tabs|tabletten', 'Drogerie & Gesundheit': '|pulver|tabletten|tabl|kapseln|bürsten|buersten|köpfe|koepfe|sticks', 'Obst & Gemüse': '|netz|schoten' }; // erlaubte Form- und Packungswörter je Kategorie
+const wordEnd = cat => '(?:' + WORD_ENDS + (WORD_END_CAT[cat] || '') + ')?(?![a-zäöüß])';
+const WORD_END_OWN = '(?:e|en|n|s|es|er|ern|nen)?(?![a-zäöüß])';
+const umlautRx = s => { // „Kaese“ findet „Käse“ und umgekehrt
+  let r = ''; const x = String(s).toLowerCase();
+  for (let i = 0; i < x.length; i++) { const two = x.slice(i, i + 2), ch = x[i]; if (two === 'ae') { r += '(?:ae|ä)'; i++; } else if (two === 'oe') { r += '(?:oe|ö)'; i++; } else if (two === 'ue') { r += '(?:ue|ü)'; i++; } else if (two === 'ss') { r += '(?:ss|ß)'; i++; } else if (ch === 'ä') r += '(?:ä|ae)'; else if (ch === 'ö') r += '(?:ö|oe)'; else if (ch === 'ü') r += '(?:ü|ue)'; else if (ch === 'ß') r += '(?:ß|ss)'; else r += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  return r;
+};
+const stripOwn = (q, s) => { try { return s.replace(new RegExp('(?<![a-zäöüß])' + umlautRx(q.name) + '(?![a-zäöüß])', 'gi'), ' '); } catch (e) { return s; } }; // das eigene Produktwort ist selbst kein Sperrwort („Quark“, „Schokolade“)
+const RXC = {}; const rx = p => RXC[p.id] || (RXC[p.id] = mkRx(p.cat === 'Fleisch' || p.custom ? p.kw : '(?:' + p.kw + ')' + wordEnd(p.cat)));
+const regCustom = c => { if (!PRODUCTS.some(p => p.id === c.id)) PRODUCTS.push({ id: c.id, cat: 'Eigene Produkte', name: c.name, kw: '(?<![a-zäöüß])(?:' + umlautRx(c.name) + ')' + WORD_END_OWN, base: null, custom: 1, q: [translit(c.name)] }); };
 (() => { const old = S.custom.filter(c => /^(frisch)?fleisch$/i.test(c.name.trim())); if (!old.length || !PROD('fleisch')) return; const ids = new Set(old.map(c => c.id)); S.list.forEach(i => { if (ids.has(i.pid)) i.pid = 'fleisch'; }); S.custom = S.custom.filter(c => !ids.has(c.id)); save(); })();
 S.custom.forEach(regCustom);
 // Verweise auf Produkte, die es nicht (mehr) gibt (z. B. nach dem Einspielen einer unvollständigen Sicherung), reparieren statt abstürzen
@@ -64,10 +97,19 @@ function repairRefs() {
   for (const k of Object.keys(S.prefs)) if (!PROD(k)) delete S.prefs[k];
   for (const k of Object.keys(S.adds)) if (!PROD(k)) { delete S.adds[k]; delete S.addDay[k]; }
 }
+// 3) Zwei offene Fenster (App und Browser): Änderungen aus dem anderen Fenster sofort übernehmen, sonst überschreibt eines das andere
+function syncFromStorage() {
+  if (SAVE_FAILED) return; // ungespeicherte Eingaben nie überschreiben
+  try {
+    const raw = localStorage.getItem(LS); if (!raw || raw === LAST_RAW) return;
+    LAST_RAW = raw; S = sanitize(JSON.parse(raw)); S.custom.forEach(regCustom); repairRefs(); CACHE = null; if (typeof render === 'function') render();
+  } catch (e) { }
+}
+window.addEventListener('storage', e => { if (e.key === LS && e.storageArea === localStorage) syncFromStorage(); });
 const SC = { rewe: '#cc071e', netto: '#f2c200', aldi: '#1a73c9', dm: '#e8590c', lidl: '#0b3c91' }; // Ladenfarben wie im Prospekt
 const storeColor = id => SC[id] || '#8a9a92';
 const ICON = { 'Haushalt & Wäsche': '🧺', 'Milchprodukte': '🥛', 'Obst & Gemüse': '🥬', 'Öle & Grundnahrung': '🌿', 'Fleisch': '🥩', 'Getränke': '🥤', 'Eigene Produkte': '⭐', 'Drogerie & Gesundheit': '🧴' };
-const PICON = { wm_dunkel: '🧺', wm_bunt: '🧺', wm_weiss: '🧺', wm_uni: '🧺', weichspueler: '🌸', farbfang: '🎨', kuechenrolle: '🧻', milch: '🥛', ayran: '🥛', buttermilch: '🥛', kefir: '🥛', butter: '🍞', butterschmalz: '🍳', tomaten: '🍅', gurken: '🥒', paprika: '🌶️', melone: '🍈', trauben: '🍇', heidelbeeren: '🍇', erdbeeren: '🍓', apfel: '🍎', ananas: '🍍', kiwi: '🥝', zwiebeln: '🧅', leinoel: '🌿', salatoel: '🌿', basmati: '🍚', buchweizen: '🌾', sonnenblumenkerne: '🌻', kuerbiskerne: '🎃', pinienkerne: '🌰', rinderhack: '🥩', gemhack: '🥩', haehnchen: '🍗', pute: '🍗', rind: '🥩', wasser: '💧', bitburger: '🍺', vitamine: '💊', zahnpasta: '🦷', zahnseide: '🦷', zahnbuerste: '🦷', handcreme: '🧴', duschgel: '🚿', shampoo: '🧴', deo: '🧴' };
+const PICON = { wm_dunkel: '🧺', wm_bunt: '🧺', wm_weiss: '🧺', wm_uni: '🧺', weichspueler: '🌸', farbfang: '🎨', kuechenrolle: '🧻', milch: '🥛', ayran: '🥛', buttermilch: '🥛', kefir: '🥛', butter: '🍞', butterschmalz: '🍳', tomaten: '🍅', gurken: '🥒', paprika: '🌶️', melone: '🍈', trauben: '🍇', heidelbeeren: '🍇', erdbeeren: '🍓', apfel: '🍎', ananas: '🍍', kiwi: '🥝', zwiebeln: '🧅', leinoel: '🌿', salatoel: '🌿', basmati: '🍚', reis: '🍚', bratoel: '🌻', buchweizen: '🌾', sonnenblumenkerne: '🌻', kuerbiskerne: '🎃', pinienkerne: '🌰', rinderhack: '🥩', gemhack: '🥩', haehnchen: '🍗', pute: '🍗', rind: '🥩', wasser: '💧', bitburger: '🍺', vitamine: '💊', zahnpasta: '🦷', zahnseide: '🦷', zahnbuerste: '🦷', handcreme: '🧴', duschgel: '🚿', shampoo: '🧴', deo: '🧴' };
 const GUESS = [[/kaffee|espresso|krönung/i, '☕'], [/pasta|nudel|spaghetti|barilla/i, '🍝'], [/lachs|fisch|thunfisch|garnele/i, '🐟'], [/käse|kaese|gouda|mozzarella/i, '🧀'], [/joghurt|quark|skyr/i, '🥣'], [/ei(er)?\b|eier/i, '🥚'], [/brot|toast|brötchen/i, '🍞'], [/schoko|keks|riegel|gummi|süß/i, '🍫'], [/saft|limo|cola|fanta|sprite|schorle/i, '🧃'], [/bier|pils/i, '🍺'], [/wein|sekt/i, '🍷'], [/waschmittel|persil|perwoll|weichspüler/i, '🧺'], [/reiniger|spül|geschirr/i, '🧽'], [/nuss|nüsse|kerne|mandel/i, '🥜'], [/honig/i, '🍯'], [/avocado/i, '🥑'], [/brokkoli|spinat|salat|gemüse|karotte|möhre/i, '🥦'], [/obst|beere|banane|orange|zitrone|mango/i, '🍊'], [/reis/i, '🍚'], [/öl\b|olivenöl/i, '🌿'], [/fleisch|steak|filet|braten|hack/i, '🥩'], [/pizza/i, '🍕'], [/eis\b|eiscreme/i, '🍨'], [/tee\b/i, '🍵']];
 const iconFor = (p, name) => (p && (PICON[p.id] || (p.custom ? (GUESS.find(g => g[0].test(p.name)) || [])[1] : null))) || (GUESS.find(g => g[0].test(name || (p && p.name) || '')) || [])[1] || (p && ICON[p.cat]) || '🏷️';
 const prefOf = (p, name) => { // 1. deine eigene Wahl, 2. Standardladen des Produkts, 3. Wortliste, 4. Stichwörter (Drogerie -> dm)
@@ -86,6 +128,7 @@ const imgBig = (u, big) => { // gleiche Bilder in besserer Auflösung (bonial: O
   if (/dm\.emea\.cms\.aldi\.cx/.test(u)) return u.replace(/scaleWidth\/\d+\//, 'scaleWidth/' + (big ? 800 : 464) + '/');
   return u;
 };
+const imgFor = (it, b) => b && b.img && (!b.p || !b.p.custom || fold(b.name + ' ' + (b.cats || '')).includes(fold(it.name).slice(0, 4))) ? b.img : ''; // Bild des Angebots nur zeigen, wenn es zum Eintrag passt (kein Pizza-Bild bei Kaffee)
 const thumb = (img, emoji, cls = '', zoom = false) => `<div class="thumb ${cls}"${img && zoom ? ` data-z="${esc(img)}" onclick="zoomImg(this)" role="button" tabindex="0" aria-label="Bild vergrößern" onkeydown="if(event.key==='Enter')zoomImg(this)" style="cursor:zoom-in"` : ''}><span class="em">${emoji}</span>${img ? `<img src="${esc(imgBig(img))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</div>`;
 function zoomImg(el) {
   const u = el.dataset.z; if (!u) return;
@@ -96,18 +139,50 @@ function zoomImg(el) {
 /* ================= Angebote laden ================= */
 let SRC = { fetched: null, offers: [], source: null, live: false, offline: false };
 const OFFERS_KEY = 'einkauf.offers';
-// Angebote: erst die aktuelle offers.json (Server oder Hosting), sonst die zuletzt gespeicherte Kopie (Offline im Laden), sonst Beispieldaten
+// Angebote: erst die aktuelle offers.json (Server oder Hosting), sonst die zuletzt gespeicherte Kopie (Offline im Laden), sonst leer
 let LAST_LOAD = 0;
+const MAX_OFFERS = 5000, MAX_OFFER_SPAN_DAYS = 120, OFFERS_COPY_MAX = 3e6; // Grenzen beim Prüfen der Angebote: Anzahl, längste Gültigkeit in Tagen, Größe der Offline-Kopie in Zeichen
+// Angebote prüfen, bevor sie benutzt oder als Offline-Kopie gespeichert werden: jedes Feld wird auf seinen Typ geprüft und nur Bekanntes übernommen.
+// Kaputte Einträge (ohne Preis, Namen oder echte Gültigkeit) und Doppelte fliegen raus; Doppelte füllen fehlende Felder des ersten auf.
+function cleanOffers(list) {
+  const nowY = new Date().getFullYear();
+  const day = v => { if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null; const d = new Date(v + 'T12:00:00'); return !isNaN(d) && d.toISOString().slice(0, 10) === v && d.getFullYear() >= nowY - 1 && d.getFullYear() <= nowY + 1 ? d : null; }; // echter Kalendertag in der Nähe von heute
+  const pos = v => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1e7) ? v : null;
+  const txt = (v, n) => typeof v === 'string' ? v.slice(0, n) : '';
+  const https = v => typeof v === 'string' && /^https:\/\/[^\s"'<>]+$/i.test(v) ? v.slice(0, 600) : ''; // nur https-Adressen (kein javascript:)
+  const out = [], idx = new Map(); let bad = 0, dup = 0;
+  for (const o of (Array.isArray(list) ? list : []).slice(0, MAX_OFFERS)) {
+    if (!o || typeof o !== 'object' || typeof o.store !== 'string' || typeof o.name !== 'string' || !o.name.trim()) { bad++; continue; }
+    const price = pos(o.price), v0 = day(Array.isArray(o.valid) ? o.valid[0] : null), v1 = day(Array.isArray(o.valid) ? o.valid[1] : null);
+    if (!price || !v0 || !v1 || v1 < v0 || (v1 - v0) / 864e5 > MAX_OFFER_SPAN_DAYS) { bad++; continue; }
+    const c = {
+      id: txt(o.id, 80) || (o.store + '-' + out.length), store: o.store.slice(0, 20), name: o.name.slice(0, 200), img: https(o.img), desc: txt(o.desc, 300), cats: txt(o.cats, 200), pid: null,
+      price, regular: pos(o.regular), regularIsUvp: o.regularIsUvp === true, unitPrice: pos(o.unitPrice), base: ['kg', 'l', 'st'].includes(o.base) ? o.base : undefined,
+      amount: pos(o.amount), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(o.unit) ? o.unit : undefined, count: pos(o.count), valid: [o.valid[0], o.valid[1]], src: https(o.src), note: txt(o.note, 200),
+      found: Array.isArray(o.found) ? o.found.filter(f => typeof f === 'string').map(f => f.slice(0, 60)).slice(0, 20) : [],
+      ...(o.appRequired === true ? { appRequired: true } : {}), ...(o.incomplete ? { incomplete: txt(o.incomplete, 200) } : {}), ...(typeof o.food === 'boolean' ? { food: o.food } : {})
+    };
+    const k = [c.store, c.name, c.price, c.valid[0], c.valid[1], c.amount || '', c.unit || ''].join('|');
+    if (idx.has(k)) { // gleiches Angebot (mehrere Suchbegriffe): Fundstellen vereinen, fehlende Felder auffüllen
+      dup++; const f = out[idx.get(k)]; f.found = [...new Set([...f.found, ...c.found])];
+      if (!f.regular && c.regular) { f.regular = c.regular; f.regularIsUvp = c.regularIsUvp; }
+      for (const x of ['img', 'desc', 'cats', 'src', 'note', 'regular', 'unitPrice', 'base', 'count', 'incomplete']) if (!f[x] && c[x]) f[x] = c[x];
+      if (f.food === undefined && c.food !== undefined) f.food = c.food; if (c.appRequired) f.appRequired = true; continue;
+    }
+    idx.set(k, out.length); out.push(c);
+  }
+  return { offers: out, bad, dup };
+}
 async function loadOffers() {
   let j = null, offline = false; LAST_LOAD = Date.now();
   if (location.protocol.startsWith('http')) {
-    try { const r = await fetch('offers.json?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { }
+    try { const r = await fetch('offers.json?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) { const raw = await r.json(), c = cleanOffers(raw && raw.offers); if (c.offers.length) j = { ...raw, fetched: isNaN(new Date(raw.fetched)) ? new Date().toISOString() : raw.fetched, offers: c.offers }; } } catch (e) { }
   }
-  if (j && j.offers && j.offers.length) { try { localStorage.setItem(OFFERS_KEY, JSON.stringify(j)); } catch (e) { } }
-  else { try { const c = JSON.parse(localStorage.getItem(OFFERS_KEY) || 'null'); if (c && c.offers && c.offers.length) { j = c; offline = true; } } catch (e) { } }
+  if (j && j.offers && j.offers.length) { try { const cp = JSON.stringify(j); if (cp.length < OFFERS_COPY_MAX) localStorage.setItem(OFFERS_KEY, cp); else localStorage.removeItem(OFFERS_KEY); } catch (e) { try { localStorage.removeItem(OFFERS_KEY); } catch (x) { } } } // erst geprüft, dann als Offline-Kopie gespeichert (nie so groß, dass sie deine Daten verdrängt)
+  else { try { const raw = JSON.parse(localStorage.getItem(OFFERS_KEY) || 'null'), c = cleanOffers(raw && raw.offers); if (c.offers.length) { j = { ...raw, fetched: isNaN(new Date(raw.fetched)) ? new Date().toISOString() : raw.fetched, offers: c.offers }; offline = true; } } catch (e) { } }
   if (j && j.offers && j.offers.length) {
     SRC = { ...j, offers: j.offers.filter(o => STORES.some(s => s.id === o.store)).map(o => ({ ...o, pid: null })), live: true, offline }; // Penny ist für dich nicht relevant
-  } else SRC = { fetched: window.OFFERS_META.fetched, offers: window.OFFERS.map(o => ({ ...o, pidLocked: !!o.pid })), source: 'Beispieldaten', live: false, offline: false };
+  } else SRC = { fetched: null, offers: [], source: 'keine', live: false, offline: false }; // ohne echte Angebote und ohne Kopie: leer lassen, keine erfundenen Beispieldaten zeigen
   CACHE = null;
 }
 
@@ -144,18 +219,51 @@ function saveEur(o) {
 }
 const saveTag = o => { const s = saveEur(o); return s != null && s >= 0.05 ? ` <span class="sv">spart ${eur(s)}</span>` : ''; };
 const COMPOUND_CATS = new Set(['Obst & Gemüse', 'Milchprodukte']); // „Paprika-Chips“, „Bananen-Haarspange“: vorne steht nur die Zutat
-const FB_NOISE = /gelee|schokolad|zartbitter|praline|bonbon|gummi|haar|pflege|dekor|spange|vase|topf|fußmatte|nektar|saft|smoothie|joghurt|quark|riegel|kuchen|keks|zwerge|quetschie|quetschbeutel|eis\b|spielzeug|plüsch|puppe/i;
-const customOk = (o, q) => o.food !== false && !FB_NOISE.test(o.name + ' ' + (o.cats || '')) && (o.food === true || (o.name + ' ' + (o.cats || '')).toLowerCase().includes(q.name.toLowerCase().slice(0, 4)));
+const FB_NOISE = /gelee|schokolad|zartbitter|praline|bonbon|gummi|haar|pflege|dekor|spange|vase|topf|fußmatte|nektar|saft|smoothie|joghurt|quark|riegel|kuchen|keks|reise|hotel|urlaub|kreuzfahrt|flug|zwerge|quetschie|quetschbeutel|eis\b|spielzeug|plüsch|puppe/i;
+const customOk = (o, q) => o.food !== false && !FB_NOISE.test(stripOwn(q, o.name + ' ' + (o.cats || ''))) && (o.food === true || new RegExp('(?<![a-zäöüß])' + q.name.toLowerCase().slice(0, 4).replace(/[^a-zäöüß0-9]/g, '') + (q.name.length < 4 ? '(?![a-zäöüß])' : ''), 'i').test(o.name + ' ' + (o.cats || '')));
+const CAN_RX = /\bdosen|\bdose\b|konserve|\bgl(?:as|äser)\b|in stücken|stückig|geschält|tiefkühl|\btk\b|tiefgefror|eingelegt|getrocknet|passiert|gurkentopf|in scheiben|in saft|in sirup|abtropf|\bstücke\b|salz-dill|essig|gewürzgurk|cornichon|tiefgekühl/i; // Dose, Glas, Tiefkühl: kein Frischprodukt
+const CLAIM_RX = /kartoffel|möhre|karotte|kohl|salat|spinat|pilz|champignon|zucchini|aubergine|kürbis|lauch|mais\b|brokkoli|banane|orange|zitrone|birne|pflaume|kirsch|mango|pfirsich|avocado|knoblauch|ingwer/i; // nennt der Name ein anderes Gemüse oder Obst, zählt ein Wort nur aus der Kategorie nicht (Pfanni Speisekartoffeln)
+const LITER_G_OK = new Set(['kefir', 'ayran', 'buttermilch']); // nur diese Flüssigkeiten werden auch in Gramm verkauft; Milch in Gramm ist Schokolade
+// Fehlende Menge, Stückzahl und Grundpreis aus dem Text holen (Name, Beschreibung, Hinweis); vorhandene Werte der Quelle bleiben, außer der Preis steht erkennbar je kg oder je 100 g
+const noNutri = s => s.replace(/\d+(?:[.,]\d+)?\s?g\s*(?:protein|eiweiß|fett|zucker|kohlenhydrate)[^,]*?(?:je|pro)\s?100\s?g/gi, ' ').replace(/\d+(?:[.,]\d+)?\s?g\s*(?:protein|eiweiß|fett|zucker|kohlenhydrate)/gi, ' '); // „20 g Protein pro 100 g“ ist eine Nährwertangabe, keine Menge und kein Preis
+function inferQty(o, p) {
+  const nd = noNutri(o.name + ' ' + (o.desc || '')), t = nd + ' ' + (o.note || ''), tc = nd.replace(/\bab\s+\d+/gi, ' '), out = {}, per = p.base === 'kg' || p.base === 'l'; // tc: ohne Mindestabnahme („ab 4 Stück“)
+  if (per) {
+    if (!o.unitPrice && p.base === 'kg') { // Metro und Theke: der Preis gilt je kg bzw. je 100 g, nicht für die ganze Packung
+      if (/(?:\bje|\bpro)\s?kg\b|(?<![\d€]\s?)\/\s?kg\b/i.test(t)) return { unitPrice: o.price, base: 'kg', amount: null, unit: undefined };
+      if (/(?:\bje|\bpro)\s?100\s?g\b/i.test(t)) return { unitPrice: +(o.price * 10).toFixed(2), base: 'kg', amount: null, unit: undefined };
+    }
+    const kg = o.unit === 'kg' ? o.amount : o.unit === 'g' && o.amount ? o.amount / 1000 : null;
+    if (o.unitPrice && p.base === 'kg' && kg >= 0.2 && Math.abs(o.unitPrice - o.price * 10) < 0.03 * o.unitPrice) { // Theke: 1,19 € steht für 100 g, die ca. 700 g kosten also gut 8 €
+      const f = kg * 10; out.price = +(o.price * f).toFixed(2); if (o.regular) out.regular = +(o.regular * f).toFixed(2); out.note = (o.note ? o.note + ', ' : '') + 'Theke: Preis je 100 g, Gesamtpreis nach Gewicht geschätzt';
+    }
+    const m = /(\d+)\s?[x×]\s?(\d+(?:[.,]\d+)?)[\s-]*(kg|g|ml|l|liter)\b/i.exec(nd); // „6 x 1,5 l“ sind 9 l
+    if (m) { const M = +m[2].replace(',', '.'), u = m[3].toLowerCase() === 'liter' ? 'l' : m[3].toLowerCase(); if (!o.amount || (o.amount === M && o.unit === u)) { out.amount = +m[1] * M; out.unit = u; } }
+    else if (!o.amount && !o.unitPrice) { const s = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s?(kg|g|ml|l)\b/i.exec(nd); if (s) { out.amount = +s[1].replace(',', '.'); out.unit = s[2].toLowerCase(); } } // ALDI schreibt die Größe in den Namen
+  } else if (p.base === 'st' && !o.count && !(o.unit === 'st' && o.amount)) {
+    const w = /(\d+)\s?[x×]\s?(\d+)[\s-]*(?:wl|wäschen|waschladungen?|waschgänge)(?![a-zäöü])/i.exec(tc), c = /(\d+)\s?[x×]\s?\d+[\s-]*blatt/i.exec(tc) || /(\d+)[\s-]*(?:wl|wäschen|waschladungen?|waschgänge)(?![a-zäöü])/i.exec(tc) || /(\d+)[\s-]*rollen?\b/i.exec(tc) || /(\d+)[\s-]*(?:stück|stk|st)\b/i.exec(tc), n = w ? +w[1] * +w[2] : c ? +c[1] : 0; // „2 x 20 WL“ sind 40 Waschladungen
+    if (n > 0 && n < 1000) out.count = n;
+    else if (/(?:^|[\s,])(?:je\s)?(?:stück|st\.)\s*$/i.test(o.desc || '') || /^(?:je\s)?(?:stück|st\.)$/i.test(o.note || '')) out.count = 1; // „Kl. I Stück“: der Preis gilt für ein Stück
+  }
+  return Object.keys(out).length ? out : null;
+}
 const HEAD_CATS = new Set(['Obst & Gemüse', 'Milchprodukte', 'Öle & Grundnahrung', 'Getränke']);
 function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
   const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p && !(window.NOISE_RX && NOISE_RX.test(text))) { let len = 0; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; if (COMPOUND_CATS.has(q.cat) && /^-[A-Za-zÄÖÜäöü]/.test(src.slice(m.index + m[0].length))) continue; if (m[0].length > len) { p = q; len = m[0].length; } } }
+  if (!p) { const cands = [], nameSrc = o.store === 'aldi' ? o.name.split(',')[0] : o.name; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = q.custom ? (o.store === 'aldi' ? o.name.split(',')[0] : o.name) : HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; const nz = x => q.custom ? stripOwn(q, x) : x; if (window.NOISE_RX && NOISE_RX.test(nz(m.index < (o.store === 'aldi' && src === head ? o.name.split(',')[0].length : o.name.length) ? o.name : text))) continue; /* Sperrwort zählt nur dort, wo das Produktwort steht: im Namen (ganz) oder, wenn nur die Kategorie trifft, Name und Kategorie */ if (q.custom && (o.food === false || FB_NOISE.test(nz(text)))) continue; if (q.animal && animalClash(q, o.name)) continue; if (COMPOUND_CATS.has(q.cat)) { const rest = src.slice(m.index + m[0].length); if (/^-[A-Za-zÄÖÜäöü]/.test(rest) && !/^-(?:rispe|mix|netz|schale|trio|duo|pack|beutel|auswahl)/i.test(rest)) continue; } /* „Tomaten-Dip“ ist keine Tomate, „Tomaten-Rispe“ schon */ const inName = rx(q).test(HEAD_CATS.has(q.cat) ? nameSrc : o.name); if (q.cat === 'Obst & Gemüse' && (CAN_RX.test(text) || (!inName && CLAIM_RX.test(o.name)))) continue; cands.push({ q, l: m[0].length, inName }); }
+    const longest = a => a.reduce((b, c) => (!b || c.l > b.l ? c : b), null); const pool = cands.some(c => c.inName && c.q.cat !== 'Obst & Gemüse') ? cands.filter(c => c.q.cat !== 'Obst & Gemüse') : cands; let best = longest(pool); /* Obst im Namen eines Milchprodukts ist nur der Geschmack (Fruchtkefir Erdbeere) */
+    if (best && !best.inName) { const nm = longest(pool.filter(c => c.inName)); if (nm && !(best.q.group && best.q.group.includes(nm.q.id)) && !(nm.q.group && nm.q.group.includes(best.q.id))) best = nm; } /* trifft nur ein Wort aus der Kategorie, schlägt ein anderes Produkt aus dem Namen (Lenor Waschmittel ist kein Color-Waschmittel) */
+    if (best) p = best.q; }
   // Eigene Produkte: Treffer der Suchseite (z. B. „Gummibärchen" findet „Goldbären") nutzen, wenn der Name nicht passt
   if (!p && o.found) p = PRODUCTS.find(q => q.custom && q.q && o.found.some(f => f.toLowerCase() === q.q[0]) && customOk(o, q)) || null;
+  if (p && p.cat === 'Fleisch') { const g = meatGrams(o), stueck = g >= 120 && !POULTRY_RX.test(o.name) && /steak|kotelett|schnitzel|medaillon|filet|rücken|keule|hüft|entrec/i.test(o.name); if (g != null && g < 200 && !stueck && !/(?:je|pro)\s?100\s?g/i.test(noNutri(o.name + ' ' + (o.desc || ''))) && !(g === 100 && !/\d+\s?g\b/i.test(o.name))) p = null; } // unter 200 g ist es Aufschnitt, kein Frischfleisch (100 g ohne Gramm im Namen ist Theken-Preis je 100 g)
+  if (p) { const q2 = inferQty(o, p); if (q2) o = { ...o, ...q2 }; }
+  if (o.regular && /einzelpreis/i.test((o.note || '') + ' ' + (o.desc || ''))) { const r = o.regular / o.price; if (r >= 1.9 && Math.abs(r - Math.round(r)) < 0.06) o = { ...o, regular: null }; } // „Einzelpreis“: der Normalpreis ist der Preis der ganzen Packung (3 x Einzelpreis), das ist kein Rabatt
   let store = STORE(o.store), up = unitPrice(o, p);
-  if (p && p.base && p.base !== 'st' && up && up.base === 'st' && !o.pidLocked) { p = null; up = unitPrice(o, null); }
+  if (p && p.base === 'l' && !p.custom && up && up.base === 'kg' && !LITER_G_OK.has(p.id) && !o.pidLocked) { p = null; up = unitPrice(o, null); }
+  else if (p && p.base && p.base !== 'st' && up && up.base === 'st' && !o.pidLocked) { p = null; up = unitPrice(o, null); }
   else if (p && up && (p.base === 'l' || p.base === 'kg') && up.base !== p.base && up.base !== 'st') up = { v: up.v, base: p.base }; // Dichte ≈ 1 (Kefir in g, Milch in l)
   if (p && p.meat && (o.food === false || MEAT_NOISE.test(text))) { p = null; up = unitPrice(o, null); } // „Rindengefäß“, Lammfell-Kissen & Co. sind kein Fleisch
   let pct = null, kind = null;
@@ -167,10 +275,14 @@ function enrich(o) {
   const state = to < TODAY ? 'expired' : from > TODAY ? 'next' : 'now';
   const qty = up && p && p.base !== 'st' && up.v > 0 ? o.price / up.v : null, bulk = qty != null && qty > 3; // z. B. 12 x 1 l
   const excluded = !(p && p.id === 'gemhack') && EXCLUDE_RX.test(full);
-  const gourmet = !!(p && p.meat && (GOURMET_RX.test(o.name) || (up && up.base === 'kg' && up.v > 22))); // Edelstück (Steak, Filet …) oder über 22 €/kg: nur Zusatzinfo
+  const gourmet = !!(p && p.meat && !POULTRY_RX.test(o.name) && (GOURMET_RX.test(o.name) || (up && up.base === 'kg' && up.v > 22))); // Edelstück (Steak, Filet …) oder über 22 €/kg: nur Zusatzinfo
   return { ...o, p, store, up, pct, kind, dubious, bulk, state, daysLeft: Math.round((to - TODAY) / 864e5), excluded, gourmet };
 }
-const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|decke|kissen|korb|gefäß|deko|holz|spielzeug|plüsch|figur|kerze|schuh|haustier|hund|katze|futter|whiskas|dreamies|felix|knusper|pick|salat|pasta|nudel|wrap|sandwich|\bcup\b|soup|suppe|maggi|pastete|wiener|hot ?dog|aspik|sülze|nugget|cordon|spezialität|ofenschale|menü|menu|backwelt|\bteller\b|frikadelle|gebacken|gegart|aufschnitt|panier|high protein|hälse|feinkost|fertig/i;
+const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|kissen|gefäß|deko|spielzeug|plüsch|kerze|schuh|haustier|futter|whiskas|dreamies|felix|knusper|(?:^|[^a-zäöüß])(?:hund|katze)|(?:decke|korb|körbe|figur)n?(?![a-zäöüß])|holz(?:figur|deko|brett)|picker|salat|pasta|nudel|wrap|sandwich|\bcup\b|soup|suppe|maggi|pastete|wiener|hot ?dog|aspik|sülze|nugget|cordon|spezialität|ofenschale|menü|menu|backwelt|\bteller\b|frikadelle|gebacken|gegart|aufschnitt|panier|high protein|hälse|geräuchert|gebraten|gekocht|gepökelt|(?:leber|herz(?:en)?|nieren?|zungen?|mägen|magen)(?![a-zäöüß])|innerei|bouillon|\bfond\b|extrakt|feinkost|fertig/i;
+const POULTRY_RX = /hähn|hühn|\bpute|\bputen|chicken|geflügel/i; // Geflügel ist alltäglich, auch als Filet oder Steak
+const ANIMALS = { haehnchen: /hähn|hühn|huhn|chicken|geflügel/i, pute: /\bpute|\bputen/i, rind: /\brind|jungbull|\bbulle|\bochs/i, schwein: /schwein/i, lamm: /\blamm/i, kalb: /\bkalb/i, ente: /\benten?(?![a-zäöü])|\bgans\b|\bgänse(?:brust|keule|braten)/i, wild: /hirsch[a-zäöü-]*(?:gulasch|braten|keule|rücken|steak|filet|fleisch|ragout|hack)|\bwild(?:fleisch|gulasch|braten|schwein|ragout|keule|rücken|hack)|vom wild\b|\breh(?:rücken|keule|gulasch)/i };
+const animalClash = (q, name) => { const hit = Object.keys(ANIMALS).filter(a => ANIMALS[a].test(name)); const mine = q.animal.split('|'); return hit.length > 0 && (!hit.some(a => mine.includes(a)) || (hit.length > 1 && hit.some(a => !mine.includes(a)))); }; // eine andere Tierart im Namen schlägt das Teilstück (Kalbs-Tafelspitz ist kein Rind, Hähnchen-Hack kein gemischtes Hack)
+const meatGrams = o => { const mx = /(\d+)\s?[x×]\s?(\d+(?:[.,]\d+)?)\s?g\b/i.exec(o.name + ' ' + (o.desc || '')), m = /(\d+(?:[.,]\d+)?)\s?g\b/i.exec(o.name); if (mx) return +mx[1] * +mx[2].replace(',', '.'); return o.amount && o.unit === 'g' ? o.amount : o.amount && o.unit === 'kg' ? o.amount * 1000 : m ? +m[1].replace(',', '.') : null; };
 const GOURMET_RX = /steak|filet|entrec|tafelspitz|roastbeef|wagyu|angus|dry.?aged|karree|carr[ée]|lendenbraten|chateaubriand|t-bone|porterhouse|ribeye|rib-eye|medaillon|lachsschinken|keulenbraten|hirsch|wild|gans|gänse/i;
 const OFFERS_ALL = () => CACHE || (CACHE = [...SRC.offers, ...S.manual].map(enrich).filter(o => o.state !== 'expired' && !o.excluded));
 const rank = (a, b) => (a.up && b.up && a.up.base === b.up.base) ? a.up.v - b.up.v : (!!b.up - !!a.up) || a.price - b.price;
@@ -180,7 +292,7 @@ function productInfo(p) {
   const ids = p.group ? new Set(p.group) : null;
   let offs = OFFERS_ALL().filter(o => o.p && (ids ? ids.has(o.p.id) : o.p.id === p.id));
   const gourmet = p.group ? offs.filter(o => o.gourmet && o.state === 'now').sort(rank) : []; // „Fleisch“: Edelstücke nur als Zusatzinfo
-  if (p.group) offs = offs.filter(o => !o.gourmet);
+  if (p.group) { const nonG = offs.filter(o => !o.gourmet), usable = x => x.some(o => o.state === 'now' && o.store.tier !== 'D'); if (usable(nonG) || !usable(offs)) offs = nonG; } // gibt es nur Edelstücke (Lamm, Kalb, Wild), werden sie gezeigt
   const pc = x => x.dubious || x.pct == null ? 0 : Math.round(x.pct * 20); // Ersparnis in 5-%-Stufen
   const byBulk = p.meat ? (x, y) => (!!x.gourmet - !!y.gourmet) || (x.bulk - y.bulk) || (p.mainFirst ? (x.p.main ? 0 : 1) - (y.p.main ? 0 : 1) : 0) || (p.group ? pc(y) - pc(x) : 0) || rank(x, y) : (x, y) => (x.bulk - y.bulk) || rank(x, y);
   const now = offs.filter(o => o.state === 'now').sort(byBulk), next = offs.filter(o => o.state === 'next').sort(p.meat ? byBulk : rank);
@@ -192,10 +304,10 @@ function decision(info, item) {
   const { p, nearBest, best, nextBest } = info, b = nearBest || best;
   if (!b) { const pf = prefOf(p, item && item.name); return { tag: 'Kein Angebot', cls: '', why: pf ? prefNote(pf) + '.' : 'Aktuell kein bekanntes Angebot. Normal in der Nah-Runde kaufen.' }; }
   if (nextBest && b.up && nextBest.up && nextBest.up.base === b.up.base && nextBest.up.v < b.up.v * 0.9 && !(item && item.urgent))
-    return { tag: 'Lohnt sich warten', cls: 't-warn', why: `Nächste Woche ${eur(nextBest.price)} bei ${nextBest.store.short} (ab ${fmtD(nextBest.valid[0])}), deutlich günstiger.` };
+    return { tag: 'Lohnt sich warten', cls: 't-warn', why: `Nächste Woche ${eur(nextBest.price)}${nextBest.up ? ' (' + eur(nextBest.up.v) + ' / ' + unitLbl(nextBest.up.base) + ')' : ''} bei ${nextBest.store.short} (ab ${fmtD(nextBest.valid[0])}), deutlich günstiger.` };
   if (p.stock && b.pct != null && !b.dubious && b.pct * 100 >= S.set.stockPct) return { tag: 'Vorratskauf', cls: 't-stock', why: `${Math.round(b.pct * 100)} % Ersparnis${saveEur(b) >= 0.05 ? ' (' + eur(saveEur(b)) + ')' : ''} (${b.kind}). ${p.meat ? 'Portionsweise einfrieren.' : 'Haltbar, auf Vorrat sinnvoll.'}` };
   const ends = b.daysLeft <= 1;
-  return { tag: ends ? 'Heute kaufen' : 'Diese Woche', cls: 't-ok', why: (ends ? 'Angebot endet bald. ' : '') + (p.perish ? 'Schnell verderblich, nicht auf Vorrat kaufen.' : 'Kein Zeitdruck.') };
+  return { tag: ends ? 'Heute kaufen' : 'Diese Woche', cls: 't-ok', why: (ends ? 'Angebot endet bald. ' : '') + (p.perish ? 'Schnell verderblich, nicht auf Vorrat kaufen.' : ends ? 'Heute noch mitnehmen.' : 'Kein Zeitdruck.') };
 }
 const watched = id => S.watch.includes(id);
 const onList = id => S.list.some(i => !i.done && (i.pid === id || ((PROD(i.pid) || {}).group || []).includes(id)));
@@ -214,7 +326,7 @@ function offerCard(o, opt = {}) {
   const t = [`<span class="tag t-tier"><i class="dot t${o.store.tier}"></i>${esc(o.store.short)} · ${TIER_SHORT[o.store.tier] || ''}</span>`];
   if (!p) t.push('<span class="tag t-new">Nicht in deiner Liste</span>');
   if (p && onList(p.id)) t.push('<span class="tag t-ok">Auf Liste</span>');
-  if (p && watched(p.id)) t.push('<span class="tag t-watch">👁 Beobachtet</span>');
+  if (p && watched(p.id)) t.push('<span class="tag t-watch">👁 Favorit</span>');
   if (p && p.stock && !o.dubious && o.pct != null && o.pct * 100 >= S.set.stockPct) t.push('<span class="tag t-stock">Vorrat</span>');
   if (o.state === 'next') t.push('<span class="tag t-warn">ab ' + fmtD(o.valid[0]) + '</span>');
   if (o.appRequired) t.push('<span class="tag t-warn">nur mit App/Coupon</span>');
@@ -227,7 +339,7 @@ function offerCard(o, opt = {}) {
   ${o.desc ? `<div class="mute clamp">${esc(o.desc)}</div>` : ''}
   <div class="row" style="margin-top:2px"><span class="price">${eur(o.price)}</span>${o.regular ? `<span class="old">${eur(o.regular)}</span>` : ''}${o.up ? `<span class="mute">${eur(o.up.v)} / ${unitLbl(o.up.base)}</span>` : ''}${p ? `<button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}</div></div></div>
   <div class="row" style="margin:8px 0 2px">${t.join('')}</div>
-  ${o.pct != null ? `<div class="mute">Ersparnis ${o.regular ? eur(o.regular - o.price) + ' ' : ''}(${esc(o.kind)})</div>` : ''}${cmp ? `<div class="small" style="margin-top:3px"><b>${esc(cmp)}</b></div>` : ''}${usualBlock(o, true)}${nextLine(nh)}
+  ${o.pct != null ? `<div class="mute">Ersparnis laut ${esc(o.kind)}</div>` : ''}${cmp ? `<div class="small" style="margin-top:3px"><b>${esc(cmp)}</b></div>` : ''}${usualBlock(o, true)}${nextLine(nh)}
   ${o.note ? `<div class="mute">${esc(o.note)}</div>` : ''}${o.incomplete ? `<div class="mute">⚠ ${esc(o.incomplete)}</div>` : ''}
   <div class="row sp" style="margin-top:8px"><span class="mute">gültig ${fmtD(o.valid[0])}–${fmtD(o.valid[1])}${o.src ? ` · <a href="${esc(o.src)}" target="_blank" rel="noopener">Quelle</a>` : ''}</span><span class="row" style="gap:6px">${laterBtn}${add}</span></div></div>`;
 }
@@ -243,6 +355,7 @@ const UNITRX = '(' + Object.keys(UNITW).sort((a, b) => b.length - a.length).join
 const numVal = t => /^\d/.test(t) ? t.replace('.', ',') : String(NUMW[t.toLowerCase()]);
 function mkQty(num, unit) { // „1" ohne Einheit = keine Menge; „1 kg" bleibt
   const n = numVal(num), u = unit ? UNITW[unit.toLowerCase()] : '';
+  if (!(parseFloat(n.replace(',', '.')) > 0)) return '';
   if (!u) return n === '1' ? '' : n;
   return (n === '1' && !['kg', 'g', 'l', 'ml', 'Pfd'].includes(u) ? '' : n + ' ' + u);
 }
@@ -291,7 +404,7 @@ function toggleP(id) { if (onList(id)) { S.list = S.list.filter(i => !(i.pid ===
 function quickAdd() {
   const due = laterDue(), main = mainProducts(), open = UI.qa;
   const others = PRODUCTS.filter(p => !main.includes(p) && watched(p.id));
-  const rest = PRODUCTS.filter(p => !main.includes(p) && !others.includes(p) && !p.custom);
+  const rest = PRODUCTS.filter(p => !main.includes(p) && !others.includes(p) && !p.custom && !(p.virtual && p.id !== 'fleisch'));
   const shown = open ? main : main.slice(0, 18);
   const fill = open ? [] : others.slice(0, Math.max(0, 10 - shown.length)); // solange die App noch lernt: deine Standard-Favoriten
   const dueChips = due.map(x => `<button class="chip due" onclick="laterToList('${x.id}')" title="Von dir gemerkt, jetzt günstiger">📌 ${esc(x.name)}</button>`).join('');
@@ -340,25 +453,25 @@ function cRow(c) {
   const right = b && !it.done ? `<b>${eur(b.price)}</b><small>${route ? '' : esc(b.store.short)}${b.pct != null ? (route ? '' : ' · ') + `<span class="pc${b.dubious ? ' dub' : ''}">−${Math.round(b.pct * 100)} %</span>` : ''}</small>${saveEur(b) >= 0.05 ? `<small class="sv">spart ${eur(saveEur(b))}</small>` : ''}` : '';
   return `<div class="crow${it.done ? ' done' : ''}${open ? ' open' : ''}${askOpen(id, it) ? ' asking' : ''}${UI.flash && UI.flash.has(id) ? ' flash' : ''}" id="it-${id}" data-id="${id}" onclick="toggleOpen('${id}')">
     <button class="rm" onclick="event.stopPropagation();askDel('${id}')" aria-label="Entfernen">✕</button><span class="chev" aria-hidden="true">▾</span>
-    ${b && b.img ? thumb(b.img, iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
+    ${imgFor(it, b) ? thumb(imgFor(it, b), iconFor(p, it.name), 'xs') : `<span class="em" aria-hidden="true">${iconFor(p, it.name)}</span>`}
     <span class="nm">${esc(it.name)}${it.qty ? ` <span class="mute">${esc(qtyLabel(it.qty))}</span>` : ''}${it.store ? ' <span class="mv" title="Von dir in diesen Laden verschoben">📍</span>' : ''}${it.urgent ? ' <span class="tag t-warn">dringend</span>' : ''}${c.rec ? ` <span class="rec">Empfehlung: ${esc(c.rec)}</span>` : ''}${route && heavy ? (heavyKind(it, p) === 'sperrig' ? ' <span title="sperrig">📦</span>' : ' <span title="schwer">🏋️</span>') : ''}</span>
     <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span>${it.done ? '' : `<button class="star${it.fav ? ' on' : ''}" onclick="event.stopPropagation();toggleFav('${id}')" aria-label="${it.fav ? 'Stern entfernen' : 'Im Blick behalten, in mehreren Läden schauen'}" title="Im Blick behalten">${it.fav ? '★' : '☆'}</button>`}<button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button>${askOv(id, it)}</div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
   const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
-  const tip = !it.done && p ? tipFor(p.id) : null, us = !it.done && p ? (b ? usualBlock(b) : usualBlock(null, false, p)) : '';
-  return `<div class="cdet">${it.store ? `<div class="mvnote">📍 Von dir nach <b>${esc(STORE(it.store).short)}</b> verschoben. <button class="lnk" onclick="moveItem('${id}','auto')">Verschiebung aufheben</button></div>` : ''}<div class="row nowrap" style="gap:10px">${thumb(b && b.img, iconFor(p, it.name), 'md', true)}<div class="grow small">${b
+  const tbl = info ? info.now.filter(x => !(b && x.id === b.id)).slice(0, 5) : [], tip = !it.done && p ? tipFor(p.id) : null, us = !it.done && p ? (b ? usualBlock(b) : usualBlock(null, false, p)) : '';
+  return `<div class="cdet">${it.name.length > 26 ? `<div class="small" style="margin-bottom:6px"><b>${esc(it.name)}</b>${it.qty ? ' · ' + esc(qtyLabel(it.qty)) : ''}</div>` : ''}${it.store ? `<div class="mvnote">📍 Von dir nach <b>${esc(STORE(it.store).short)}</b> verschoben. <button class="lnk" onclick="moveItem('${id}','auto')">Verschiebung aufheben</button></div>` : ''}<div class="row nowrap" style="gap:10px">${thumb(imgFor(it, b), iconFor(p, it.name), 'md', true)}<div class="grow small">${b
     ? `<b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b>${b.up ? ` · ${eur(b.up.v)}/${unitLbl(b.up.base)}` : ''}${b.pct != null ? ` <span class="pct ${b.dubious ? 'dub' : ''}">−${Math.round(b.pct * 100)} %</span>${saveTag(b)}` : ''}${p ? ` <button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}${dec && dec.cls ? ` <span class="tag ${dec.cls}">${dec.tag}</span>` : ''}<div class="mute">${esc(b.name.slice(0, 44))}${b.desc ? ' · ' + esc(b.desc.slice(0, 40)) : ''}</div>`
     : `<span class="mute">${esc(c.note || (pf ? prefNote(pf) : 'Kein aktuelles Angebot bekannt. Normal im City-Center kaufen.'))}</span>`}${c.note && b ? `<div class="mute">${esc(c.note)}</div>` : ''}</div></div>
-    ${dec ? `<div class="small" style="margin-top:6px">${esc(dec.why)}</div>` : !p ? '<div class="small mute" style="margin-top:6px">Noch kein Produkt zugeordnet. Mit 👁 wird es beobachtet und bei der nächsten Suche gefunden.</div>' : ''}
+    ${dec ? `<div class="small" style="margin-top:6px">${esc(dec.why)}</div>` : !p ? '<div class="small mute" style="margin-top:6px">Noch kein Produkt zugeordnet. Mit 👁 wird es ein Favorit und bei der nächsten Suche gefunden.</div>' : ''}
     ${info && info.gourmet && info.gourmet.length ? `<div class="small mute" style="margin-top:6px">🥩 Edelstück im Angebot: ${esc(info.gourmet[0].name.slice(0, 32))} ${eur(info.gourmet[0].price)} bei ${esc(info.gourmet[0].store.short)}${info.gourmet[0].pct != null && !info.gourmet[0].dubious ? ' (−' + Math.round(info.gourmet[0].pct * 100) + ' %)' : ''}</div>` : ''}
     ${us}${tip && !us ? `<div class="small nxt">💡 ${esc(tipText(tip))}</div>` : ''}
     ${!it.done ? nextLine(info ? nextHint(info) : null, `<button class="lnk" onclick="rememberItem('${id}')">📌 für nächste Woche merken</button>`) : ''}
-    ${info && info.now.length ? `<table style="margin-top:6px">${info.now.slice(0, 5).map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
-    ${it.fav ? `<div class="mvnote">★ Im Blick: kein fester Laden. ${c.rec ? 'Empfohlen: <b>' + esc(c.rec) + '</b>. ' : ''}<button class="lnk" onclick="toggleFav('${id}')">Stern entfernen</button></div>` : ''}<div class="row" style="margin-top:8px"><label class="mute"><input type="checkbox" ${it.urgent ? 'checked' : ''} onchange="urgent('${id}')" style="width:auto"> dringend</label><label class="mute"><input type="checkbox" ${itemHeavy(it, p) ? 'checked' : ''} onchange="toggleHeavy('${id}')" style="width:auto"> schwer/sperrig (zuletzt)</label></div>
+    ${tbl.length ? `<table style="margin-top:6px">${tbl.map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
+    ${it.fav ? `<div class="mvnote">★ Im Blick: kein fester Laden. ${c.rec ? 'Empfohlen: <b>' + esc(c.rec) + '</b>. ' : ''}<button class="lnk" onclick="toggleFav('${id}')">Stern entfernen</button></div>` : ''}<div class="row" style="margin-top:8px"><label class="mute"><input type="checkbox" ${it.urgent ? 'checked' : ''} onchange="urgent('${id}')" style="width:auto"> dringend</label><label class="mute"><input type="checkbox" ${itemHeavy(it, p) ? 'checked' : ''} onchange="toggleHeavy('${id}')" style="width:auto"> schwer/sperrig (zuletzt kaufen)</label></div>
     ${it.pid ? `<div class="mute" style="margin-top:8px">Wo kaufst du das normalerweise?</div><div class="chips"><button class="chip ${(S.prefs[it.pid] || (pf || {}).id) ? '' : 'on'}" onclick="setPref('${it.pid}','')">Egal</button>${['dm', 'rewe', 'netto', 'aldi', 'lidl'].map(s => `<button class="chip ${(S.prefs[it.pid] || (pf || {}).id) === s ? 'on' : ''}" onclick="setPref('${it.pid}','${s}')">${STORE(s).short}</button>`).join('')}</div>` : ''}
     <div class="mute" style="margin-top:8px">Heute kaufen bei</div><div class="chips"><button class="chip ${it.store ? '' : 'on'}" onclick="moveItem('${id}','auto')">Automatisch</button>${['rewe', 'netto', 'aldi', 'dm', 'lidl'].map(s => `<button class="chip ${it.store === s ? 'on' : ''}" onclick="moveItem('${id}','${s}')">${STORE(s).short}</button>`).join('')}</div>
-    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Beobachtet' : 'Beobachten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="askDel('${id}')">✕ Entfernen</button></div></div>`;
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="eye('${id}')">👁 ${p && watched(p.id) ? 'Favorit' : 'Zu Favoriten'}</button><button class="btn sm" onclick="rememberItem('${id}')">📌 Nächste Woche</button><button class="btn sm" onclick="repOpen('${id}')">🔁 Wiederkehrend</button><button class="btn sm" onclick="askDel('${id}')">✕ Entfernen</button></div></div>`;
 }
 V.list = () => {
   askBoughtCard();
@@ -378,8 +491,8 @@ V.list = () => {
     <li><b>Abhaken und Fertig:</b> Hake ab, was du hast. Mit „Fertig“ räumt die App es weg und lernt, was du oft kaufst.</li></ol>
     <button class="btn sm" onclick="S.hideHelp=true;save();render()">Verstanden</button></div>`;
   const bkDays = S.lastBackup ? Math.round((TODAY - d0(S.lastBackup)) / 864e5) : 999;
-  const backupBanner = (S.bons.length + Object.keys(S.adds).length >= 5 && bkDays > 30 && !UI.hideBk) ? `<div class="banner info row sp"><span>💾 Deine Daten liegen nur auf diesem Gerät. ${S.lastBackup ? 'Letzte Sicherung vor ' + bkDays + ' Tagen.' : 'Noch keine Sicherung.'}</span><span class="row" style="gap:6px"><button class="btn sm" onclick="exp()">Jetzt sichern</button><button class="ico" onclick="UI.hideBk=true;render()" aria-label="Später">✕</button></span></div>` : '';
-  const sugg = SUGG.map(([k, n], i) => `<div class="banner info row sp"><span>Du kaufst <b>${esc(k.startsWith('n:') ? k.slice(2) : (PROD(k)?.name || k))}</b> oft (${n}×). Beobachten?</span><button class="btn sm" onclick="watchKey(${i})">👁 Ja</button></div>`).join('');
+  const backupBanner = ((S.bons.length >= 1 || Object.keys(S.adds).length >= 5 || S.list.length >= 8) && (!S.lastBackup || bkDays > 14) && !UI.hideBk) ? `<div class="banner info row sp"><span>💾 Deine Daten liegen nur auf diesem Gerät. ${S.lastBackup ? 'Letzte Sicherung vor ' + bkDays + ' Tagen.' : 'Noch keine Sicherung.'} Bon-Fotos sind nicht in der Sicherung.</span><span class="row" style="gap:6px"><button class="btn sm" onclick="exp()">Jetzt sichern</button><button class="ico" onclick="UI.hideBk=true;render()" aria-label="Später">✕</button></span></div>` : '';
+  const sugg = SUGG.map(([k, n], i) => `<div class="banner info row sp"><span>Du kaufst <b>${esc(k.startsWith('n:') ? k.slice(2) : (PROD(k)?.name || k))}</b> oft (${n}×). Zu Favoriten?</span><button class="btn sm" onclick="watchKey(${i})">👁 Ja</button></div>`).join('');
   const kurz = shortSeg();
   const dragTip = (!S.set.noDragTip && open.length >= 2) ? `<div class="banner info row sp nowrap"><span>💡 <b>Tipp:</b> Artikel kurz gedrückt halten und in einen anderen Laden ziehen.</span><button class="ico" onclick="S.set.noDragTip=true;save();render()" aria-label="Tipp schließen">✕</button></div>` : '';
   const head = listHead('🛒 Meine Liste', open.length ? `${open.length} Artikel offen · Reihenfolge wie im Laden` : 'noch leer') + kurz + dragTip;
@@ -390,7 +503,7 @@ V.list = () => {
   const bon = `<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>`;
   // Liste zuerst. Ist sie leer, kommen Anleitung und Schnell-Hinzufügen gleich darunter.
   return open.length
-    ? `${head}${groupsHtml}${plusBtn()}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${topSummary()}`
+    ? `${head}${groupsHtml}${plusBtn()}${shareBtn()}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${topSummary()}`
     : `${head}${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe auf <b>+</b>, um etwas einzutragen, oder wähle ein Hauptprodukt.')}${plusBtn()}${wagen}${topSummary()}`;
 };
 function offersFiltered() {
@@ -410,7 +523,7 @@ function offersBody() {
     const st = t === 'week' ? 'now' : 'next', m = offs.filter(o => o.state === st && o.p).sort(byPct);
     const a = m.filter(o => onList(o.p.id)), b = m.filter(o => !a.includes(o) && watched(o.p.id)), c = m.filter(o => !a.includes(o) && !b.includes(o));
     return `${intro}${t === 'next' ? nextStatusLine() + '<div class="banner info">📌 Tippe bei einem Angebot auf „Merken“. Das Produkt erscheint dann in der Woche, in der es günstiger ist, oben bei „Schnell hinzufügen“ und in deiner Liste.</div>' : ''}${t === 'next' && !m.length ? empty('🗓️', 'Noch keine Angebote für nächste Woche bekannt. Sie erscheinen meist ab Samstag.') : ''}
-    ${a.length ? `<h2>Auf deiner Liste</h2>${grid(a.map(o => offerCard(o)).join(''))}` : ''}${b.length ? `<h2>👁 Beobachtet</h2>${grid(b.map(o => offerCard(o)).join(''))}` : ''}
+    ${a.length ? `<h2>Auf deiner Liste</h2>${grid(lim(a, 30).map(o => offerCard(o)).join(''))}${more(a, 30)}` : ''}${b.length ? `<h2>👁 Deine Favoriten</h2>${grid(lim(b, 30).map(o => offerCard(o)).join(''))}${more(b, 30)}` : ''}
     ${c.length ? `<h2>Weitere Treffer aus deiner Dauerliste</h2>${grid(lim(c, 24).map(o => offerCard(o)).join(''))}${more(c, 24)}` : ''}${t === 'week' && !m.length && w !== 'walk' ? empty('🔎', SRC.live ? none : 'Noch nichts geladen. Tippe oben auf „Angebote suchen".') : ''}`;
   }
   if (t === 'discover') {
@@ -434,17 +547,17 @@ function storeBody() { // alle Angebote eines Ladens, deine Produkte zuerst
   const id = UI.store, st = STORE(id), state = UI.offers === 'next' ? 'next' : 'now', byPct = (x, y) => (y.dubious ? 0 : (y.pct || 0)) - (x.dubious ? 0 : (x.pct || 0));
   const all = offersFiltered().filter(o => o.store.id === id && o.state === state), mine = all.filter(o => o.p && (onList(o.p.id) || watched(o.p.id))).sort(byPct), rest = all.filter(o => !mine.includes(o)).sort(byPct), lim = UI.more ? rest : rest.slice(0, 24);
   return `<div class="banner info">${st.tier === 'A' ? '🏠' : st.tier === 'B' ? '🚶' : '🚗'} <b>${esc(st.name)}</b> · ${all.length} Angebote ${state === 'next' ? 'für nächste Woche' : 'diese Woche'}</div>` +
-    (mine.length ? `<h2>Zu deiner Liste und deinen Favoriten</h2>${grid(mine.map(o => offerCard(o)).join(''))}` : '') +
+    (mine.length ? `<h2>Zu deiner Liste und deinen Favoriten</h2>${grid((UI.more ? mine : mine.slice(0, 30)).map(o => offerCard(o)).join(''))}${!UI.more && mine.length > 30 ? `<div style="text-align:center;margin:10px"><button class="btn" onclick="UI.more=true;renderOffers()">Alle ${mine.length} anzeigen</button></div>` : ''}` : '') +
     (rest.length ? `<h2>Alle Angebote bei ${esc(st.short)}</h2>${grid(lim.map(o => offerCard(o)).join(''))}${!UI.more && rest.length > 24 ? `<div style="text-align:center;margin:10px"><button class="btn" onclick="UI.more=true;renderOffers()">Alle ${rest.length} anzeigen</button></div>` : ''}` : '') +
     (!all.length ? empty('🏷️', state === 'next' ? `Für ${esc(st.short)} sind noch keine Angebote für nächste Woche bekannt.` : `Für ${esc(st.short)} sind gerade keine Angebote geladen.`) : '');
 }
 const renderOffers = () => { const e = $('#olist'); if (e) e.innerHTML = offersBody(); };
 V.watch = () => {
-  return `<div class="banner info">👁 <b>Was ist das?</b> Beobachtete Produkte sind deine Dauerprodukte. Die App prüft sie bei jeder Angebotssuche, auch wenn sie nicht auf deiner Liste stehen, und zeigt dir starke Angebote dafür auf der Startseite. Aktuell beobachtet: <b>${S.watch.length}</b></div>
-  <div class="add"><input id="wn" placeholder="Eigenes Produkt beobachten, z. B. Lachs" onkeydown="if(event.key==='Enter')addCustom()"><button class="btn pri" onclick="addCustom()">+</button></div>
+  return `<div class="banner info">👁 <b>Was ist das?</b> Favoriten sind deine Dauerprodukte. Die App prüft sie bei jeder Angebotssuche, auch wenn sie nicht auf deiner Liste stehen, und zeigt dir starke Angebote dafür auf der Startseite. Favoriten: <b>${S.watch.length}</b></div>
+  <div class="add"><input id="wn" placeholder="Eigenes Produkt als Favorit, z. B. Lachs" onkeydown="if(event.key==='Enter')addCustom()"><button class="btn pri" onclick="addCustom()">+</button></div>
   <div class="add"><input placeholder="Produkte filtern…" value="${esc(UI.wq || '')}" oninput="UI.wq=this.value;$('#wl').innerHTML=watchBody()"></div><div id="wl">${watchBody()}</div>`;
 };
-function watchBody() { const qq = (UI.wq || '').toLowerCase(); return orderCats([...new Set(PRODUCTS.map(p => p.cat))]).map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id) || byUse(a, b)); const line = p => { const i = productInfo(p), b = i.nearBest || i.best; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Nicht mehr beobachten' : 'Beobachten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %${saveEur(b) >= 0.05 ? ' · spart ' + eur(saveEur(b)) : ''}` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
+function watchBody() { const qq = (UI.wq || '').toLowerCase(); return orderCats([...new Set(PRODUCTS.map(p => p.cat))]).map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id) || byUse(a, b)); const line = p => { const i = productInfo(p), b = i.nearBest || i.best; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %${saveEur(b) >= 0.05 ? ' · spart ' + eur(saveEur(b)) : ''}` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
 V.route = () => routeView();
 V.bon = () => bonView();
 function extraBody() {
@@ -479,15 +592,15 @@ V.pro = () => {
     const links = s.id === 'aldi' ? [['Diese Woche', s.links[0][1]], ['Nächste Woche', aldiNext ? 'https://www.aldi-sued.de/angebote/' + aldiNext : s.links[0][1]], ...s.links.slice(1)] : s.links;
     return `<div class="card"><div class="row sp"><b>${esc(s.short)}</b><span class="mute">${now ? '✓ ' + now + ' Angebote in der App' : 'keine Preise in der App'}</span></div>
       ${canNext ? `<div class="mute" style="margin-top:2px">Nächste Woche: ${next ? '✓ ' + next + ' Angebote da' : '⏳ noch nicht veröffentlicht'}</div>` : ''}
-      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px">${links.map(l => `<a class="btn" href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join('')}</div></div>`;
+      <div class="row prolinks" style="margin-top:8px;flex-wrap:wrap;gap:8px">${links.map(l => `<a class="btn" href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join('')}</div></div>`;
   };
   return `<h2>📰 Prospekte</h2><div class="mute" style="margin:0 4px 8px">Die Seiten öffnen sich in deinem Browser. Der Stand zeigt, was die App von dort schon geladen hat.</div>` +
     ['A', 'B', 'D'].map(t => `<h3 style="margin:14px 4px 6px"><i class="dot t${t}"></i> ${TIER_LABEL[t]}</h3>` + STORES.filter(s => s.tier === t && s.links.length).map(card).join('')).join('');
 };
 V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow">Bon fotografieren: Die App liest ihn, lernt, wo du was kaufst, und findet Spartipps.<div class="mute"><button class="lnk" onclick="bonList()">${S.bons.length} Bons gespeichert, ansehen</button> · 📷 Foto-Lesen: ${aiKey() ? '✓ eingerichtet' : 'noch nicht eingerichtet'} <button class="lnk" onclick="aiSheet()">${aiKey() ? 'ändern' : 'einrichten'}</button></div></div><button class="btn pri sm" onclick="go('bon')">📷 Bon</button></div>
   <h2>🎨 Darstellung</h2><div class="card">${SEG(S.set.theme || 'auto', [['auto', 'Automatisch'], ['light', '☀️ Hell'], ['dark', '🌙 Dunkel']], 'setTheme')}<div class="mute small" style="margin-top:6px">Automatisch folgt der Einstellung deines Handys.</div></div>
-  <h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
-  <h2>Datenstand</h2><div class="card"><div>${SRC.live ? `Letzte Suche: <b>${new Date(SRC.fetched).toLocaleString('de-DE')}</b><br><span class="mute">${SRC.offers.length} Angebote · ${esc(SRC.source)}</span>` : 'Noch keine Suche. Tippe oben auf „Angebote suchen".'}</div>
+  ${repeatBlock()}<h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
+  ${storageCard()}<h2>Datenstand</h2><div class="card"><div>${SRC.live ? `Letzte Suche: <b>${new Date(SRC.fetched).toLocaleString('de-DE')}</b><br><span class="mute">${SRC.offers.length} Angebote · ${esc(SRC.source)}</span>` : 'Noch keine Suche. Tippe oben auf „Angebote suchen".'}</div>
   <div class="mute" style="margin-top:8px">Wichtig: Die Angebote sind Händler-weit. Ob genau deine Filiale in Chorweiler mitmacht, wird nicht geprüft. <b>ALDI SÜD</b> kommt direkt von der ALDI-Webseite: ${SRC.aldi && SRC.aldi.ok ? '✓ ' + SRC.aldi.count + ' Produkte geladen' : '⚠ aktuell nicht geladen' + (SRC.aldi && SRC.aldi.error ? ' (' + esc(SRC.aldi.error) + ')' : '') + ', bitte Prospekt-Link bei Läden nutzen'}. Abgedeckt sind REWE, Netto, Lidl, METRO, ALDI und teilweise dm. Penny ist bewusst nicht dabei.</div></div>
   <h2>Läden</h2>${['A', 'B', 'D'].map(t => `<div class="card"><h3><i class="dot t${t}"></i>${TIER_LABEL[t]}</h3>${STORES.filter(s => s.tier === t).map(s => `<details style="margin-top:8px"><summary><b>${esc(s.short)}</b> <span class="mute">${t === 'A' ? '3 Min zu Fuß' : t === 'B' ? s.walk + ' Min zu Fuß' : s.car ? 'ca. ' + s.car + ' Min Auto' : ''}</span></summary><div class="mute" style="padding:6px 0">${esc(s.addr)}<br>Öffnungszeiten: ${esc(s.hours)}${s.transit ? '<br>' + esc(s.transit) : ''}${s.note ? '<br>' + esc(s.note) : ''}</div><div class="row">${s.links.map(l => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join(' · ')}</div></details>`).join('')}</div>`).join('')}
   <h2>Angebot selbst eintragen</h2><div class="card"><div class="fgrid">
@@ -618,8 +731,8 @@ function setPref(pid, store) {
 let FB_T;
 function feedbackText(html, warn) {
   const f = $('#fb'); if (!f) return;
-  f.innerHTML = html; f.className = 'fb' + (warn ? ' warn' : ''); f.hidden = false;
-  clearTimeout(FB_T); FB_T = setTimeout(() => { if (!MIC) f.hidden = true; }, warn ? 10000 : 7000);
+  f.innerHTML = html; f.className = 'fb' + (warn ? ' warn' : ''); f.hidden = false; f.onclick = e => { if (!(e.target.closest && e.target.closest('button,a'))) f.hidden = true; }; // Antippen schließt die Meldung
+  clearTimeout(FB_T); FB_T = setTimeout(() => { if (!MIC) f.hidden = true; }, warn ? 10000 : /<button/.test(html) ? 8000 : 5000);
 }
 function jumpToItem(id) { go('list'); setTimeout(() => { const e = document.getElementById('it-' + id); if (e) e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); }
 function showFeedback(added, dup, favNew = []) {
@@ -633,28 +746,30 @@ function showFeedback(added, dup, favNew = []) {
 }
 const SPLIT = /(?<!\d),|,(?!\d)|;|\n|\.(?:\s+|$)|\s+(?:und|sowie|plus|punkt|komma|weiter|nächstes)\s+|\s+(?:punkt|komma)$/i;
 function addMany(txt) {
-  const parts = txt.split(SPLIT).map(s => s.trim()).filter(Boolean);
+  const parts = txt.split(SPLIT).map(s => Array.from(s.trim().replace(/^(?:(?:und|sowie|plus|dann|noch|auch|bitte|punkt|komma|weiter|nächstes|ähm|äh)\s+)+/i, '').replace(/(?:\s+(?:und|sowie|plus|punkt|komma|bitte|ähm|äh))+$/i, '')).slice(0, 60).join('')).filter(s => /[a-zäöüß]/i.test(s) && !/^(?:und|oder|sowie|plus|punkt|komma|weiter|nächstes|bitte|dann|noch|auch|ähm|äh)$/i.test(s));
   const added = [], dup = [], favNew = [];
   parts.forEach(v => {
     const a = parseAdd(v);
     const g0 = !a.pid && a.name.length >= 3 ? guessFor(a.name) : null; // Meintest-du-Prüfung bevor das Wort als neues Produkt angelegt wird
     if (!a.pid && a.name.length >= 3) a.pid = mkCustom(a.name).id; // frei eingetippte Artikel bekommen ein eigenes Produkt, damit Angebote gefunden werden
-    if (S.list.some(i => !i.done && i.name.toLowerCase() === a.name.toLowerCase())) { dup.push(a.name); return; }
+    const stem = s => { const f = fold(s); return f.length > 4 ? f.replace(/(?:en|n|e|s)$/, '') : f; }; // Möhre = Möhren
+    const same = S.list.find(i => !i.done && stem(i.name) === stem(a.name));
+    if (same) { if (a.qty && same.qty !== a.qty) { same.qty = a.qty; dup.push(a.name + ' (Menge: ' + a.qty + ')'); } else dup.push(a.name); return; } // schon da: eine neue Menge wird übernommen, nicht verschluckt
     const id = uid(); S.list.push({ id, pid: a.pid, name: a.name, qty: a.qty, urgent: false, done: false, t: Date.now() });
     const p = a.pid ? PROD(a.pid) : null;
     const known = !!(p && !p.custom), g = known ? null : g0; if (g) GUESSES[id] = g;
     added.push({ id, name: a.name, qty: a.qty, known, guess: g });
     const fv = noteAdd(a.pid); if (fv) favNew.push(fv);
   });
-  UI.flash = new Set(added.map(x => x.id)); save(); hideSug(); render(); showFeedback(added, dup, favNew); return added.length;
+  UI.flash = new Set(added.map(x => x.id)); save(); hideSug(); render(); showFeedback(added, dup, favNew); return parts.length ? added.length : -1;
 }
 let HEARD_T = 0;
 function heardSet(t) { // „Verstanden: …“ bleibt sichtbar, der Text steht noch kurz im Feld
   const el = $('#ni'), h = $('#heard'); if (!t) return;
-  if (el) { el.value = t; el.classList.add('sent'); clearTimeout(HEARD_T); HEARD_T = setTimeout(() => { if (el.classList.contains('sent')) { el.value = ''; el.classList.remove('sent'); } }, 5000); }
-  if (h) { h.hidden = false; h.innerHTML = '🎤 Verstanden: <b>„' + esc(t) + '“</b>'; }
+  if (el) { el.value = ''; el.classList.remove('sent'); } // das Feld bleibt frei, damit getippter Text nicht an den gesprochenen angehängt wird
+  if (h) { h.hidden = false; h.innerHTML = '🎤 Verstanden: <b>„' + esc(t.length > 90 ? t.slice(0, 87) + '…' : t) + '“</b>'; clearTimeout(HEARD_T); HEARD_T = setTimeout(() => { if (!MIC) h.hidden = true; }, 8000); }
 }
-function addItem() { const el = $('#ni'); if (!el) return; if (el.classList.contains('sent')) { el.value = ''; el.classList.remove('sent'); return; } if (!el.value.trim()) return; addMany(el.value); el.value = ''; el.focus(); }
+function addItem() { const el = $('#ni'); if (!el) return; if (el.classList.contains('sent')) { el.value = ''; el.classList.remove('sent'); return; } if (!el.value.trim()) return; if (addMany(el.value) === -1) { feedbackText('Kein Produkt erkannt. Schreibe zum Beispiel „Milch“.', true); return; } el.value = ''; el.focus(); }
 let MIC = false, REC = null, MIC_STOP = false, MIC_IDLE = 0;
 function micUi() {
   const b = $('#micb'); if (b) { b.textContent = MIC ? '⏹' : '🎤'; b.classList.toggle('danger', MIC); }
@@ -695,7 +810,7 @@ function nextHint(info) {
   const cheaper = (nb.up && b.up && nb.up.base === b.up.base) ? nb.up.v < b.up.v * 0.9 : nb.price < b.price * 0.9;
   return cheaper ? { o: nb, why: 'Nächste Woche günstiger' } : null;
 }
-const nextLine = (nh, extra = '') => nh ? `<div class="small nxt">📅 ${esc(nh.why)}: <b>${eur(nh.o.price)}</b> bei ${esc(nh.o.store.short)} (ab ${fmtD(nh.o.valid[0])}) ${extra}</div>` : '';
+const nextLine = (nh, extra = '') => nh ? `<div class="small nxt">📅 ${esc(nh.why)}: <b>${eur(nh.o.price)}</b>${nh.o.up ? ' (' + eur(nh.o.up.v) + ' / ' + unitLbl(nh.o.up.base) + ')' : ''} bei ${esc(nh.o.store.short)} (ab ${fmtD(nh.o.valid[0])}) ${extra}</div>` : '';
 const NEXT_STORES = ['netto', 'rewe', 'lidl', 'aldi']; // Läden, die überhaupt Prospektdaten liefern
 function nextStatus() { const all = OFFERS_ALL(); return NEXT_STORES.map(id => ({ s: STORE(id), n: all.filter(o => o.store.id === id && o.state === 'next').length })); }
 const nextBadge = () => { const st = nextStatus(); return st.filter(x => x.n > 0).length + '/' + st.length; };
@@ -780,7 +895,7 @@ function topSummary() {
   const habit = dedupe(offs.filter(o => o.p && (freq(o.p) > 0 || watched(o.p.id)) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, 8);
   const top = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= 0.3 && !near.includes(o)).sort(byPct)).slice(0, 8);
   const sec = (title, sub, a) => a.length ? `<h2>${title}</h2><div class="mute" style="margin:-4px 4px 8px">${sub}</div><div class="hs">${a.map(o => offerCard(o)).join('')}</div>` : '';
-  return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Beobachtete und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', 'Ab 30 % Ersparnis, auch bei Lidl (Spaziergang)', top);
+  return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', 'Ab 30 % Ersparnis, auch bei Lidl (Spaziergang)', top);
 }
 const byId = id => S.list.find(i => i.id === id);
 const tick = id => { const i = byId(id); if (!i) return; i.done = !i.done; shortCheckEnd(); save(); render(); };
@@ -789,19 +904,19 @@ const toggleHeavy = id => { const i = byId(id); if (!i) return; i.heavy = !itemH
 const toggleFav = id => { const i = byId(id); if (!i) return; if (i.fav) delete i.fav; else i.fav = true; save(); render(); toast(i.fav ? '★ ' + i.name + ' im Blick: steht oben, ohne Laden' : i.name + ' wieder bei seinem Laden'); };
 const urgent = id => { const i = byId(id); if (!i) return; i.urgent = !i.urgent; save(); render(); };
 const toggleOpen = id => { if (typeof DRAG !== 'undefined' && Date.now() - DRAG.t < 500) return;  UI.open.has(id) ? UI.open.delete(id) : UI.open.add(id); render(); };
-function mkCustom(name) { let c = S.custom.find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) { c = { id: 'c_' + uid(), name }; S.custom.push(c); regCustom(c); CACHE = null; } return c; }
-function eye(id) { const i = byId(id); if (!i) return; if (!i.pid) { const c = mkCustom(i.name); i.pid = c.id; if (!watched(c.id)) S.watch.push(c.id); toast('„' + i.name + '" wird jetzt beobachtet. Bei der nächsten Suche werden Angebote gesucht.'); } else watchP(i.pid, true); save(); render(); }
+function mkCustom(name) { name = Array.from(String(name).replace(/\s+/g, ' ').trim()).slice(0, 60).join(''); let c = S.custom.find(x => fold(x.name) === fold(name)); /* Käse = Kaese = käse */ if (!c) { c = { id: 'c_' + uid(), name }; S.custom.push(c); regCustom(c); CACHE = null; } return c; }
+function eye(id) { const i = byId(id); if (!i) return; if (!i.pid) { const c = mkCustom(i.name); i.pid = c.id; if (!watched(c.id)) S.watch.push(c.id); toast('„' + i.name + '" ist jetzt ein Favorit. Bei der nächsten Suche werden Angebote gesucht.'); } else watchP(i.pid, true); save(); render(); }
 function watchP(id, noRender) { S.watch = watched(id) ? S.watch.filter(x => x !== id) : [...S.watch, id]; save(); if (!noRender) { render(); } }
-function addCustom() { const v = $('#wn').value.trim(); if (!v) return; const c = mkCustom(v); if (!watched(c.id)) S.watch.push(c.id); save(); render(); toast('„' + v + '" wird beobachtet. Tippe oben auf „Angebote suchen".'); }
+function addCustom() { const v = $('#wn').value.trim(); if (!v) return; const c = mkCustom(v); if (!watched(c.id)) S.watch.push(c.id); save(); render(); toast('„' + v + '" ist jetzt ein Favorit. Tippe oben auf „Angebote suchen".'); }
 function watchKey(i) { const k = SUGG[i][0]; if (k.startsWith('n:')) { const c = mkCustom(k.slice(2)); if (!watched(c.id)) S.watch.push(c.id); } else if (!watched(k)) S.watch.push(k); S.buys[k] = 0; save(); render(); }
 function finish() { S.list.filter(i => i.done).forEach(i => { const k = i.pid || 'n:' + i.name.toLowerCase(); S.buys[k] = (S.buys[k] || 0) + 1; if (i.pid) noteRec(i.pid, isoDay(TODAY)); }); S.list = S.list.filter(i => !i.done); shortCheckEnd();
   const auto = [];
-  Object.entries(S.buys).forEach(([k, n]) => { // was du oft kaufst, wird automatisch dauerhaft beobachtet
+  Object.entries(S.buys).forEach(([k, n]) => { // was du oft kaufst, wird automatisch zum Favorit
     if (n < 3) return; let id = k;
     if (k.startsWith('n:')) { id = mkCustom(k.slice(2)).id; S.buys[id] = n; delete S.buys[k]; }
     if (!watched(id)) { S.watch.push(id); const p = PROD(id); if (p) auto.push(p.name); }
   });
-  save(); render(); toast(auto.length ? 'Erledigtes weggeräumt. Neu im Beobachten: ' + auto.join(', ') : 'Erledigtes weggeräumt. Die App lernt daraus.'); }
+  save(); render(); toast(auto.length ? 'Erledigtes weggeräumt. Neu bei den Favoriten: ' + auto.join(', ') : 'Erledigtes weggeräumt. Die App lernt daraus.'); }
 function addOffer() {
   const name = $('#mn').value.trim(), price = parseFloat($('#mp').value); if (!name || !(price > 0)) return alert('Produkt und Preis nötig.');
   const o = { id: 'm' + Date.now(), store: $('#ms').value, name, price, regular: parseFloat($('#mr').value) || null, amount: parseFloat($('#ma').value) || null, unit: $('#mu').value || null, valid: [new Date().toISOString().slice(0, 10), $('#mv').value || '2999-01-01'], manual: true };
@@ -821,10 +936,13 @@ function imp(el) {
   const f = el.files[0]; el.value = ''; if (!f) return;
   f.text().then(t => {
     let j; try { j = JSON.parse(t); } catch (e) { return alert('Das ist keine gültige Sicherungsdatei.'); }
-    const n = sanitize(j && j.app === 'intelligente-einkaufsliste' && j.daten ? j.daten : j);
+    const mine = j && j.app === 'intelligente-einkaufsliste' && j.daten, alt = !mine && j && Array.isArray(j.list) && Array.isArray(j.bons) && j.watch !== undefined; // alt = Sicherung einer älteren Version ohne Kennung
+    if (!mine && !alt) return alert('Das ist keine Sicherung dieser App. Bitte nur Dateien nehmen, die du hier mit „Exportieren“ erstellt hast.');
+    const n = sanitize(mine ? j.daten : j);
     if (!n.list.length && !n.bons.length && !Object.keys(n.adds).length && !n.custom.length) return alert('In dieser Datei habe ich keine Einkaufsdaten gefunden.');
-    if (!confirm(`Diese Daten übernehmen?\n\n${n.list.length} Artikel auf der Liste\n${n.bons.length} gespeicherte Bons\n${n.watch.length} beobachtete Produkte\n\nDas ersetzt die Daten auf diesem Gerät.`)) return;
-    S = n; S.custom.forEach(regCustom); repairRefs(); CACHE = null; save(); render(); feedbackText('✓ Daten importiert.');
+    if (!confirm(`Diese Daten übernehmen?\n\n${n.list.length} Artikel auf der Liste\n${n.bons.length} gespeicherte Bons\n${n.watch.length} Favoriten\n\nDas ersetzt die Daten auf diesem Gerät. Der jetzige Stand wird vorher als Kopie aufgehoben.`)) return;
+    try { if (!localStorage.getItem(LS + '.vorImport')) localStorage.setItem(LS + '.vorImport', JSON.stringify({ t: Date.now(), daten: S })); } catch (e) { return alert('Die Sicherheitskopie des jetzigen Stands konnte nicht angelegt werden (Speicher voll). Der Import wurde abgebrochen. Mach zuerst eine Sicherung (⬆ Exportieren).'); } // die älteste Kopie bleibt erhalten
+    UI.undo = null; UI.undoMove = null; S = n; S.custom.forEach(regCustom); repairRefs(); CACHE = null; if (!save()) return; render(); feedbackText('✓ Daten importiert.');
   }).catch(() => alert('Die Datei konnte nicht gelesen werden.'));
 }
 const setOff = k => { UI.offers = k; UI.more = false; render(); };
@@ -878,7 +996,8 @@ function render() {
 }
 function go(k, back) { if (!back && k !== cur && cur !== 'bon') { if (NAV[NAV.length - 1] !== cur) NAV.push(cur); if (NAV.length > 20) NAV.shift(); } cur = k; try { history.replaceState(history.state, '', '#' + k); } catch (e) { location.hash = k; } dockClose(); render(); scrollTo(0, 0); }
 repairRefs();
-loadOffers().then(render); render(); bonQueueInit();
+bonRemapOld(); repeatCheck(); loadOffers().then(render); render(); bonQueueInit();
+if (window.LOAD_BAD) setTimeout(() => feedbackText(window.LOAD_BAD === 'kopie' ? '⚠ Deine gespeicherten Daten waren beschädigt. Eine Kopie zur Rettung ist gesichert (Mehr → Gerettete Daten exportieren). Bitte melde dich bei mir, bevor du viel Neues einträgst.' : '⚠ Deine gespeicherten Daten waren beschädigt, und es konnte keine Kopie gesichert werden. Bitte trag nichts Neues ein und melde dich bei mir.', true), 700);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => { }); // Offline-Speicher
   navigator.serviceWorker.addEventListener('message', e => { if (e.data === 'update') feedbackText('🔄 Neue Version der App geladen. <button class="lnk" onclick="location.reload()">Jetzt neu laden</button>'); });
@@ -887,7 +1006,9 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 // Beim Zurückkehren in die App (z. B. am nächsten Tag oder im Laden): Datum aktualisieren, Angebote neu laden, wenn der Stand älter als 3 Stunden ist
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
+  syncFromStorage();
   bqRun();
   const n = d0(new Date()); if (+n !== +TODAY) { TODAY = n; CACHE = null; }
+  repeatCheck();
   if (MODE !== 'server' && Date.now() - LAST_LOAD > 3 * 3600e3) loadOffers().then(render); else render();
 });
