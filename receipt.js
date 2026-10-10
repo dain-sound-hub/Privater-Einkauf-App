@@ -114,10 +114,10 @@ function bonRemapOld() { // „Lamm / Kalb / Ente“ ist in Lamm, Kalb, Ente und
   for (const b of S.bons) for (const it of b.items || []) if (it.pid === 'lammkalb') { const x = { kind: 'item', name: it.n || '' }; matchBonItem(x); if (x.pid && x.pid !== 'lammkalb') { it.pid = x.pid; ch = true; } }
   if (ch) save();
 }
-function onBonOf(it) { // erledigter Artikel, der auf einem Bon der letzten 7 Tage steht (nur Bons, die nach dem Eintragen gekauft wurden)
+function onBonOf(it) { // erledigter (abgehakter) Artikel, der auf einem Bon der letzten 14 Tage steht; er muss vor dem Einlesen des Bons auf der Liste gestanden haben
   if (!it.done) return null; const now = Date.now();
   for (const b of S.bons) {
-    if (b.du) continue; const ts = bonTs(b.date, b.time, b.saved); if ((now - ts) / 864e5 > 7 || addedAfter(it, ts)) continue;
+    if (b.du) continue; const ts = bonTs(b.date, b.time, b.saved); if ((now - ts) / 864e5 > 14 || addedAfter(it, Math.max(ts, b.saved || 0))) continue;
     const hit = bonMatchList(it, b.items.map(i => ({ name: i.n, pid: i.pid }))); if (hit) return { store: b.store, date: b.date, name: hit.name };
   }
   return null;

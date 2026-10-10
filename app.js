@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 114, t: '10.10. 19:51' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 115, t: '10.10. 19:56' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
