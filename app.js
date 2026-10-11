@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 115, t: '10.10. 19:56' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 119, t: '11.10. 10:30' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -15,17 +15,17 @@ function sanitize(x) {
   const idOk = v => typeof v === 'string' && /^[\w-]{1,40}$/.test(v);
   const num = (v, d) => Number.isFinite(+v) && +v > 0 ? +v : d;
   const dateOk = v => { if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false; const d = new Date(v + 'T12:00:00'); return !isNaN(d) && d.getFullYear() >= 2000 && d.getFullYear() <= 2100 && d.toISOString().slice(0, 10) === v; }; // echter Kalendertag (kein 31.02.)
-  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10), minDay = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10); // älter als ca. 400 Tage = vermutlich falsch gelesenes Jahr
   const str = (v, n) => (typeof v === 'string' || typeof v === 'number') ? String(v).slice(0, n) : ''; // Objekte und Listen werden nicht zu "[object Object]"
   const numOr = (v, d) => ((typeof v === 'number') || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(+v) ? +v : d; // null und leer sind keine 0
   const uniq = a => { const seen = new Set(); return a.map(x => { if (seen.has(x.id)) x = { ...x, id: Math.random().toString(36).slice(2, 10) }; seen.add(x.id); return x; }); }; // doppelte IDs bekommen eine neue
   const set = (o.set && typeof o.set === 'object') ? o.set : {};
   return {
-    hideHelp: !!o.hideHelp,
+    hideHelp: !!o.hideHelp, remapV: Number.isFinite(+o.remapV) ? +o.remapV : 0,
     list: uniq(arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: str(i.name, 80), qty: str(i.qty, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}), ...(i.fav ? { fav: true } : {}), ...(STORES.some(s => s.id === i.store) ? { store: i.store } : {}), ...(numOr(i.pos, null) !== null ? { pos: +i.pos } : {}), ...(Number.isFinite(+i.t) && +i.t > 0 ? { t: Math.min(+i.t, Date.now()) } : {}) })).filter(i => i.name.trim())).slice(0, 1000),
     repeat: uniq(arr(o.repeat).filter(r => r && idOk(r.id) && typeof r.name === 'string' && r.name.trim() && [1, 2, 4].includes(+r.every) && Number.isInteger(+r.dow) && +r.dow >= 0 && +r.dow <= 6 && dateOk(r.anchor)).slice(0, 50).map(r => ({ id: r.id, name: r.name.slice(0, 60), qty: str(r.qty, 20), pid: idOk(r.pid) ? r.pid : null, every: +r.every, dow: +r.dow, anchor: r.anchor, last: dateOk(r.last) && r.last <= today ? r.last : '' }))),
     ask: arr(o.ask).filter(x => x && typeof x === 'object' && idOk(x.id)).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i).slice(0, 30).map(x => ({ id: x.id, name: str(x.name, 80), qty: str(x.qty, 20), bon: str(x.bon, 80) })),
-    bons: uniq(arr(o.bons).filter(b => b && typeof b === 'object' && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: dateOk(b.date) && b.date <= today ? b.date : today, store: String(b.store).slice(0, 20), total: numOr(b.total, null), items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: numOr(i.p, 0), pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null), b: String(i.b ?? '').slice(0, 30) })), ...(b.partial || b.items.length > 120 ? { partial: true } : {}), ...(b.du || !(dateOk(b.date) && b.date <= today) ? { du: true } : {}), // du = Datum war ungültig: zählt nicht für „Schon gekauft?“ und Standard
+    bons: uniq(arr(o.bons).filter(b => b && typeof b === 'object' && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: dateOk(b.date) && b.date <= today ? b.date : today, store: String(b.store).slice(0, 20), total: numOr(b.total, null), items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: numOr(i.p, 0), pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null), b: String(i.b ?? '').slice(0, 30) })), ...(b.partial || b.items.length > 120 ? { partial: true } : {}), ...(b.du || !(dateOk(b.date) && b.date <= today) || b.date < minDay ? { du: true } : {}), // du = Datum war ungültig: zählt nicht für „Schon gekauft?“ und Standard
     ...(/^\d{1,2}:\d{2}$/.test(String(b.time ?? '')) ? { time: b.time } : {}), ...(Number.isFinite(+b.saved) && +b.saved > 0 ? { saved: +b.saved } : {}) }))),
     aliases: Object.fromEntries(Object.entries(o.aliases && typeof o.aliases === 'object' && !Array.isArray(o.aliases) ? o.aliases : {}).filter(([k, v]) => k.length <= 60 && idOk(v)).slice(0, 400)),
     lastBackup: dateOk(o.lastBackup) && o.lastBackup <= today ? o.lastBackup : '', short: { on: !!(o.short && o.short.on), view: o.short && o.short.view === 'all' ? 'all' : 'short', later: arr(o.short && o.short.later).filter(idOk), known: arr(o.short && o.short.known).filter(idOk) }, rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
@@ -36,7 +36,7 @@ function sanitize(x) {
     watch: Array.isArray(o.watch) ? o.watch.filter(idOk) : DEF.watch.slice(),
     custom: arr(o.custom).filter(c => c && idOk(c.id) && typeof c.name === 'string' && c.name.trim()).slice(0, 500).map(c => ({ id: c.id, name: c.name.slice(0, 80) })),
     manual: arr(o.manual).filter(m => m && typeof m === 'object' && typeof m.name === 'string' && Number(m.price) > 0 && STORES.some(s => s.id === m.store) && Array.isArray(m.valid) && dateOk(m.valid[0]) && dateOk(m.valid[1])).map(m => ({ id: String(m.id ?? 'm' + Date.now()).slice(0, 40), store: m.store, name: m.name.slice(0, 80), price: Number(m.price), regular: num(m.regular, null), amount: num(m.amount, null), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(m.unit) ? m.unit : null, valid: [m.valid[0], m.valid[1]], manual: true })),
-    hist: arr(o.hist).filter(h => h && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })),
+    hist: arr(o.hist).filter(h => h && (!dateOk(h.date) || h.date >= minDay) && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })),
     buys: Object.fromEntries(Object.entries(o.buys && typeof o.buys === 'object' && !Array.isArray(o.buys) ? o.buys : {}).filter(([k, n]) => k.length <= 90 && Number.isFinite(+n) && +n >= 0).slice(0, 3000).map(([k, n]) => [k, +n])),
     set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20), noDragTip: !!set.noDragTip, theme: ['light', 'dark'].includes(set.theme) ? set.theme : 'auto' }
   };
@@ -171,7 +171,9 @@ function cleanOffers(list) {
     }
     idx.set(k, out.length); out.push(c);
   }
-  return { offers: out, bad, dup };
+  const dated = /-\d{4}-\d{2}-\d{2}$/, perm = new Map(out.filter(o => !dated.test(o.id)).map(o => [o.id + '|' + o.price, o]));
+  const keep = out.filter(o => { const d = dated.test(o.id) && perm.get(o.id.replace(dated, '') + '|' + o.price); if (!d) return true; dup++; return !(o.valid[0] >= d.valid[0] && o.valid[1] <= d.valid[1]); });
+  return { offers: keep, bad, dup };
 }
 async function loadOffers() {
   let j = null, offline = false; LAST_LOAD = Date.now();
@@ -194,7 +196,11 @@ function unitPrice(o, p) {
     return n ? { v: o.price / n, base: 'st' } : null;
   }
   const base = o.base || (p && p.base) || null;
-  if (o.unitPrice) return { v: o.unitPrice, base: base || 'kg' };
+  if (o.unitPrice) { // stimmt der Grundpreis der Quelle nicht annähernd zu Preis und Menge (1 €/l statt 26 €/l), wird er neu gerechnet; glatte Mehrfachpackungen (4 x 75 ml) sind in Ordnung
+    const a = o.amount, u = o.unit, mm = { g: [0.001, 'kg'], kg: [1, 'kg'], ml: [0.001, 'l'], l: [1, 'l'] }[u];
+    if (a && mm && (!base || base === mm[1])) { const own = o.price / (a * mm[0]), r = o.unitPrice / own, inv = 1 / r, multi = x => Math.abs(Math.round(x) - x) < 0.04 && Math.round(x) >= 2 && Math.round(x) <= 24; if ((r > 2.5 || r < 0.4) && !multi(r) && !multi(inv)) return { v: own, base: mm[1] }; }
+    return { v: o.unitPrice, base: base || 'kg' };
+  }
   if (!o.amount || !o.unit) return null;
   const a = o.amount, u = o.unit;
   if (u === 'g') return { v: o.price / (a / 1000), base: 'kg' };
@@ -218,7 +224,7 @@ function saveEur(o) {
   return null;
 }
 const saveTag = o => { const s = saveEur(o); return s != null && s >= 0.05 ? ` <span class="sv">spart ${eur(s)}</span>` : ''; };
-const COMPOUND_CATS = new Set(['Obst & Gemüse', 'Milchprodukte']); // „Paprika-Chips“, „Bananen-Haarspange“: vorne steht nur die Zutat
+const COMPOUND_CATS = new Set(['Obst & Gemüse', 'Milchprodukte', 'Drogerie & Gesundheit']); // „Paprika-Chips“, „Bananen-Haarspange“: vorne steht nur die Zutat
 const FB_NOISE = /gelee|schokolad|zartbitter|praline|bonbon|gummi|haar|pflege|dekor|spange|vase|topf|fußmatte|nektar|saft|smoothie|joghurt|quark|riegel|kuchen|keks|reise|hotel|urlaub|kreuzfahrt|flug|zwerge|quetschie|quetschbeutel|eis\b|spielzeug|plüsch|puppe/i;
 const customOk = (o, q) => o.food !== false && !FB_NOISE.test(stripOwn(q, o.name + ' ' + (o.cats || ''))) && (o.food === true || new RegExp('(?<![a-zäöüß])' + q.name.toLowerCase().slice(0, 4).replace(/[^a-zäöüß0-9]/g, '') + (q.name.length < 4 ? '(?![a-zäöüß])' : ''), 'i').test(o.name + ' ' + (o.cats || '')));
 const CAN_RX = /\bdosen|\bdose\b|konserve|\bgl(?:as|äser)\b|in stücken|stückig|geschält|tiefkühl|\btk\b|tiefgefror|eingelegt|getrocknet|passiert|gurkentopf|in scheiben|in saft|in sirup|abtropf|\bstücke\b|salz-dill|essig|gewürzgurk|cornichon|tiefgekühl/i; // Dose, Glas, Tiefkühl: kein Frischprodukt
@@ -247,12 +253,13 @@ function inferQty(o, p) {
   }
   return Object.keys(out).length ? out : null;
 }
-const HEAD_CATS = new Set(['Obst & Gemüse', 'Milchprodukte', 'Öle & Grundnahrung', 'Getränke']);
+const SHELF_RX = /\/produkte\/(?:konserven|tiefkuehl)/i; // ALDI nennt das Regal in der Adresse der Produktseite
+const HEAD_CATS = new Set(['Obst & Gemüse', 'Milchprodukte', 'Öle & Grundnahrung', 'Getränke', 'Drogerie & Gesundheit']);
 function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
   const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p) { const cands = [], nameSrc = o.store === 'aldi' ? o.name.split(',')[0] : o.name; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = q.custom ? (o.store === 'aldi' ? o.name.split(',')[0] : o.name) : HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; const nz = x => q.custom ? stripOwn(q, x) : x; if (window.NOISE_RX && NOISE_RX.test(nz(m.index < (o.store === 'aldi' && src === head ? o.name.split(',')[0].length : o.name.length) ? o.name : text))) continue; /* Sperrwort zählt nur dort, wo das Produktwort steht: im Namen (ganz) oder, wenn nur die Kategorie trifft, Name und Kategorie */ if (q.custom && (o.food === false || FB_NOISE.test(nz(text)))) continue; if (q.animal && animalClash(q, o.name)) continue; if (COMPOUND_CATS.has(q.cat)) { const rest = src.slice(m.index + m[0].length); if (/^-[A-Za-zÄÖÜäöü]/.test(rest) && !/^-(?:rispe|mix|netz|schale|trio|duo|pack|beutel|auswahl)/i.test(rest)) continue; } /* „Tomaten-Dip“ ist keine Tomate, „Tomaten-Rispe“ schon */ const inName = rx(q).test(HEAD_CATS.has(q.cat) ? nameSrc : o.name); if (q.cat === 'Obst & Gemüse' && (CAN_RX.test(text) || (!inName && CLAIM_RX.test(o.name)))) continue; cands.push({ q, l: m[0].length, inName }); }
+  if (!p) { const cands = [], nameSrc = o.store === 'aldi' ? o.name.split(',')[0] : o.name; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = q.custom ? (o.store === 'aldi' ? o.name.split(',')[0] : o.name) : HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; const nz = x => q.custom ? stripOwn(q, x) : x; if (window.NOISE_RX && NOISE_RX.test(nz(m.index < (o.store === 'aldi' && src === head ? o.name.split(',')[0].length : o.name.length) ? o.name : text))) continue; /* Sperrwort zählt nur dort, wo das Produktwort steht: im Namen (ganz) oder, wenn nur die Kategorie trifft, Name und Kategorie */ if (q.custom && (o.food === false || FB_NOISE.test(nz(text)))) continue; if (q.animal && animalClash(q, o.name)) continue; if (COMPOUND_CATS.has(q.cat)) { const rest = src.slice(m.index + m[0].length); if (/^-[A-Za-zÄÖÜäöü]/.test(rest) && !/^-(?:rispe|mix|netz|schale|trio|duo|pack|beutel|auswahl|set)/i.test(rest)) continue; } /* „Tomaten-Dip“ ist keine Tomate, „Tomaten-Rispe“ schon */ const inName = rx(q).test(HEAD_CATS.has(q.cat) ? nameSrc : o.name); if (q.cat === 'Obst & Gemüse' && (CAN_RX.test(text) || SHELF_RX.test(o.src || '') || (!inName && CLAIM_RX.test(o.name)))) continue; cands.push({ q, l: m[0].length, inName }); }
     const longest = a => a.reduce((b, c) => (!b || c.l > b.l ? c : b), null); const pool = cands.some(c => c.inName && c.q.cat !== 'Obst & Gemüse') ? cands.filter(c => c.q.cat !== 'Obst & Gemüse') : cands; let best = longest(pool); /* Obst im Namen eines Milchprodukts ist nur der Geschmack (Fruchtkefir Erdbeere) */
     if (best && !best.inName) { const nm = longest(pool.filter(c => c.inName)); if (nm && !(best.q.group && best.q.group.includes(nm.q.id)) && !(nm.q.group && nm.q.group.includes(best.q.id))) best = nm; } /* trifft nur ein Wort aus der Kategorie, schlägt ein anderes Produkt aus dem Namen (Lenor Waschmittel ist kein Color-Waschmittel) */
     if (best) p = best.q; }
@@ -278,7 +285,7 @@ function enrich(o) {
   const gourmet = !!(p && p.meat && !POULTRY_RX.test(o.name) && (GOURMET_RX.test(o.name) || (up && up.base === 'kg' && up.v > 22))); // Edelstück (Steak, Filet …) oder über 22 €/kg: nur Zusatzinfo
   return { ...o, p, store, up, pct, kind, dubious, bulk, state, daysLeft: Math.round((to - TODAY) / 864e5), excluded, gourmet };
 }
-const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|kissen|gefäß|deko|spielzeug|plüsch|kerze|schuh|haustier|futter|whiskas|dreamies|felix|knusper|(?:^|[^a-zäöüß])(?:hund|katze)|(?:decke|korb|körbe|figur)n?(?![a-zäöüß])|holz(?:figur|deko|brett)|picker|salat|pasta|nudel|wrap|sandwich|\bcup\b|soup|suppe|maggi|pastete|wiener|hot ?dog|aspik|sülze|nugget|cordon|spezialität|ofenschale|menü|menu|backwelt|\bteller\b|frikadelle|gebacken|gegart|aufschnitt|panier|high protein|hälse|geräuchert|gebraten|gekocht|gepökelt|(?:leber|herz(?:en)?|nieren?|zungen?|mägen|magen)(?![a-zäöüß])|innerei|bouillon|\bfond\b|extrakt|feinkost|fertig/i;
+const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|kissen|gefäß|deko|spielzeug|plüsch|kerze|schuh|haustier|futter|whiskas|dreamies|felix|knusper|(?:^|[^a-zäöüß])(?:hund|katze)|(?:decke|korb|körbe|figur)n?(?![a-zäöüß])|holz(?:figur|deko|brett)|picker|salat|pasta|nudel|wrap|sandwich|\bcup\b|soup|suppe|maggi|pastete|wiener|hot ?dog|aspik|sülze|nugget|cordon|spezialität|ofenschale|menü|menu|backwelt|\bteller\b|frikadelle|gebacken|gegart|aufschnitt|panier|high protein|hälse|geräuchert|gebraten|gekocht|gepökelt|(?:leber|herz(?:en)?|nieren?|zungen?|mägen|magen)(?![a-zäöüß])|innerei|bouillon|fond\b|extrakt|feinkost|fertig/i;
 const POULTRY_RX = /hähn|hühn|\bpute|\bputen|chicken|geflügel/i; // Geflügel ist alltäglich, auch als Filet oder Steak
 const ANIMALS = { haehnchen: /hähn|hühn|huhn|chicken|geflügel/i, pute: /\bpute|\bputen/i, rind: /\brind|jungbull|\bbulle|\bochs/i, schwein: /schwein/i, lamm: /\blamm/i, kalb: /\bkalb/i, ente: /\benten?(?![a-zäöü])|\bgans\b|\bgänse(?:brust|keule|braten)/i, wild: /hirsch[a-zäöü-]*(?:gulasch|braten|keule|rücken|steak|filet|fleisch|ragout|hack)|\bwild(?:fleisch|gulasch|braten|schwein|ragout|keule|rücken|hack)|vom wild\b|\breh(?:rücken|keule|gulasch)/i };
 const animalClash = (q, name) => { const hit = Object.keys(ANIMALS).filter(a => ANIMALS[a].test(name)); const mine = q.animal.split('|'); return hit.length > 0 && (!hit.some(a => mine.includes(a)) || (hit.length > 1 && hit.some(a => !mine.includes(a)))); }; // eine andere Tierart im Namen schlägt das Teilstück (Kalbs-Tafelspitz ist kein Rind, Hähnchen-Hack kein gemischtes Hack)
@@ -506,8 +513,10 @@ V.list = () => {
     ? `${head}${groupsHtml}${plusBtn()}${shareBtn()}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${topSummary()}`
     : `${head}${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe auf <b>+</b>, um etwas einzutragen, oder wähle ein Hauptprodukt.')}${plusBtn()}${wagen}${topSummary()}`;
 };
+const SEARCH_CATS = { fleisch: 'Fleisch', frischfleisch: 'Fleisch', obst: 'Obst & Gemüse', gemüse: 'Obst & Gemüse', gemuese: 'Obst & Gemüse', milchprodukte: 'Milchprodukte', getränke: 'Getränke', getraenke: 'Getränke', drogerie: 'Drogerie & Gesundheit', haushalt: 'Haushalt & Wäsche' }; // ein ganzes Rubrik-Wort sucht die ganze Rubrik („Fleisch“ = alles Fleisch zum Braten, nicht nur Hackfleisch)
 function offersFiltered() {
-  const q = UI.q.toLowerCase().trim(); return OFFERS_ALL().filter(o => !q || (o.name + ' ' + (o.desc || '') + ' ' + o.store.short + ' ' + (o.p ? o.p.name : '')).toLowerCase().includes(q));
+  const q = UI.q.toLowerCase().trim(), cat = SEARCH_CATS[q]; if (cat) return OFFERS_ALL().filter(o => o.p && o.p.cat === cat);
+  return OFFERS_ALL().filter(o => !q || (o.name + ' ' + (o.desc || '') + ' ' + o.store.short + ' ' + (o.p ? o.p.name : '')).toLowerCase().includes(q));
 }
 // Angebote nach Entfernung getrennt: Vor Ort (City-Center) · Spaziergang (Lidl) · Mit dem Auto (Großmarkt)
 const WHERE = { local: ['A'], walk: ['B'], car: ['C', 'D'] };
@@ -996,7 +1005,7 @@ function render() {
 }
 function go(k, back) { if (!back && k !== cur && cur !== 'bon') { if (NAV[NAV.length - 1] !== cur) NAV.push(cur); if (NAV.length > 20) NAV.shift(); } cur = k; try { history.replaceState(history.state, '', '#' + k); } catch (e) { location.hash = k; } dockClose(); render(); scrollTo(0, 0); }
 repairRefs();
-bonRemapOld(); repeatCheck(); loadOffers().then(render); render(); bonQueueInit();
+bonRemapOld(); repeatCheck(); loadOffers().then(() => { bonRemapOld(true); render(); }); render(); bonQueueInit();
 if (window.LOAD_BAD) setTimeout(() => feedbackText(window.LOAD_BAD === 'kopie' ? '⚠ Deine gespeicherten Daten waren beschädigt. Eine Kopie zur Rettung ist gesichert (Mehr → Gerettete Daten exportieren). Bitte melde dich bei mir, bevor du viel Neues einträgst.' : '⚠ Deine gespeicherten Daten waren beschädigt, und es konnte keine Kopie gesichert werden. Bitte trag nichts Neues ein und melde dich bei mir.', true), 700);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => { }); // Offline-Speicher

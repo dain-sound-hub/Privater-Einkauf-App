@@ -12,3 +12,6 @@ server.js
 # Sonstiges
 node_modules/
 *.log
+
+# private Testdaten (echte Bon-Zeilen)
+tests/privat/

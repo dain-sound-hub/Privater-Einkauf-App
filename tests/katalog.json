@@ -1,0 +1,576 @@
+{
+  "hinweis": "Test-Katalog der Einkaufs-App. angebote = Angebotsname (+ optional cats, desc, preis, menge/einheit, grundpreis/basis, laden, hinweis) -> erwartet = Produkt-ID oder null (kein Produkt). bons = Zeile vom Kassenbon. eingaben = getippter Text. Optional: grundpreis_erwartet (\"12.83/kg\"), preis_erwartet, stueck_erwartet, menge_erwartet. offen:true = bekannter, noch nicht behobener Fall. Jeder gefundene Fehler wird hier ein neuer Eintrag (mit grund).",
+  "angebote": [
+    {
+      "name": "Bärenmarke Frische Milch",
+      "cats": "Bärenmarke H-Milch frische Milch",
+      "erwartet": "milch"
+    },
+    {
+      "name": "Alpenmilch 3,5 % 1 l",
+      "erwartet": "milch",
+      "grund": "Vorsilbe vor Milch"
+    },
+    {
+      "name": "Landmilch 1 l",
+      "erwartet": "milch"
+    },
+    {
+      "name": "CHOCEUR Milch Maus Adventskalendar 140 g",
+      "erwartet": null,
+      "grund": "Schokolade ist keine Milch"
+    },
+    {
+      "name": "CHOCEUR Nussknacker Vollmilch 100 g",
+      "erwartet": null,
+      "grund": "Liter-Produkt in Gramm ist keine Milch"
+    },
+    {
+      "name": "Alpenmilch Schokolade 100 g",
+      "erwartet": null
+    },
+    {
+      "name": "Fruchtkefir Erdbeere 500 g",
+      "erwartet": "kefir",
+      "grund": "Obst im Namen eines Milchprodukts ist nur Geschmack"
+    },
+    {
+      "name": "REWE Bio Tomaten in Stücken",
+      "cats": "REWE Bio Tomatenstücke",
+      "erwartet": null,
+      "grund": "Dose/in Stücken ist kein Frischprodukt"
+    },
+    {
+      "name": "ORO DI PARMA Tomaten",
+      "cats": "Dosentomaten Oro di Parma",
+      "erwartet": null
+    },
+    {
+      "name": "Heidelbeeren tiefgekühlt",
+      "erwartet": null
+    },
+    {
+      "name": "Schlichting Salz-Dill Gurken 250 g",
+      "cats": "Gurken",
+      "erwartet": null
+    },
+    {
+      "name": "Spreewaldhof Unser Gurkentopf",
+      "cats": "Spreewaldhof Gurken",
+      "erwartet": null
+    },
+    {
+      "name": "Cocktail Rispentomaten",
+      "cats": "Rispentomaten",
+      "erwartet": "tomaten"
+    },
+    {
+      "name": "REWE Bio Rote Bio Tafeläpfel",
+      "cats": "Bio Äpfel Tafeläpfel",
+      "erwartet": "apfel",
+      "grund": "Treffer aus der Kategorie, wenn der Name nichts anderes sagt"
+    },
+    {
+      "name": "Pfanni Speisekartoffeln Unsere Besten",
+      "cats": "Pfanni vorwiegend festkochende Kartoffel Speisekartoffeln Speisezwiebeln festkochende Kartoffeln",
+      "erwartet": null,
+      "grund": "Name nennt anderes Gemüse (Kartoffel), Kategorie-Wort Zwiebel zählt nicht"
+    },
+    {
+      "name": "BON-RI Basmati Reis 1 kg",
+      "erwartet": "basmati"
+    },
+    {
+      "name": "BON-RI Jasmin Reis 1 kg",
+      "erwartet": "reis"
+    },
+    {
+      "name": "reis-fit Mediterran",
+      "cats": "Basmati Reis Reis-Fit",
+      "erwartet": null,
+      "grund": "Reis-Fertigmischung"
+    },
+    {
+      "name": "Tress Brüder Bio Indisches Curry",
+      "cats": "Tress Vegan Bio Reis",
+      "erwartet": null
+    },
+    {
+      "name": "Thomy Reines Sonnenblumenöl",
+      "erwartet": "bratoel"
+    },
+    {
+      "name": "Mazola Keimöl",
+      "cats": "Keimöl Mazola",
+      "erwartet": "bratoel"
+    },
+    {
+      "name": "BERTOLLI Olivenöl 500 ml, Cucina",
+      "erwartet": "salatoel"
+    },
+    {
+      "name": "RAPSO Rapsöl",
+      "erwartet": "salatoel"
+    },
+    {
+      "name": "Lenor Waschmittel Pulver",
+      "cats": "Lenor Waschpulver Colorwaschmittel",
+      "erwartet": "wm_uni",
+      "grund": "Name schlägt Kategorie-Wort"
+    },
+    {
+      "name": "WEISSER RIESE Waschmittel XXL, Color Gel",
+      "erwartet": "wm_bunt",
+      "grund": "Farbwort nach dem Komma (ALDI-Schreibweise)"
+    },
+    {
+      "name": "TANDIL Feinwaschmittel 1,5 l, Sport 37 WL",
+      "erwartet": null
+    },
+    {
+      "name": "Lenor Weichspüler",
+      "cats": "Weichspüler Lenor",
+      "erwartet": "weichspueler"
+    },
+    {
+      "name": "KOKETT Feuchtes Toilettenpapier",
+      "erwartet": null
+    },
+    {
+      "name": "KOKETT Toilettenpapier 3-lagig, 10 x 220 Blatt",
+      "erwartet": "toilettenpapier",
+      "stueck_erwartet": 10
+    },
+    {
+      "name": "Rumpsteak 180 g",
+      "erwartet": "rindersteak"
+    },
+    {
+      "name": "Lammkoteletts 180 g",
+      "erwartet": "lamm"
+    },
+    {
+      "name": "Kalbs-Tafelspitz",
+      "erwartet": "kalb",
+      "grund": "Tierart im Namen schlägt Teilstück"
+    },
+    {
+      "name": "Herta Putenbrust 100 g",
+      "erwartet": null,
+      "grund": "Aufschnitt unter 200 g"
+    },
+    {
+      "name": "Bresaola 80 g",
+      "erwartet": null
+    },
+    {
+      "name": "Hähnchenherzen",
+      "erwartet": null,
+      "grund": "Innereien"
+    },
+    {
+      "name": "Rinderzungen",
+      "erwartet": null
+    },
+    {
+      "name": "Hirschbräu",
+      "erwartet": null
+    },
+    {
+      "name": "Gänseschmalz",
+      "erwartet": null
+    },
+    {
+      "name": "Hirschedelgulasch",
+      "erwartet": "wild"
+    },
+    {
+      "name": "Hackfleisch vom Rind und Schwein",
+      "erwartet": "gemhack"
+    },
+    {
+      "name": "Hähnchen-Innenfilet 400 g",
+      "erwartet": "haehnchenbrust"
+    },
+    {
+      "name": "MEINE METZGEREI Halbes Hähnchen gewürzt 750 g",
+      "erwartet": "haehnchen",
+      "grund": "Sperrwort braucht Wortende (gewürzt ist nicht Gewürz)"
+    },
+    {
+      "name": "Hähnchen-Brustfilet-Roulade",
+      "desc": "bis zu 20g PROTEIN pro 100g",
+      "menge": 150,
+      "einheit": "g",
+      "erwartet": null,
+      "grund": "Nährwertangabe ist keine Preisangabe"
+    },
+    {
+      "name": "Bürgermeisterstück vom Jungbullen",
+      "desc": "Deutschland vakuumverpackt ca. 700 g",
+      "preis": 1.19,
+      "menge": 700,
+      "einheit": "g",
+      "grundpreis": 11.9,
+      "basis": "kg",
+      "laden": "netto",
+      "erwartet": "rind",
+      "preis_erwartet": 8.33,
+      "grund": "Theke: Preis je 100 g wird auf das Gewicht umgerechnet"
+    },
+    {
+      "name": "Rinderbraten Dicker Bug",
+      "desc": "Vak.-verp., ca. 4-5-kg-Stücke 10 kg Je kg",
+      "preis": 12.83,
+      "menge": 10,
+      "einheit": "kg",
+      "laden": "metro",
+      "erwartet": "rinderbraten",
+      "grundpreis_erwartet": "12.83/kg",
+      "grund": "Metro: Preis gilt je kg"
+    },
+    {
+      "name": "Volvic Naturelle",
+      "desc": "Mineralwasser 6 x 1,5-l-Fl.-Pckg. zzgl. 1.50 Pfand",
+      "preis": 4.49,
+      "menge": 1.5,
+      "einheit": "l",
+      "grundpreis": 0.5,
+      "basis": "l",
+      "laden": "rewe",
+      "erwartet": "wasser",
+      "grundpreis_erwartet": "0.5/l",
+      "cats": "Mineralwasser Volvic Mineralwasser still"
+    },
+    {
+      "name": "MILSANI Frische Milch 1,5 % 1 l, fettarm",
+      "preis": 0.85,
+      "erwartet": "milch",
+      "grundpreis_erwartet": "0.85/l",
+      "grund": "Größe steht im Namen (ALDI)"
+    },
+    {
+      "name": "PERSIL Gel Universalwaschmittel 20 WL",
+      "preis": 6.75,
+      "erwartet": "wm_uni",
+      "stueck_erwartet": 20
+    },
+    {
+      "name": "Zespri Kiwi grün",
+      "desc": "Neuseeland Kl. I Stück",
+      "preis": 0.44,
+      "laden": "netto",
+      "erwartet": "kiwi",
+      "stueck_erwartet": 1
+    },
+    {
+      "name": "Gut Ponholz Hähnchen Brustfilet",
+      "desc": "Holzfäller-Tradition",
+      "erwartet": "haehnchenbrust",
+      "grund": "Kurzwort holz nur als Wortteil gesperrt, nicht in Eigennamen"
+    },
+    {
+      "name": "EURODONT Zahnbürsten-Aufsätze, Sonic",
+      "erwartet": null,
+      "grund": "Bindestrich-Anhang = anderes Produkt (Zubehör), auch bei Drogerie"
+    },
+    {
+      "name": "LACURA Premium Kollagenpulver 250 g, Neutral+Vitamin C",
+      "erwartet": null,
+      "grund": "ALDI: hinter dem Komma nur Sorte, gilt auch für Drogerie"
+    },
+    {
+      "name": "MEINE METZGEREI Hähnchen Ministeaks 800 g",
+      "erwartet": "haehnchenbrust",
+      "grund": "Mini-Steak/Schnitzel = Brust"
+    },
+    {
+      "name": "MEINE METZGEREI Puten-Ministeaks 400 g",
+      "erwartet": "putenbrust"
+    },
+    {
+      "name": "BBQ Hähnchensteaks, mariniert, 550 g, Rote Paprika",
+      "erwartet": "haehnchenbrust"
+    },
+    {
+      "name": "Balea Handcreme Ginseng & Green Mandarin",
+      "laden": "dm",
+      "preis": 1.95,
+      "menge": 0.075,
+      "einheit": "l",
+      "grundpreis": 1,
+      "basis": "l",
+      "erwartet": "handcreme",
+      "grundpreis_erwartet": "26/l",
+      "grund": "Grundpreis der Quelle passt nicht zu Preis und Menge"
+    },
+    {
+      "name": "Colgate Zahnpasta",
+      "desc": "Je 4x75 ml",
+      "preis": 4.99,
+      "menge": 75,
+      "einheit": "ml",
+      "grundpreis": 16.63,
+      "basis": "l",
+      "erwartet": "zahnpasta",
+      "grundpreis_erwartet": "16.63/l",
+      "grund": "Gegenprobe: glatte Mehrfachpackung bleibt wie die Quelle"
+    },
+    {
+      "name": "KING'S CROWN Datterini Tomaten 2 x 220 g",
+      "quelle": "https://www.aldi-sued.de/produkte/konserven-fertiggerichte/k/1",
+      "erwartet": null,
+      "grund": "Regal Konserve ist kein Frischprodukt"
+    },
+    {
+      "name": "Gemüse Mix",
+      "quelle": "https://www.aldi-sued.de/produkte/tiefkuehlung/k/1",
+      "erwartet": null,
+      "grund": "Regal Tiefkühl ist kein Frischgemüse"
+    }
+  ],
+  "bons": [
+    {
+      "zeile": "BIO TOMATEN",
+      "erwartet": "tomaten"
+    },
+    {
+      "zeile": "TOMATEN GESCHAELT",
+      "erwartet": null
+    },
+    {
+      "zeile": "PASS.TOMATEN",
+      "erwartet": null
+    },
+    {
+      "zeile": "TOMATEN STUECKE",
+      "erwartet": null
+    },
+    {
+      "zeile": "GEWUERZGURKEN",
+      "erwartet": null
+    },
+    {
+      "zeile": "KALBSLEBER",
+      "erwartet": null
+    },
+    {
+      "zeile": "KALBSLEBERWURST",
+      "erwartet": null
+    },
+    {
+      "zeile": "PUTENBRUST AUFSCHNITT 100G",
+      "erwartet": null
+    },
+    {
+      "zeile": "PUTENBRUST 500G",
+      "erwartet": "putenbrust"
+    },
+    {
+      "zeile": "HAEHNCHENBRUST 150G",
+      "erwartet": null
+    },
+    {
+      "zeile": "SONNENBLUMENOEL",
+      "erwartet": "bratoel",
+      "grund": "OE statt ö auf dem Bon"
+    },
+    {
+      "zeile": "HAEHNCHEN SCHENKEL",
+      "erwartet": "haehnchenschenkel"
+    },
+    {
+      "zeile": "HACKFL.GEM.",
+      "erwartet": "gemhack",
+      "grund": "Abkürzung"
+    },
+    {
+      "zeile": "RI.HACK",
+      "erwartet": "rinderhack"
+    },
+    {
+      "zeile": "BIO HACKFLEISCH",
+      "erwartet": "gemhack",
+      "grund": "Wort vor Hackfleisch (Marke/Bio)"
+    },
+    {
+      "zeile": "COLORWASCHM.",
+      "erwartet": "wm_bunt"
+    },
+    {
+      "zeile": "SCHWARZ WASCHMITTEL",
+      "erwartet": "wm_dunkel"
+    },
+    {
+      "zeile": "BAUERNMILCH",
+      "erwartet": "milch"
+    },
+    {
+      "zeile": "FRISCHE VOLLMILCH 1L",
+      "erwartet": "milch"
+    },
+    {
+      "zeile": "KERRYGOLD BUTTER",
+      "erwartet": "butter"
+    },
+    {
+      "zeile": "BUTTERMILCH",
+      "erwartet": "buttermilch"
+    },
+    {
+      "zeile": "MILCH-REIS",
+      "erwartet": null
+    },
+    {
+      "zeile": "BASMATI REIS",
+      "erwartet": "basmati"
+    },
+    {
+      "zeile": "REIS",
+      "erwartet": "reis"
+    },
+    {
+      "zeile": "APFELESSIG",
+      "erwartet": null
+    },
+    {
+      "zeile": "BIO",
+      "erwartet": null
+    },
+    {
+      "zeile": "MILKA SCHOKO",
+      "erwartet": null
+    },
+    {
+      "zeile": "TOMATEN-DIP",
+      "erwartet": null
+    },
+    {
+      "zeile": "RINDERHACK-SOSSE",
+      "erwartet": null
+    },
+    {
+      "zeile": "HAEHNCHENINNEREIEN 500G",
+      "erwartet": null
+    },
+    {
+      "zeile": "WEISSES WASCHMITTEL",
+      "erwartet": "wm_weiss"
+    },
+    {
+      "zeile": "FRISCHMILCH",
+      "erwartet": "milch"
+    },
+    {
+      "zeile": "RINDERBOUIL.",
+      "erwartet": null,
+      "grund": "Abgekürztes Sperrwort am Wortende"
+    },
+    {
+      "zeile": "PUTE.AUFSCHN.",
+      "erwartet": null,
+      "grund": "Abgekürztes Sperrwort (Aufschnitt)"
+    },
+    {
+      "zeile": "RINDERFOND",
+      "erwartet": null,
+      "grund": "Sperrwort am Ende eines zusammengesetzten Worts"
+    },
+    {
+      "zeile": "LAYS PAPRIKA",
+      "erwartet": null,
+      "grund": "Marke vor Gemüsewort = Sorte (kein Frischgemüse)"
+    },
+    {
+      "zeile": "PRINGLES PAPRIKA",
+      "erwartet": null
+    },
+    {
+      "zeile": "HELA TOMATEN",
+      "erwartet": null
+    },
+    {
+      "zeile": "BUTTER-MANDEL-STOLLEN",
+      "erwartet": null,
+      "grund": "Bindestrich-Sperre auch für Milchprodukte"
+    },
+    {
+      "zeile": "GEROLSTEIN NAT.",
+      "erwartet": "wasser",
+      "grund": "Gekürzter Markenname aus kwBon"
+    },
+    {
+      "zeile": "BITTER LEMON",
+      "erwartet": null
+    },
+    {
+      "zeile": "RIND.ROULADE",
+      "erwartet": "rind",
+      "grund": "darf nicht kaputtgehen (rind. ist kein Sperrwort)"
+    },
+    {
+      "zeile": "SPAN.TOMATEN",
+      "erwartet": "tomaten",
+      "grund": "darf nicht kaputtgehen: Herkunfts-Abkürzung"
+    },
+    {
+      "zeile": "ZESPRI KIWI GOLD",
+      "erwartet": "kiwi",
+      "grund": "darf nicht kaputtgehen: Frischmarke aus Angeboten gelernt"
+    },
+    {
+      "zeile": "PAPRIKA ROT",
+      "erwartet": "paprika"
+    },
+    {
+      "zeile": "GALA APFEL",
+      "erwartet": "apfel",
+      "offen": true,
+      "grund": "Sorte vor Obst: wird nur noch nicht zugeordnet (unsicher statt falsch); Sorte hinter dem Obst bleibt erkannt"
+    },
+    {
+      "zeile": "APFEL ELSTAR",
+      "erwartet": "apfel"
+    }
+  ],
+  "eingaben": [
+    {
+      "text": "2 Milch",
+      "erwartet": "milch",
+      "menge_erwartet": "2"
+    },
+    {
+      "text": "0 Milch",
+      "erwartet": "milch",
+      "menge_erwartet": "",
+      "grund": "0 ist keine Menge"
+    },
+    {
+      "text": "Milch 2x",
+      "erwartet": "milch",
+      "menge_erwartet": "2"
+    },
+    {
+      "text": "ein halbes Kilo Butter",
+      "erwartet": "butter",
+      "menge_erwartet": "0,5 kg"
+    },
+    {
+      "text": "1 kg Hackfleisch",
+      "erwartet": "gemhack",
+      "menge_erwartet": "1 kg"
+    },
+    {
+      "text": "Hähnchen",
+      "erwartet": "haehnchen"
+    },
+    {
+      "text": "Käse",
+      "erwartet": null
+    },
+    {
+      "text": "Möhren",
+      "erwartet": null
+    }
+  ]
+}

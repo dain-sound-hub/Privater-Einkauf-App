@@ -1,0 +1,68 @@
+// Prüfskript: lässt den Test-Katalog gegen die echte Zuordnungslogik der App laufen (ohne Browser, ohne Agenten).
+// Aufruf:  node tests/pruefen.js            (Katalog + privater Katalog, falls vorhanden)
+//          node tests/pruefen.js --alle     (zusätzlich: alle echten Angebote aus offers.json auflisten, die keinem Produkt zugeordnet sind – nur zur Ansicht)
+// Nur für die Entwicklung. Wird nicht ins App-Hosting hochgeladen.
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const root = path.join(__dirname, '..');
+
+// Ein „alles-schluckendes“ Platzhalter-Objekt für Browser-Teile (document, window.addEventListener …), damit app.js ohne Browser laden kann
+const stub = () => new Proxy(function () { }, {
+  get: (t, k) => k === Symbol.toPrimitive ? () => '' : k === 'then' ? undefined : k === 'length' ? 0 : k === Symbol.iterator ? function* () { } : stub(),
+  apply: () => stub(), construct: () => stub(), set: () => true
+});
+const mem = new Map();
+const sb = {
+  console, setTimeout, clearTimeout, setInterval: () => 0, clearInterval: () => { }, Date, Math, JSON, Promise, Intl, URL, Set, Map, RegExp, Array, Object, String, Number, Boolean, Error, parseInt, parseFloat, isNaN, isFinite, encodeURIComponent, decodeURIComponent,
+  document: stub(), navigator: { onLine: true, language: 'de-DE', userAgent: 'node' }, history: { replaceState() { }, state: null }, innerHeight: 800, innerWidth: 375, scrollY: 0, scrollX: 0, pageYOffset: 0, devicePixelRatio: 1,
+  location: { protocol: 'http:', hash: '', href: 'http://localhost/', origin: 'http://localhost', pathname: '/' },
+  localStorage: { getItem: k => mem.has(k) ? mem.get(k) : null, setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k) },
+  fetch: async u => { const f = path.join(root, String(u).split('?')[0]); if (!fs.existsSync(f)) return { ok: false, status: 404, json: async () => ({}), text: async () => '' }; const t = fs.readFileSync(f, 'utf8'); return { ok: true, status: 200, json: async () => JSON.parse(t), text: async () => t }; },
+  addEventListener() { }, removeEventListener() { }, requestAnimationFrame: f => 0, scrollTo() { }, scrollBy() { }, getSelection: stub, matchMedia: () => ({ matches: false, addEventListener() { } }), alert() { }, confirm: () => false, prompt: () => null
+};
+sb.window = sb; sb.self = sb; sb.globalThis = sb;
+vm.createContext(sb);
+const load = f => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sb, { filename: f });
+let loadErr = null;
+for (const f of ['data.js', 'route.js', 'receipt.js', 'extras.js', 'app.js']) { try { load(f); } catch (e) { loadErr = f + ': ' + e.message; break; } }
+if (loadErr) { console.error('FEHLER beim Laden der App-Dateien:', loadErr); process.exit(2); }
+
+(async () => {
+  await new Promise(r => setTimeout(r, 400)); // Angebote werden asynchron geladen
+  const run = c => vm.runInContext(c, sb);
+  sb.__t = {};
+  const offerCase = c => { sb.__t.o = { store: c.laden || 'aldi', name: c.name, desc: c.desc || '', cats: c.cats || '', price: c.preis || 2, valid: ['2026-10-05', '2999-01-01'], ...(c.menge ? { amount: c.menge, unit: c.einheit } : {}), ...(c.grundpreis ? { unitPrice: c.grundpreis, base: c.basis } : {}), ...(c.hinweis ? { note: c.hinweis } : {}), ...(c.quelle ? { src: c.quelle } : {}) }; return run('(() => { const e = enrich(__t.o); return { pid: e.p ? e.p.id : null, up: e.up ? +e.up.v.toFixed(2) + "/" + e.up.base : null, price: e.price, count: e.count || null }; })()'); };
+  const bonCase = c => { sb.__t.b = c.zeile; return run('(() => { S.aliases = {}; const x = { kind: "item", name: __t.b, price: 1, qty: 1 }; matchBonItem(x); return { pid: x.pid || null }; })()'); };
+  const inputCase = c => { sb.__t.i = c.text; return run('(() => { const a = parseAdd(__t.i); return { pid: a.pid || null, name: a.name, qty: a.qty }; })()'); };
+
+  const files = [path.join(__dirname, 'katalog.json')];
+  const priv = path.join(__dirname, 'privat'); if (fs.existsSync(priv)) fs.readdirSync(priv).filter(f => f.endsWith('.json')).forEach(f => files.push(path.join(priv, f)));
+  let ok = 0, bad = 0; const fails = [], openN = [];
+  for (const f of files) {
+    if (!fs.existsSync(f)) continue; const cat = JSON.parse(fs.readFileSync(f, 'utf8'));
+    for (const [kind, fn] of [['angebote', offerCase], ['bons', bonCase], ['eingaben', inputCase]]) for (const c of cat[kind] || []) {
+      let r; try { r = fn(c); } catch (e) { r = { pid: 'FEHLER ' + e.message }; }
+      const exp = c.erwartet === undefined ? null : c.erwartet, gotOk = r.pid === exp && (c.grundpreis_erwartet === undefined || r.up === c.grundpreis_erwartet) && (c.menge_erwartet === undefined || r.qty === c.menge_erwartet) && (c.preis_erwartet === undefined || r.price === c.preis_erwartet) && (c.stueck_erwartet === undefined || r.count === c.stueck_erwartet);
+      if (c.offen) { openN.push(`${c.name || c.zeile || c.text}: ${gotOk ? 'JETZT RICHTIG (Eintrag "offen" entfernen)' : 'noch offen'}`); continue; } if (gotOk) ok++; else { bad++; fails.push(`${path.basename(f)} [${kind}] „${c.name || c.zeile || c.text}“ → erhalten ${JSON.stringify(r)}, erwartet ${JSON.stringify({ pid: exp, ...(c.grundpreis_erwartet !== undefined ? { up: c.grundpreis_erwartet } : {}), ...(c.preis_erwartet !== undefined ? { price: c.preis_erwartet } : {}), ...(c.stueck_erwartet !== undefined ? { count: c.stueck_erwartet } : {}), ...(c.menge_erwartet !== undefined ? { qty: c.menge_erwartet } : {}) })}${c.grund ? ' (' + c.grund + ')' : ''}`); }
+    }
+  }
+  console.log(`${ok} von ${ok + bad} Fällen richtig.`);
+  fails.forEach(x => console.log('  ✗ ' + x));
+  if (openN.length) { console.log('Bekannt offen:'); openN.forEach(x => console.log('  · ' + x)); }
+  const bi = process.argv.indexOf('--bon');
+  if (bi > 0) { // Bon-Text aus Datei einlesen und anzeigen, was die App daraus macht (Laden, Datum, Artikel, Zuordnung)
+    sb.__t.txt = fs.readFileSync(process.argv[bi + 1], 'utf8');
+    const out = run('(() => { S.aliases = {}; const b = parseReceipt(__t.txt); return { store: b.store, date: b.date, time: b.time, total: b.total, sum: bonSum(b.items.map(i => ({ ...i, include: true }))), items: b.items.map(i => [i.kind, i.name, i.qty, i.price, i.pid || "-", i.how || ""].join(" | ")), skipped: b.skipped }; })()');
+    console.log('\nBon:', out.store, out.date, out.time, 'Summe laut Bon', out.total, 'Positionen zusammen', out.sum); out.items.forEach(x => console.log('  ' + x)); if (out.skipped.length) console.log('  übersprungen:', out.skipped.join(' / '));
+  }
+  const ei = process.argv.indexOf('--export');
+  if (ei > 0) { // Exportdatei der App (Mehr → Sichern) laden und zeigen: Bons mit unsicherem Datum, Neu-Zuordnung alter Bons, Doppelte
+    sb.__t.exp = JSON.parse(fs.readFileSync(process.argv[ei + 1], 'utf8')).daten;
+    const out = run('(() => { S = sanitize(__t.exp); S.custom.forEach(regCustom); const before = S.bons.map(b => b.items.map(i => i.pid)); S.remapV = 0; bonRemapOld(true); return { bons: S.bons.map((b, k) => ({ date: b.date, store: b.store, du: !!b.du, n: b.items.length, geaendert: b.items.map((i, j) => before[k][j] !== i.pid ? i.n + ": " + before[k][j] + " -> " + i.pid : null).filter(Boolean) })), hist: S.hist.length }; })()');
+    console.log('\nExport: ' + out.bons.length + ' Bons, Historie ' + out.hist + ' Einträge'); out.bons.forEach(b => console.log('  ' + b.date + ' ' + b.store + (b.du ? ' (Datum unplausibel → zählt nicht)' : '') + ', ' + b.n + ' Artikel' + (b.geaendert.length ? ', neu zugeordnet: ' + b.geaendert.join('; ') : '')));
+  }
+  if (process.argv.includes('--alle')) {
+    const list = run('SRC.offers.map(enrich).filter(o => !o.p && o.state !== "expired" && !o.excluded && o.pct != null && o.pct >= 0.25 && o.food).map(o => o.store.short + " | " + o.name + " | -" + Math.round(o.pct * 100) + " %")');
+    console.log(`\nStarke Angebote ohne Produkt (Ansicht, kein Fehler): ${list.length}`); list.slice(0, 40).forEach(x => console.log('  · ' + x));
+  }
+  process.exit(bad ? 1 : 0);
+})();

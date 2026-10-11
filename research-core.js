@@ -16,8 +16,8 @@ async function fetchTerm(term, page) {
 }
 function parseUnit(pb) { // z. B. "(3.96 / kg)", "1 kg = 5.95", "EUR 99,5 / 1 l", "(1 kg = € 37.44)"
   if (!pb) return null;
-  const nums = [...pb.matchAll(/\d+[.,]\d+|\d+/g)].map(x => x[0]);
-  const dec = nums.find(n => /[.,]/.test(n)) || nums[nums.length - 1];
+  const ms = [...pb.matchAll(/\d+[.,]\d+|\d+/g)];
+  const pick = ms.find(m => /[.,]/.test(m[0])) || ms.find(m => !/^\s?(?:kg|g|ml|l|liter|stk|stück)\b/i.test(pb.slice(m.index + m[0].length))) || ms[ms.length - 1], dec = pick && pick[0]; // eine Zahl direkt vor der Einheit („1 l“) ist nie der Preis
   let v = parseFloat(String(dec).replace(',', '.')); if (!isFinite(v)) return null;
   const base = /\bkg\b/i.test(pb) ? 'kg' : /\b(l|liter)\b/i.test(pb) ? 'l' : /stück|\bst\b/i.test(pb) ? 'st' : /\bg\b/i.test(pb) ? 'kg' : /\bml\b/i.test(pb) ? 'l' : null;
   if (!base) return null;

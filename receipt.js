@@ -18,9 +18,10 @@ function detectStore(t) {
 function detectDateAt(lines) { // gibt Datum und die Zeile zurück, aus der es kam
   const idx = [...lines.map((l, i) => /datum|date/i.test(l) ? i : -1).filter(i => i >= 0), ...lines.map((l, i) => i)];
   const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
-  const real = (y, mo, d) => { // echter Kalendertag (kein 31.02.), ab 2020, nicht nach heute
+  const minIso = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
+  const real = (y, mo, d) => { // echter Kalendertag (kein 31.02.), ab 2020, nicht nach heute, nicht älter als ca. 400 Tage
     if (y < 2020 || y > 2100) return null; const iso = y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0'), x = new Date(iso + 'T12:00:00');
-    return !isNaN(x) && x.toISOString().slice(0, 10) === iso && iso <= today ? iso : null;
+    return !isNaN(x) && x.toISOString().slice(0, 10) === iso && iso <= today && iso >= minIso ? iso : null;
   };
   for (const i of idx) {
     const l = lines[i]; let m = l.match(/(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})\b/);
@@ -108,10 +109,18 @@ function bonComplete(b) {
   if (b.total != null) return Math.abs(bonSum(b.items) - b.total) < 0.015;
   return null;
 }
-function bonRemapOld() { // „Lamm / Kalb / Ente“ ist in Lamm, Kalb, Ente und Wild geteilt: alte Bon-Artikel neu zuordnen
+function bonRemapOld(full) { // „Lamm / Kalb / Ente“ ist in Lamm, Kalb, Ente und Wild geteilt: alte Bon-Artikel neu zuordnen
   let ch = false;
   for (const k of Object.keys(S.aliases)) if (S.aliases[k] === 'lammkalb') { delete S.aliases[k]; ch = true; }
   for (const b of S.bons) for (const it of b.items || []) if (it.pid === 'lammkalb') { const x = { kind: 'item', name: it.n || '' }; matchBonItem(x); if (x.pid && x.pid !== 'lammkalb') { it.pid = x.pid; ch = true; } }
+  if (full && S.remapV !== APP_BUILD.v) {
+    for (const b of S.bons) for (const it of b.items || []) {
+      const x = { kind: 'item', name: it.n || '' }; matchBonItem(x); if ((x.how !== 'erkannt' && !(x.how === 'gelernt' && !it.pid)) || !x.pid || x.pid === it.pid) continue; // ein gelernter Alias füllt eine leere Zuordnung, überschreibt aber nie eine vorhandene
+      const old = it.pid ? PROD(it.pid) : null;
+      if (!old || (old.group && old.group.includes(x.pid))) { it.pid = x.pid; it.b = bonBrand(it.n, PROD(x.pid)); ch = true; }
+    }
+    S.remapV = APP_BUILD.v; ch = true; TIPS = null;
+  }
   if (ch) save();
 }
 function onBonOf(it) { // erledigter (abgehakter) Artikel, der auf einem Bon der letzten 14 Tage steht; er muss vor dem Einlesen des Bons auf der Liste gestanden haben
@@ -132,9 +141,9 @@ const bonSchreib = s => String(s).toLowerCase().replace(/(?<![aeqg])ue/g, 'ü').
   .replace(/\bhackfl\.\s*/g, 'hackfleisch ').replace(/\bgem\./g, 'gemischt').replace(/\bgeschn?\.(?=\s|$)/g, 'geschält').replace(/\bgetr\.(?=\s|$)/g, 'getrocknet').replace(/\bri\.(?=\s*hack)/g, 'rinder').replace(/\bhähn?ch\.(?=\s|$)/g, 'hähnchen').replace(/\bputenbr\./g, 'putenbrust').replace(/\bpass\.\s*/g, 'passierte ').replace(/waschm\./g, 'waschmittel');
 // gleiche Sperren wie bei den Angeboten: Dose/Glas/Tiefkühl bei Obst und Gemüse, Aufschnitt/Innereien/andere Tierart/Gramm bei Fleisch
 function bonBlocked(p, n, m) {
-  if (p.cat === 'Obst & Gemüse') {
-    if (CAN_RX.test(n)) return true;
-    const rest = n.slice(m.index + m[0].length); if (/^-[a-zäöü]/.test(rest) && !/^-(?:rispe|mix|netz|schale|trio|duo|pack|beutel|auswahl)/.test(rest)) return true;
+  if (COMPOUND_CATS.has(p.cat)) {
+    if (p.cat === 'Obst & Gemüse' && CAN_RX.test(n)) return true;
+    const rest = n.slice(m.index + m[0].length); if (/^-[a-zäöü]/.test(rest) && !/^-(?:rispe|mix|netz|schale|trio|duo|pack|beutel|auswahl|set)/.test(rest)) return true;
   }
   if (p.meat) {
     if (MEAT_NOISE.test(n) || (p.id !== 'gemhack' && EXCLUDE_RX.test(n)) || (p.animal && animalClash(p, n))) return true;
@@ -142,12 +151,28 @@ function bonBlocked(p, n, m) {
   }
   return false;
 }
+
+let BLOCK_STEMS = null;
+const blockStems = () => BLOCK_STEMS || (BLOCK_STEMS = [...new Set([window.NOISE_RX, MEAT_NOISE, CAN_RX, window.EXCLUDE_RX].filter(Boolean).flatMap(r => r.source.split('|')).map(a => a.replace(/\(\?<?[!=][^)]*\)|\\b|[()?:^$\\]|\[[^\]]*\][*+?]?/g, '')).filter(a => /^[a-zäöüß]{5,}$/.test(a)))]);
+// Bon-Abkürzung „bouil.“, „aufschn.“: steht vor dem Punkt der Anfang eines Sperrworts (auch am Ende eines zusammengesetzten Worts), wird das Sperrwort ergänzt
+const bonAbbr = n => n.replace(/([a-zäöüß]+)\.(?![0-9])/g, (m0, t) => { for (let i = 0; i + 5 <= t.length; i++) { const tail = t.slice(i), s = blockStems().find(w => w.length >= tail.length + 2 && w.startsWith(tail)); if (s) return m0 + ' ' + s + ' '; } return m0; });
+let FRESH_PRE = null, FRESH_KEY = '';
+const freshPre = () => { const k = SRC.offers.length + ':' + PRODUCTS.length; if (FRESH_PRE && k === FRESH_KEY) return FRESH_PRE; const all = SRC.offers.map(enrich), set = new Set(['bio', 'ja', 'rewe', 'kl', 'klasse', 'lose', 'mini', 'riesen', 'spitz', 'rispen', 'cherry', 'snack', 'mix']);
+  for (const o of all) { if (!o.p || o.p.cat !== 'Obst & Gemüse') continue; const nm = bonSchreib(o.store.id === 'aldi' ? o.name.split(',')[0] : o.name), m = rx(o.p).exec(nm); if (!m) continue; nm.slice(0, m.index).replace(/[^a-zäöüß\s]/g, ' ').split(/\s+/).filter(Boolean).forEach(w => set.add(w)); }
+  Object.entries(brandMap()).forEach(([w, pid]) => { const p = PROD(pid); if (p && p.cat === 'Obst & Gemüse') set.add(w); });
+  FRESH_KEY = k; return FRESH_PRE = set; };
+const freshWord = w => freshPre().has(w) || BRAND_SKIP.has(fold(w)) || /isch(?:e[rsn]?)?$|^(?:rot|gelb|grün|weiß|bunt|dunk|hell|groß|klein|deutsch)/.test(w);
+// Obst/Gemüse auf dem Bon: steht davor ein eigenes, unbekanntes Wort (Marke), ist das Produktwort nur die Sorte (Jumpys Paprika, Lay's Paprika, Hela Tomaten)
+const STORE_WORDS = new Set(['rewe', 'beste', 'wahl', 'edeka', 'gut', 'günstig', 'guenstig', 'k', 'classic', 'aldi', 'lidl', 'netto', 'penny', 'kaufland', 'ja', 'biobio', 'simply', 'nah', 'gut&günstig']);
+const brandBefore = (n, m) => { if (!m || m.index === 0 || /[a-zäöüß]/.test(n[m.index - 1])) return false; const toks = [...n.slice(0, m.index).matchAll(/([a-zäöüß]+)(\.?)/g)]; return toks.some(t => t[1].length >= 2 && !(t[2] && t[1].length <= 5) && !freshWord(t[1]) && !STORE_WORDS.has(t[1])); };
+let BRANDW = null;
+const brandWords = () => BRANDW || (BRANDW = PRODUCTS.filter(p => p.kwBon).flatMap(p => String(p.kwBon).split('|').map(a => [fold(a), p.id])).filter(([a]) => /^[a-z]{6,}$/.test(a)));
 const BON_GENERIC = new Set(['bio', 'xl', 'xxl', 'pfand', 'rabatt', 'aktion', 'angebot', 'tüte', 'tuete', 'beutel', 'eur', 'stk', 'nr']);
 function matchBonItem(it) {
   if (it.kind !== 'item') return it;
   const key = bonKey(it.name); it.aliasKey = key;
   if (S.aliases[key] && PROD(S.aliases[key])) { it.pid = S.aliases[key]; it.how = 'gelernt'; return it; }
-  const n = bonSchreib(it.name);
+  const n = bonAbbr(bonSchreib(it.name));
   if (!(window.NOISE_RX && (NOISE_RX.test(it.name) || NOISE_RX.test(n)))) {
     let best = null, len = 0;
     for (const p of PRODUCTS) {
@@ -156,11 +181,13 @@ function matchBonItem(it) {
       let m = rx(p).exec(n); if (!m) m = p.kwBon && new RegExp(p.kwBon, 'i').exec(n); if (!m) { m = rx(p).exec(it.name); if (m && bonBlocked(p, it.name, m)) m = null; } else if (bonBlocked(p, n, m)) m = null;
       if (m && m[0].length > len) { best = p; len = m[0].length; }
     }
+    if (best && best.cat === 'Obst & Gemüse' && !it.weightKg && brandBefore(n, rx(best).exec(n))) { it.brandFlavor = best.id; it.sugPid = best.id; it.sugC = 'low'; best = null; }
     if (best) { it.pid = best.id; it.how = 'erkannt'; return it; }
+    for (const w of key.split(' ')) if (w.length >= 6) { const h = brandWords().filter(([b]) => b !== w && b.startsWith(w) && b.length - w.length <= 3); if (h.length && new Set(h.map(z => z[1])).size === 1 && PROD(h[0][1])) { it.pid = h[0][1]; it.how = 'Marke'; return it; } }
     const bm = brandMap(); for (const w of key.split(' ')) if (w.length >= 4 && bm[w] && PROD(bm[w])) { it.pid = bm[w]; it.how = 'Marke'; return it; }
   }
   const sg = key.length >= 3 && !BON_GENERIC.has(key) ? suggestFor(key, 1)[0] : null; // nur sichere Treffer: ganzes Wort oder Wortanfang ab 5 Buchstaben, nie ein loses Teilwort
-  if (sg && sg.pid && (sg.score >= 100 || (sg.score >= 80 && key.length >= 5)) && !(PROD(sg.pid) && bonBlocked(PROD(sg.pid), n, { index: 0, 0: '' }))) { it.pid = sg.pid; it.how = 'ähnlich'; }
+  if (sg && sg.pid && it.brandFlavor !== sg.pid && (sg.score >= 100 || (sg.score >= 80 && key.length >= 5)) && !(PROD(sg.pid) && bonBlocked(PROD(sg.pid), n, { index: 0, 0: '' }))) { it.pid = sg.pid; it.how = 'ähnlich'; }
   return it;
 }
 
@@ -212,7 +239,7 @@ function bonBrand(name, p) { // Marke = die Wörter vor dem Produktwort („Mein
   let src = String(name), m = find(src); if (!m) { src = bonSchreib(src); m = find(src); }
   if (!m || m.index <= 0) return '';
   const toks = src.slice(0, m.index).replace(/[^\p{L}\s&-]/gu, ' ').split(/\s+/).filter(Boolean);
-  const br = toks.filter(w => w.length >= 2 && !BRAND_SKIP.has(fold(w)) && !/^(?:bio|frisch\w*|deutsch\w*|vom|von|der|die|das)$/i.test(w));
+  const br = toks.filter(w => w.length >= 2 && !BRAND_SKIP.has(fold(w)) && !/^(?:bio|frisch\w*|deutsch\w*|vom|von|der|die|das|rot\w*|gelb\w*|gr(?:ü|ue)n\w*|wei(?:ß|ss)\w*|bunt\w*|gem(?:ischt\w*)?)$/i.test(w)); // Farben und Qualitätswörter sind keine Marke
   if (!br.length || br.length > 3) return '';
   const s = br.join(' '); return s === s.toUpperCase() || s === s.toLowerCase() ? s.toLowerCase().replace(/(^|[\s&-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()) : s;
 }
@@ -872,9 +899,15 @@ function bonDupOf(store, date, total, names, skipId, time) {
   BQ.list.forEach(m => { if (m.id !== skipId && m.sig && m.status === 'gelesen') cands.push({ ...m.sig, saved: false }); });
   let warn = null;
   for (const c of cands) {
-    if (c.store !== store || c.date !== date) continue;
+    if (c.store !== store) continue;
+    let otherDay = false;
+    if (c.date !== date) { // anderes Datum nur dann doppelt, wenn Summe und Artikel (mindestens 4) übereinstimmen und Tag/Monat gleich sind oder ein Datum unplausibel alt ist
+      const old = d => (Date.now() - new Date(d)) / 864e5 > 400;
+      if (!(total != null && c.total != null && Math.abs(c.total - total) < 0.005 && Math.min(c.names.length, names.length) >= 4 && (c.date.slice(5) === date.slice(5) || old(c.date) || old(date)))) continue; otherDay = true;
+    }
     const both = total != null && c.total != null; if (both && Math.abs(c.total - total) >= 0.005) continue;
     const jac = bonJac(c.names, names), td = time && c.time ? Math.abs(toMin(time) - toMin(c.time)) : null;
+    if (otherDay && jac < 0.8) continue;
     if (td != null && td > 10) continue; // andere Uhrzeit: ein anderer Einkauf am selben Tag
     const small = Math.min(c.names.length, names.length) <= 2 && td == null; // sehr kleiner Bon ohne Uhrzeit: nicht sicher
     const cov = bonCover(c.names, names); // eine Liste steckt fast ganz in der anderen (z. B. unvollständiger Erstscan)
