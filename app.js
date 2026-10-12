@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 122, t: '12.10. 20:37' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 123, t: '12.10. 20:46' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -40,7 +40,7 @@ function sanitize(x) {
     manual: arr(o.manual).filter(m => m && typeof m === 'object' && typeof m.name === 'string' && Number(m.price) > 0 && STORES.some(s => s.id === m.store) && Array.isArray(m.valid) && dateOk(m.valid[0]) && dateOk(m.valid[1])).map(m => ({ id: String(m.id ?? 'm' + Date.now()).slice(0, 40), store: m.store, name: m.name.slice(0, 80), price: Number(m.price), regular: num(m.regular, null), amount: num(m.amount, null), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(m.unit) ? m.unit : null, valid: [m.valid[0], m.valid[1]], manual: true })),
     hist: arr(o.hist).filter(h => h && (!dateOk(h.date) || h.date >= minDay) && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })),
     buys: Object.fromEntries(Object.entries(o.buys && typeof o.buys === 'object' && !Array.isArray(o.buys) ? o.buys : {}).filter(([k, n]) => k.length <= 90 && Number.isFinite(+n) && +n >= 0).slice(0, 3000).map(([k, n]) => [k, +n])),
-    set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20), noDragTip: !!set.noDragTip, theme: ['light', 'dark'].includes(set.theme) ? set.theme : 'auto' }
+    set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20), topPct: Math.min(90, Math.max(5, num(set.topPct, 30))), noDragTip: !!set.noDragTip, theme: ['light', 'dark'].includes(set.theme) ? set.theme : 'auto' }
   };
 }
 const mkRx = src => { try { return new RegExp(src, 'i'); } catch (e) { try { return new RegExp(src.replace(/\(\?<!\[[^\]]*\]\)/g, ''), 'i'); } catch (e2) { return /$^/; } } }; // ältere Browser ohne Lookbehind
@@ -630,7 +630,7 @@ V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow
   <label class="f">Menge<input id="ma" type="number" step="any"></label><label class="f">Einheit<select id="mu"><option value="">–</option><option>g</option><option>kg</option><option>ml</option><option>l</option><option value="st">Stück</option></select></label>
   <label class="f">gültig bis<input id="mv" type="date"></label></div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="addOffer()">Speichern</button><span class="mute">Merkt sich den Preis auch als dein Referenzpreis.</span></div>
   ${S.manual.map((o, i) => `<div class="item"><div class="grow">${esc(o.name)} · ${eur(o.price)} · ${esc(STORE(o.store).short)}</div><button class="ico" onclick="delOffer(${i})">✕</button></div>`).join('')}</div>
-  <h2>Einstellungen</h2><div class="card"><div class="fgrid"><label class="f">Wert deiner Zeit (€/Std.)<input type="number" id="sh" value="${S.set.hourly}"></label><label class="f">Vorrat ab … % Ersparnis<input type="number" id="sp" value="${S.set.stockPct}"></label><label class="f">Max. Autofahrt (Min)<input type="number" id="sc" value="${S.set.carMax}"></label><label class="f">Spartipp ab … % günstiger<input type="number" id="st" value="${S.set.tipPct}"></label></div><button class="btn" style="margin-top:10px" onclick="saveSet()">Speichern</button></div>
+  <h2>Einstellungen</h2><div class="card"><div class="fgrid"><label class="f">Wert deiner Zeit (€/Std.)<input type="number" id="sh" value="${S.set.hourly}"></label><label class="f">Vorrat ab … % Ersparnis<input type="number" id="sp" value="${S.set.stockPct}"></label><label class="f">Max. Autofahrt (Min)<input type="number" id="sc" value="${S.set.carMax}"></label><label class="f">Spartipp ab … % günstiger<input type="number" id="st" value="${S.set.tipPct}"></label><label class="f">Starke Angebote ab … % Ersparnis<input type="number" id="sg" min="5" max="90" value="${S.set.topPct}"></label></div><button class="btn" style="margin-top:10px" onclick="saveSet()">Speichern</button></div>
   <h2>Zurücksetzen</h2><div class="card row"><button class="btn danger" onclick="if(confirm('Alle Daten dieser App löschen? Mach vorher eine Sicherung.')){localStorage.removeItem(LS);location.reload()}">Alles löschen</button></div>`;
 
 /* ================= Aktionen ================= */
@@ -913,9 +913,9 @@ function topSummary() {
   const food = o => o.p || o.food;
   const near = dedupe(offs.filter(o => o.store.tier === 'A' && food(o) && !o.dubious && o.pct != null && o.pct >= 0.15).sort(byPct)).slice(0, 8);
   const habit = dedupe(offs.filter(o => o.p && habitOk(o.p) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, 8).map(o => ({ ...o, why: grundText(o.p) }));
-  const top = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= 0.3 && !near.includes(o)).sort(byPct)).slice(0, 8);
+  const top = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= S.set.topPct / 100 && !near.includes(o)).sort(byPct)).slice(0, 8);
   const sec = (title, sub, a) => a.length ? `<h2>${title}</h2><div class="mute" style="margin:-4px 4px 8px">${sub}</div><div class="hs">${a.map(o => offerCard(o)).join('')}</div>` : '';
-  return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', 'Ab 30 % Ersparnis, auch bei Lidl (Spaziergang)', top);
+  return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', `Ab ${S.set.topPct} % Ersparnis, die stärksten zuerst. Die Schwelle stellst du unter Mehr → Einstellungen ein.`, top);
 }
 const byId = id => S.list.find(i => i.id === id);
 const tick = id => { const i = byId(id); if (!i) return; i.done = !i.done; shortCheckEnd(); save(); render(); };
@@ -944,7 +944,7 @@ function addOffer() {
   S.manual.push(o); CACHE = null; save(); render(); toast('Angebot gespeichert');
 }
 const delOffer = i => { S.manual.splice(i, 1); CACHE = null; save(); render(); };
-function saveSet() { S.set = { ...S.set, hourly: +$('#sh').value || 15, stockPct: +$('#sp').value || 20, carMax: +$('#sc').value || 25, tipPct: +$('#st').value || 20 }; save(); render(); toast('Gespeichert'); }
+function saveSet() { S.set = { ...S.set, hourly: +$('#sh').value || 15, stockPct: +$('#sp').value || 20, carMax: +$('#sc').value || 25, tipPct: +$('#st').value || 20, topPct: Math.min(90, Math.max(5, +$('#sg').value || 30)) }; save(); render(); toast('Gespeichert'); }
 async function exp() { // alle Daten in eine Datei: teilen (z. B. an ein anderes Handy) oder herunterladen
   const name = 'einkauf-daten-' + isoDay(TODAY) + '.json', json = JSON.stringify({ app: 'intelligente-einkaufsliste', exportiert: new Date().toISOString(), daten: S }, null, 1);
   const file = new File([json], name, { type: 'application/json' });
