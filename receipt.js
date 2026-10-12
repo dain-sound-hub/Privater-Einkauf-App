@@ -115,7 +115,7 @@ function bonRemapOld(full) { // „Lamm / Kalb / Ente“ ist in Lamm, Kalb, Ente
   for (const b of S.bons) for (const it of b.items || []) if (it.pid === 'lammkalb') { const x = { kind: 'item', name: it.n || '' }; matchBonItem(x); if (x.pid && x.pid !== 'lammkalb') { it.pid = x.pid; ch = true; } }
   if (full && S.remapV !== APP_BUILD.v) {
     for (const b of S.bons) for (const it of b.items || []) {
-      const x = { kind: 'item', name: it.n || '' }; matchBonItem(x); if ((x.how !== 'erkannt' && !(x.how === 'gelernt' && !it.pid)) || !x.pid || x.pid === it.pid) continue; // ein gelernter Alias füllt eine leere Zuordnung, überschreibt aber nie eine vorhandene
+      const x = { kind: 'item', name: it.n || '' }; matchBonItem(x); if ((x.how !== 'erkannt' && !(x.how === 'gelernt' && !it.pid) && !(x.how === 'Marke' && x.tol && !it.pid)) || !x.pid || x.pid === it.pid) continue; // ein gelernter Alias füllt eine leere Zuordnung, überschreibt aber nie eine vorhandene
       const old = it.pid ? PROD(it.pid) : null;
       if (!old || (old.group && old.group.includes(x.pid))) { it.pid = x.pid; it.b = bonBrand(it.n, PROD(x.pid)); ch = true; }
     }
@@ -167,6 +167,13 @@ const STORE_WORDS = new Set(['rewe', 'beste', 'wahl', 'edeka', 'gut', 'günstig'
 const brandBefore = (n, m) => { if (!m || m.index === 0 || /[a-zäöüß]/.test(n[m.index - 1])) return false; const toks = [...n.slice(0, m.index).matchAll(/([a-zäöüß]+)(\.?)/g)]; return toks.some(t => t[1].length >= 2 && !(t[2] && t[1].length <= 5) && !freshWord(t[1]) && !STORE_WORDS.has(t[1])); };
 let BRANDW = null;
 const brandWords = () => BRANDW || (BRANDW = PRODUCTS.filter(p => p.kwBon).flatMap(p => String(p.kwBon).split('|').map(a => [fold(a), p.id])).filter(([a]) => /^[a-z]{6,}$/.test(a)));
+const KNOWN_W = {}; let KNOWN_KEY = '';
+const knownWords = pid => { // Wörter aus den Angebotsnamen dieses Produkts (zum Prüfen, ob eine gekürzte Marke wirklich dieses Produkt meint)
+  const k = SRC.offers.length + ':' + PRODUCTS.length; if (k !== KNOWN_KEY) { for (const x in KNOWN_W) delete KNOWN_W[x]; KNOWN_KEY = k; }
+  if (KNOWN_W[pid]) return KNOWN_W[pid]; const set = new Set();
+  OFFERS_ALL().forEach(o => { if (o.p && o.p.id === pid) fold(o.name + ' ' + (o.cats || '')).split(/[^a-z]+/).forEach(w => { if (w.length >= 3) set.add(w); }); });
+  return KNOWN_W[pid] = set;
+};
 const BON_GENERIC = new Set(['bio', 'xl', 'xxl', 'pfand', 'rabatt', 'aktion', 'angebot', 'tüte', 'tuete', 'beutel', 'eur', 'stk', 'nr']);
 function matchBonItem(it) {
   if (it.kind !== 'item') return it;
@@ -183,7 +190,7 @@ function matchBonItem(it) {
     }
     if (best && best.cat === 'Obst & Gemüse' && !it.weightKg && brandBefore(n, rx(best).exec(n))) { it.brandFlavor = best.id; it.sugPid = best.id; it.sugC = 'low'; best = null; }
     if (best) { it.pid = best.id; it.how = 'erkannt'; return it; }
-    for (const w of key.split(' ')) if (w.length >= 6) { const h = brandWords().filter(([b]) => b !== w && b.startsWith(w) && b.length - w.length <= 3); if (h.length && new Set(h.map(z => z[1])).size === 1 && PROD(h[0][1])) { it.pid = h[0][1]; it.how = 'Marke'; return it; } }
+    for (const w of key.split(' ')) if (w.length >= 6) { const h = brandWords().filter(([b]) => b !== w && b.startsWith(w) && b.length - w.length <= 3); if (h.length && new Set(h.map(z => z[1])).size === 1 && PROD(h[0][1]) && !bonBlocked(PROD(h[0][1]), n, { index: 0, 0: '' }) && key.split(' ').filter(x => x !== w && x.length >= 3 && !BRAND_SKIP.has(x)).every(x => [...knownWords(h[0][1])].some(k => k.startsWith(x)))) { it.pid = h[0][1]; it.how = 'Marke'; it.tol = true; return it; } }
     const bm = brandMap(); for (const w of key.split(' ')) if (w.length >= 4 && bm[w] && PROD(bm[w])) { it.pid = bm[w]; it.how = 'Marke'; return it; }
   }
   const sg = key.length >= 3 && !BON_GENERIC.has(key) ? suggestFor(key, 1)[0] : null; // nur sichere Treffer: ganzes Wort oder Wortanfang ab 5 Buchstaben, nie ein loses Teilwort
@@ -193,7 +200,33 @@ function matchBonItem(it) {
 
 /* ---------- Gewohnheiten: Stammladen, Referenzpreis, Spartipps ---------- */
 const bonsSorted = () => S.bons.slice().sort((a, b) => b.date.localeCompare(a.date));
-function boughtLog(pid) { const out = []; for (const b of bonsSorted().filter(x => !x.du)) for (const it of b.items) if (it.pid === pid) out.push({ date: b.date, store: b.store, it }); return out.slice(0, 5); }
+/* ---------- Kaufhistorie: eine gemeinsame Quelle für „Das kaufst du öfter“, Hauptprodukte und Angebotslisten ---------- */
+const mergeDays = a => { const days = [...new Set(a)].sort(), out = []; for (const d of days) { if (out.length && (new Date(d) - new Date(out[out.length - 1])) / 864e5 <= 1) continue; out.push(d); } return out; }; // Tage innerhalb von 1 Tag zählen einmal (Eintragen und Abhaken derselben Ware)
+const nearAny = (d, list) => list.some(x => Math.abs(new Date(d) - new Date(x)) / 864e5 <= 1);
+const dateSane = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d)) && d <= isoDay(new Date()) && d >= new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10); // echtes Datum: nicht in der Zukunft, nicht älter als ca. 400 Tage
+let BH_S = null;
+function buyHist(pid) { // Kauftage aus Bons (mit Bon-Datum, ohne unsichere Daten) und aus abgehakten Listenartikeln; Sammelprodukte zählen ihre Unterprodukte mit
+  if (BH_S !== S) { BH = null; BH_S = S; } // wurde S ersetzt (Import, anderes Fenster), wird neu gerechnet
+  BH = BH || {}; if (BH[pid]) return BH[pid];
+  const p = PROD(pid), ids = new Set(p && p.group ? [...p.group, pid] : [pid]), bonMap = new Map();
+  for (const b of S.bons) if (!b.du && b.items.some(i => i.pid && ids.has(i.pid))) bonMap.set(b.date, bonStoreName(b.store)); // zwei Bons an benachbarten Tagen bleiben zwei Käufe
+  const bonDays = [...bonMap.keys()].sort(), got = new Set(); ids.forEach(id => ((S.got || {})[id] || []).forEach(d => got.add(d)));
+  const gotDays = [...got].sort().filter(d => !nearAny(d, bonDays)); // Abhaken am Tag des Bons (±1) ist derselbe Kauf
+  const days = [...bonDays, ...gotDays].sort(), legacy = (got.size || bonDays.length) ? 0 : Math.min(S.buys[pid] || 0, 10); // alte Zähler ohne Datum nur, wenn es sonst nichts gibt
+  return BH[pid] = { days, stores: days.map(d => bonMap.get(d) || ''), n: days.length + legacy, last: days[days.length - 1] || '' };
+}
+const habitDays = p => { const base = buyHist(p.id).days; return [...base, ...mergeDays(((S.rec && S.rec[p.id]) || []).filter(d => !nearAny(d, base)))].sort(); }; // Tage, an denen du das Produkt eingetragen, abgehakt oder gekauft hast
+const habitOk = p => watched(p.id) || habitDays(p).length >= 2; // „öfter“ = Favorit oder an mindestens 2 verschiedenen Tagen
+function grundText(p) { // warum wird dieses Angebot unter „Das kaufst du öfter“ gezeigt?
+  const h = buyHist(p.id), parts = [];
+  const fy = d => fmtD(d) + (d.slice(0, 4) !== String(new Date().getFullYear()) ? d.slice(0, 4) : ''); // Jahr nur, wenn es nicht dieses ist
+  if (h.days.length) parts.push('Gekauft am ' + h.days.slice(-2).reverse().map((d, k) => fy(d) + (h.stores.slice(-2).reverse()[k] ? ' (' + h.stores.slice(-2).reverse()[k] + ')' : '')).join(' und '));
+  else { const d = habitDays(p); if (d.length) parts.push('Eingetragen am ' + d.slice(-2).reverse().map(fy).join(' und ')); } // „Favorit“ steht schon als Zeichen auf der Karte
+  return parts.join(' · ');
+}
+function autoFav(pid) { const p = PROD(pid), l = buyHist(pid).last; if (p && !watched(pid) && freq(p) >= 3 && (!l || (Date.now() - new Date(l)) / 864e5 <= 120)) { S.watch.push(pid); return p.name; } return null; } // wer oft kauft, bekommt das Produkt als Favorit
+function bonNote(pid, date) { if (dateSane(date)) noteRec(pid, date); return autoFav(pid); } // Bon-Kauf mit Bon-Datum (nicht mit dem Tag des Einlesens)
+function boughtLog(pid) { const out = []; for (const b of bonsSorted().filter(x => !x.du)) { const it = b.items.find(i => i.pid === pid); if (it) out.push({ date: b.date, store: b.store, it }); } return out.slice(0, 5); } // ein Kauf pro Bon, nicht eine Zeile pro Artikel
 // Stammladen: mindestens 3 Käufe, davon mindestens 2 von 3 im selben Laden (letzte 5 Käufe, unabhängig vom Zeitraum)
 function stammladen(pid) {
   const log = boughtLog(pid); if (log.length < 3) return null;
@@ -443,7 +476,8 @@ function bonCommit(b, items, store, date, qid, opt) {
   const oldTip = new Set(savingTips().map(t => t.p.id)), before = {};
   items.forEach(i => { if (i.pid) before[i.pid] = stammladen(i.pid); });
   const rec = { id: uid(), date, saved: Date.now(), store, total: b.total, items: items.map(bonRecItem), ...(partial ? { partial: true } : {}), ...(b.time ? { time: b.time } : {}) };
-  S.bons.unshift(rec); S.bons = bonsSorted().slice(0, 60);
+  if (!dateSane(date)) rec.du = true; // Datum in der Zukunft oder uralt: zählt nicht
+  S.bons.unshift(rec); S.bons = bonsSorted().slice(0, 60); BH = null; // Kaufhistorie neu rechnen, bevor Favoriten geprüft werden
   const lines = [], spont = [], favNew = [];
   const seen = new Set(), seenP = new Set();
   items.forEach(i => {
@@ -454,8 +488,8 @@ function bonCommit(b, items, store, date, qid, opt) {
     if (seen.has(p.id)) return; seen.add(p.id);
     const parents = PRODUCTS.filter(q => q.group && q.id !== p.id && q.group.includes(p.id) && !(q.virtual && q.id !== 'fleisch')); // Sammelprodukt: „Hähnchenbrust“ auf dem Bon zählt auch für „Hähnchen“ und „Fleisch“
     if (!S.list.some(l => l.pid === p.id || parents.some(q => q.id === l.pid))) spont.push(p.name);
-    const f = noteAdd(p.id); if (f) favNew.push(f);
-    parents.forEach(q => { if (!seenP.has(q.id)) { seenP.add(q.id); const g = noteAdd(q.id); if (g) favNew.push(g); } });
+    const f = bonNote(p.id, date); if (f) favNew.push(f);
+    parents.forEach(q => { if (!seenP.has(q.id)) { seenP.add(q.id); const g = bonNote(q.id, date); if (g) favNew.push(g); } });
   });
   S.hist = S.hist.slice(-400);
   TIPS = null;
@@ -845,7 +879,7 @@ function bqList() {
   }).join('');
   const saved = [...S.bons].sort((a, b) => b.date.localeCompare(a.date)).map(b => {
     const m = BQ.list.find(x => x.recId === b.id), tot = b.total != null ? b.total : +b.items.reduce((s, i) => s + i.p, 0).toFixed(2);
-    return `<div class="item" role="button" tabindex="0" style="cursor:pointer" onclick="bonDetail('${b.id}')" onkeydown="if(event.key==='Enter')bonDetail('${b.id}')"><div class="grow"><div class="nm" style="cursor:pointer"><b>${esc(fmtD(b.date))}</b> · ${esc(bonStoreName(b.store))}</div><div class="small">${b.items.length} Positionen · ${eur(tot)}${m && m.hasPhotos ? ' · 📷 Foto da' : ''}</div></div><span class="mute" aria-hidden="true">›</span></div>`;
+    return `<div class="item" role="button" tabindex="0" style="cursor:pointer" onclick="bonDetail('${b.id}')" onkeydown="if(event.key==='Enter')bonDetail('${b.id}')"><div class="grow"><div class="nm" style="cursor:pointer"><b>${esc(fmtD(b.date))}</b> · ${esc(bonStoreName(b.store))}</div><div class="small">${b.items.length} ${b.items.length === 1 ? 'Position' : 'Positionen'} (${Math.round(b.items.reduce((s, i) => s + (i.q || 1), 0))} Stück) · ${eur(tot)}${m && m.hasPhotos ? ' · 📷 Foto da' : ''}</div></div><span class="mute" aria-hidden="true">›</span></div>`;
   }).join('');
   setTimeout(bqStorageInfo, 0);
   return bqSortedBlock() + (rows ? `<h2>🧾 Bons in Bearbeitung (${open.length})</h2><div class="card tight">${rows}</div>` : '') +
@@ -923,8 +957,8 @@ function bonDetailView() {
   const m = BQ.list.find(x => x.recId === b.id), sum = +b.items.reduce((s, i) => s + i.p, 0).toFixed(2);
   const rows = b.items.map((i, ix) => { const p = i.pid ? PROD(i.pid) : null; return `<div class="item" role="button" tabindex="0" style="cursor:pointer" onclick="bonFix('${b.id}',${ix})"><div class="grow"><div class="nm" style="cursor:default">${esc(i.n)}${i.q > 1 ? ` <span class="mute">× ${i.q}</span>` : ''}</div>${p ? `<span class="tag t-ok">${esc(p.name)}</span>` : '<span class="tag">kein Produkt zugeordnet</span>'}</div><b>${eur(i.p)}</b><span class="mute" aria-hidden="true">›</span></div>`; }).join('');
   return `<button class="btn sm" onclick="BON.detail=null;render()">← Zu den Bons</button>
-    <div class="card"><h3>🧾 ${esc(bonStoreName(b.store))} · ${esc(fmtD(b.date))}</h3><div class="small" style="margin-top:6px">${b.items.length} Positionen · Summe laut Bon ${b.total != null ? eur(b.total) : 'unbekannt'} · Positionen zusammen ${eur(sum)} (Pfand wird nicht mitgezählt)${b.partial ? '<br>ℹ️ Nur teilweise gelesen. Die gelesenen Artikel zählen trotzdem.' : ''}${b.du ? '<br>⚠ Das Datum auf dem Bon war ungültig oder in der Zukunft. Dieser Bon zählt nicht für „Schon gekauft?“ und dein Standard-Produkt.' : ''}<br><span class="mute">Antippen einer Zeile ändert das Produkt.</span></div></div>
-    <h2>Gekauft</h2><div class="card tight">${rows || '<div class="empty">Keine Positionen.</div>'}${b.total != null ? `<div class="item" style="border-top:2px solid var(--line)"><div class="grow"><b>Summe laut Bon</b></div><b>${eur(b.total)}</b></div>` : ''}</div>
+    <div class="card"><h3>🧾 ${esc(bonStoreName(b.store))} · ${esc(fmtD(b.date))}</h3><div class="small" style="margin-top:6px">${b.items.length} ${b.items.length === 1 ? 'Position' : 'Positionen'} · Summe laut Bon ${b.total != null ? eur(b.total) : 'unbekannt'} · Positionen zusammen ${eur(sum)} (Pfand wird nicht mitgezählt)${b.partial ? '<br>ℹ️ Nur teilweise gelesen. Die gelesenen Artikel zählen trotzdem.' : ''}${b.du ? '<br>⚠ Das Datum auf dem Bon war ungültig oder in der Zukunft. Dieser Bon zählt nicht für „Schon gekauft?“ und dein Standard-Produkt.' : ''}<br><span class="mute">Antippen einer Zeile ändert das Produkt.</span></div></div>
+    <h2>Gekauft <span class="mute small">· ${Math.round(b.items.reduce((s, i) => s + (i.q || 1), 0))} Stück</span></h2><div class="card tight">${rows || '<div class="empty">Keine Positionen.</div>'}${b.total != null ? `<div class="item" style="border-top:2px solid var(--line)"><div class="grow"><b>Summe laut Bon</b></div><b>${eur(b.total)}</b></div>` : ''}</div>
     ${m && m.hasPhotos ? `<button class="btn" style="margin-top:10px" onclick="bqShow('${m.id}')">📄 Foto vom Bon ansehen</button>` : ''}`;
 }
 function bqDupCheck(m, parsed) { // nach dem Lesen: ist das derselbe Bon wie ein schon vorhandener?

@@ -327,6 +327,114 @@
       "quelle": "https://www.aldi-sued.de/produkte/tiefkuehlung/k/1",
       "erwartet": null,
       "grund": "Regal Tiefkühl ist kein Frischgemüse"
+    },
+    {
+      "name": "Ehrmann Almighurt Erdbeere",
+      "laden": "netto",
+      "cats": "Ehrmann Almighurt Joghurt",
+      "erwartet": null,
+      "grund": "cats nennt andere Produktart: Obst ist nur Geschmack"
+    },
+    {
+      "name": "Tuc Cracker Paprika",
+      "laden": "rewe",
+      "cats": "TUC Cracker",
+      "erwartet": null,
+      "grund": "cats bestätigt Paprika nicht"
+    },
+    {
+      "name": "CHRISTOPEIT Holz Wasser Rudergerät",
+      "laden": "lidl",
+      "cats": "Christopeit Sport Rudermaschine",
+      "erwartet": null,
+      "grund": "cats bestätigt Wasser nicht"
+    },
+    {
+      "name": "Reese's Peanut Butter Bar",
+      "laden": "rewe",
+      "cats": "Reese's",
+      "erwartet": null,
+      "grund": "cats bestätigt Butter nicht"
+    },
+    {
+      "name": "NINJA Reis und Slow Cooker",
+      "laden": "lidl",
+      "cats": "Slow Cooker",
+      "erwartet": null,
+      "grund": "cats bestätigt Reis nicht"
+    },
+    {
+      "name": "REWE Beste Wahl Kernlose Tafeltrauben",
+      "laden": "rewe",
+      "cats": "REWE kernlose Weintraube",
+      "erwartet": "trauben",
+      "grund": "darf nicht kaputtgehen: gleicher Wortstamm in cats"
+    },
+    {
+      "name": "Minipflaumen Tomaten",
+      "laden": "netto",
+      "cats": "Pflaumentomate",
+      "erwartet": "tomaten",
+      "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "name": "Heidelbeeren",
+      "laden": "netto",
+      "erwartet": "heidelbeeren",
+      "grund": "darf nicht kaputtgehen: leeres cats"
+    },
+    {
+      "name": "Kerrygold Butter",
+      "laden": "rewe",
+      "cats": "Kerrygold",
+      "lebensmittel": true,
+      "erwartet": "butter",
+      "grund": "cats nennt nur die Marke: darf nicht ablehnen"
+    },
+    {
+      "name": "Weihenstephan H-Milch",
+      "laden": "rewe",
+      "cats": "Weihenstephan",
+      "lebensmittel": true,
+      "erwartet": "milch"
+    },
+    {
+      "name": "Reis Kocher",
+      "laden": "lidl",
+      "cats": "Preisknaller",
+      "erwartet": null,
+      "grund": "kurzes Stichwort nur als ganzes Wort in cats"
+    },
+    {
+      "name": "Wasser Pistole",
+      "laden": "lidl",
+      "cats": "Wasserspielzeug",
+      "erwartet": null,
+      "offen": true,
+      "grund": "Zusammensetzung (Wasserspielzeug) bestätigt Wasser: bewusst offen, kommt in den Daten nicht vor"
+    },
+    {
+      "name": "Erdbeeren",
+      "laden": "netto",
+      "cats": "Beerenobst",
+      "lebensmittel": true,
+      "erwartet": "erdbeeren",
+      "grund": "Sammelwort Obst/Beere in cats"
+    },
+    {
+      "name": "Heidelbeeren",
+      "laden": "netto",
+      "cats": "Blaubeeren",
+      "lebensmittel": true,
+      "erwartet": "heidelbeeren"
+    },
+    {
+      "name": "Reese's Peanut Butter Bar",
+      "laden": "rewe",
+      "cats": "Reese's",
+      "lebensmittel": true,
+      "erwartet": null,
+      "grund": "Erdnussbutter-Riegel ist keine Butter"
     }
   ],
   "bons": [
@@ -531,6 +639,37 @@
     {
       "zeile": "APFEL ELSTAR",
       "erwartet": "apfel"
+    },
+    {
+      "zeile": "ALMIGHURT ERDBEERE",
+      "erwartet": null,
+      "grund": "Marke aus falsch zugeordnetem Angebot gelernt (freshPre)"
+    },
+    {
+      "zeile": "TUC PAPRIKA",
+      "erwartet": null
+    },
+    {
+      "zeile": "ERDBEEREN 500G",
+      "erwartet": "erdbeeren",
+      "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "zeile": "CHICKE NUGGETS",
+      "erwartet": null,
+      "grund": "gekürzte Marke darf Sperren nicht umgehen"
+    },
+    {
+      "zeile": "RHEINF RIESLING",
+      "erwartet": null
+    },
+    {
+      "zeile": "SAXONI SEKT",
+      "erwartet": null
+    },
+    {
+      "zeile": "CHRISTIN WEIN",
+      "erwartet": null
     }
   ],
   "eingaben": [

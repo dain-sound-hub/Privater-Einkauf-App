@@ -30,7 +30,7 @@ if (loadErr) { console.error('FEHLER beim Laden der App-Dateien:', loadErr); pro
   await new Promise(r => setTimeout(r, 400)); // Angebote werden asynchron geladen
   const run = c => vm.runInContext(c, sb);
   sb.__t = {};
-  const offerCase = c => { sb.__t.o = { store: c.laden || 'aldi', name: c.name, desc: c.desc || '', cats: c.cats || '', price: c.preis || 2, valid: ['2026-10-05', '2999-01-01'], ...(c.menge ? { amount: c.menge, unit: c.einheit } : {}), ...(c.grundpreis ? { unitPrice: c.grundpreis, base: c.basis } : {}), ...(c.hinweis ? { note: c.hinweis } : {}), ...(c.quelle ? { src: c.quelle } : {}) }; return run('(() => { const e = enrich(__t.o); return { pid: e.p ? e.p.id : null, up: e.up ? +e.up.v.toFixed(2) + "/" + e.up.base : null, price: e.price, count: e.count || null }; })()'); };
+  const offerCase = c => { sb.__t.o = { store: c.laden || 'aldi', name: c.name, desc: c.desc || '', cats: c.cats || '', price: c.preis || 2, valid: ['2026-10-05', '2999-01-01'], ...(c.menge ? { amount: c.menge, unit: c.einheit } : {}), ...(c.grundpreis ? { unitPrice: c.grundpreis, base: c.basis } : {}), ...(c.hinweis ? { note: c.hinweis } : {}), ...(c.quelle ? { src: c.quelle } : {}), ...(c.lebensmittel ? { food: true } : {}) }; return run('(() => { const e = enrich(__t.o); return { pid: e.p ? e.p.id : null, up: e.up ? +e.up.v.toFixed(2) + "/" + e.up.base : null, price: e.price, count: e.count || null }; })()'); };
   const bonCase = c => { sb.__t.b = c.zeile; return run('(() => { S.aliases = {}; const x = { kind: "item", name: __t.b, price: 1, qty: 1 }; matchBonItem(x); return { pid: x.pid || null }; })()'); };
   const inputCase = c => { sb.__t.i = c.text; return run('(() => { const a = parseAdd(__t.i); return { pid: a.pid || null, name: a.name, qty: a.qty }; })()'); };
 
@@ -59,6 +59,18 @@ if (loadErr) { console.error('FEHLER beim Laden der App-Dateien:', loadErr); pro
     sb.__t.exp = JSON.parse(fs.readFileSync(process.argv[ei + 1], 'utf8')).daten;
     const out = run('(() => { S = sanitize(__t.exp); S.custom.forEach(regCustom); const before = S.bons.map(b => b.items.map(i => i.pid)); S.remapV = 0; bonRemapOld(true); return { bons: S.bons.map((b, k) => ({ date: b.date, store: b.store, du: !!b.du, n: b.items.length, geaendert: b.items.map((i, j) => before[k][j] !== i.pid ? i.n + ": " + before[k][j] + " -> " + i.pid : null).filter(Boolean) })), hist: S.hist.length }; })()');
     console.log('\nExport: ' + out.bons.length + ' Bons, Historie ' + out.hist + ' Einträge'); out.bons.forEach(b => console.log('  ' + b.date + ' ' + b.store + (b.du ? ' (Datum unplausibel → zählt nicht)' : '') + ', ' + b.n + ' Artikel' + (b.geaendert.length ? ', neu zugeordnet: ' + b.geaendert.join('; ') : '')));
+  }
+  const di = process.argv.indexOf('--dump');
+  if (di > 0) { // Zuordnung aller aktuellen Angebote in eine Datei schreiben (zum Vergleichen vorher/nachher mit einem Diff)
+    const rows = run('SRC.offers.map(enrich).map(o => o.store.short + " | " + o.name + " | " + (o.p ? o.p.id : "-") + " | " + (o.up ? o.up.v.toFixed(2) + "/" + o.up.base : "-"))');
+    fs.writeFileSync(process.argv[di + 1], rows.join('\n') + '\n'); console.log('Zuordnung von ' + rows.length + ' Angeboten gespeichert: ' + process.argv[di + 1]);
+  }
+  const hi = process.argv.indexOf('--habit');
+  if (hi > 0) { // Warum erscheint ein Angebot unter „Das kaufst du öfter, jetzt im Angebot“? Zeigt Produkt und Grund (Favorit oder Kauf-/Eintragshäufigkeit) mit den Daten einer Exportdatei
+    sb.__t.exp = JSON.parse(fs.readFileSync(process.argv[hi + 1], 'utf8')).daten;
+    const out = run('(() => { S = sanitize(__t.exp); S.custom.forEach(regCustom); CACHE = null; S.remapV = 0; bonRemapOld(true); BH = null; const offs = OFFERS_ALL(); const why = p => (watched(p.id) ? "Favorit" : "") + (freq(p) > 0 ? " Häufigkeit " + freq(p) + " (eingetragen " + (S.adds[p.id] || 0) + "x, gekauft " + (S.buys[p.id] || 0) + "x)" : ""); return { habit: offs.filter(o => o.p && habitOk(o.p) && !onList(o.p.id) && o.state === "now").map(o => o.store.short + " | " + o.name + " | Produkt: " + o.p.name + " (" + o.p.id + ") | Grund: " + grundText(o.p)), match: offs.filter(o => /erdbeer/i.test(o.name + " " + (o.cats || ""))).map(o => o.store.short + " | " + o.name + " | Produkt: " + (o.p ? o.p.name + " (" + o.p.id + ")" : "-")) }; })()');
+    console.log('\nVorschläge "Das kaufst du öfter":'); out.habit.slice(0, 60).forEach(x => console.log('  ' + x));
+    console.log('\nAlle Angebote mit "Erdbeer" im Namen:'); out.match.forEach(x => console.log('  ' + x));
   }
   if (process.argv.includes('--alle')) {
     const list = run('SRC.offers.map(enrich).filter(o => !o.p && o.state !== "expired" && !o.excluded && o.pct != null && o.pct >= 0.25 && o.food).map(o => o.store.short + " | " + o.name + " | -" + Math.round(o.pct * 100) + " %")');

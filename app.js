@@ -1,12 +1,13 @@
 'use strict';
-const APP_BUILD = { v: 119, t: '11.10. 10:30' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 122, t: '12.10. 20:37' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 const APP_VERSION = '1.0 · 06.10.2026';
 /* ================= State ================= */
 const LS = 'einkauf.v2';
-const DEF = { hideHelp: false, list: [], repeat: [], later: [], prefs: {}, adds: {}, addDay: {}, rec: {}, short: { on: false, view: 'short', later: [], known: [] }, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
+let BH = null; // Zwischenspeicher der Kaufhistorie (buyHist), wird bei jedem Speichern geleert
+const DEF = { hideHelp: false, list: [], repeat: [], got: {}, later: [], prefs: {}, adds: {}, addDay: {}, rec: {}, short: { on: false, view: 'short', later: [], known: [] }, bons: [], aliases: {}, lastBackup: '', watch: ['paprika', 'butter', 'butterschmalz', 'rinderhack', 'farbfang', 'kuechenrolle'], custom: [], manual: [], hist: [], buys: {}, set: { hourly: 15, stockPct: 20, carMax: 25, lidl: 'auto', tipPct: 20 } };
 let S;
 // Gespeicherten Stand prüfen und reparieren: eine beschädigte Sicherung oder ein Fehler darf die App nie lahmlegen
 function sanitize(x) {
@@ -23,12 +24,13 @@ function sanitize(x) {
   return {
     hideHelp: !!o.hideHelp, remapV: Number.isFinite(+o.remapV) ? +o.remapV : 0,
     list: uniq(arr(o.list).filter(i => i && typeof i === 'object').map(i => ({ id: idOk(i.id) ? i.id : Math.random().toString(36).slice(2, 10), pid: idOk(i.pid) ? i.pid : null, name: str(i.name, 80), qty: str(i.qty, 20), urgent: !!i.urgent, done: !!i.done, ...(i.heavy !== undefined ? { heavy: !!i.heavy } : {}), ...(i.fav ? { fav: true } : {}), ...(STORES.some(s => s.id === i.store) ? { store: i.store } : {}), ...(numOr(i.pos, null) !== null ? { pos: +i.pos } : {}), ...(Number.isFinite(+i.t) && +i.t > 0 ? { t: Math.min(+i.t, Date.now()) } : {}) })).filter(i => i.name.trim())).slice(0, 1000),
+    got: Object.fromEntries(Object.entries(o.got && typeof o.got === 'object' && !Array.isArray(o.got) ? o.got : {}).slice(0, 2000).filter(([k, v]) => idOk(k) && k !== '__proto__' && k !== 'constructor' && Array.isArray(v)).slice(0, 800).map(([k, v]) => [k, [...new Set(v.filter(d => dateOk(d) && d <= today))].sort().slice(-20)])), // Tage, an denen du das Produkt abgehakt hast
     repeat: uniq(arr(o.repeat).filter(r => r && idOk(r.id) && typeof r.name === 'string' && r.name.trim() && [1, 2, 4].includes(+r.every) && Number.isInteger(+r.dow) && +r.dow >= 0 && +r.dow <= 6 && dateOk(r.anchor)).slice(0, 50).map(r => ({ id: r.id, name: r.name.slice(0, 60), qty: str(r.qty, 20), pid: idOk(r.pid) ? r.pid : null, every: +r.every, dow: +r.dow, anchor: r.anchor, last: dateOk(r.last) && r.last <= today ? r.last : '' }))),
     ask: arr(o.ask).filter(x => x && typeof x === 'object' && idOk(x.id)).filter((x, i, a) => a.findIndex(y => y.id === x.id) === i).slice(0, 30).map(x => ({ id: x.id, name: str(x.name, 80), qty: str(x.qty, 20), bon: str(x.bon, 80) })),
-    bons: uniq(arr(o.bons).filter(b => b && typeof b === 'object' && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: dateOk(b.date) && b.date <= today ? b.date : today, store: String(b.store).slice(0, 20), total: numOr(b.total, null), items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: num(i.q, 1), p: numOr(i.p, 0), pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null), b: String(i.b ?? '').slice(0, 30) })), ...(b.partial || b.items.length > 120 ? { partial: true } : {}), ...(b.du || !(dateOk(b.date) && b.date <= today) || b.date < minDay ? { du: true } : {}), // du = Datum war ungültig: zählt nicht für „Schon gekauft?“ und Standard
+    bons: uniq(arr(o.bons).filter(b => b && typeof b === 'object' && typeof b.store === 'string' && Array.isArray(b.items)).slice(0, 60).map(b => ({ id: idOk(b.id) ? b.id : Math.random().toString(36).slice(2, 10), date: dateOk(b.date) && b.date <= today ? b.date : today, store: String(b.store).slice(0, 20), total: numOr(b.total, null), items: b.items.filter(i => i && typeof i === 'object').slice(0, 120).map(i => ({ n: String(i.n ?? '').slice(0, 60), q: Math.min(num(i.q, 1), 999), p: numOr(i.p, 0), pid: idOk(i.pid) ? i.pid : null, k: ['kg', 'l', 'st'].includes(i.k) ? i.k : null, a: num(i.a, null), b: String(i.b ?? '').slice(0, 30) })), ...(b.partial || b.items.length > 120 ? { partial: true } : {}), ...(b.du || !(dateOk(b.date) && b.date <= today) || b.date < minDay ? { du: true } : {}), // du = Datum war ungültig: zählt nicht für „Schon gekauft?“ und Standard
     ...(/^\d{1,2}:\d{2}$/.test(String(b.time ?? '')) ? { time: b.time } : {}), ...(Number.isFinite(+b.saved) && +b.saved > 0 ? { saved: +b.saved } : {}) }))),
     aliases: Object.fromEntries(Object.entries(o.aliases && typeof o.aliases === 'object' && !Array.isArray(o.aliases) ? o.aliases : {}).filter(([k, v]) => k.length <= 60 && idOk(v)).slice(0, 400)),
-    lastBackup: dateOk(o.lastBackup) && o.lastBackup <= today ? o.lastBackup : '', short: { on: !!(o.short && o.short.on), view: o.short && o.short.view === 'all' ? 'all' : 'short', later: arr(o.short && o.short.later).filter(idOk), known: arr(o.short && o.short.known).filter(idOk) }, rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(dateOk).slice(-8)])),
+    lastBackup: dateOk(o.lastBackup) && o.lastBackup <= today ? o.lastBackup : '', short: { on: !!(o.short && o.short.on), view: o.short && o.short.view === 'all' ? 'all' : 'short', later: arr(o.short && o.short.later).filter(idOk), known: arr(o.short && o.short.known).filter(idOk) }, rec: Object.fromEntries(Object.entries(o.rec && typeof o.rec === 'object' && !Array.isArray(o.rec) ? o.rec : {}).filter(([k, v]) => idOk(k) && Array.isArray(v)).map(([k, v]) => [k, v.filter(d => dateOk(d) && d <= today).slice(-8)])),
     adds: Object.fromEntries(Object.entries(o.adds && typeof o.adds === 'object' && !Array.isArray(o.adds) ? o.adds : {}).filter(([k, n]) => idOk(k) && Number.isFinite(+n) && +n >= 0).map(([k, n]) => [k, Math.min(+n, 9999)])),
     addDay: Object.fromEntries(Object.entries(o.addDay && typeof o.addDay === 'object' && !Array.isArray(o.addDay) ? o.addDay : {}).filter(([k, v]) => idOk(k) && dateOk(v))),
     prefs: Object.fromEntries(Object.entries(o.prefs && typeof o.prefs === 'object' && !Array.isArray(o.prefs) ? o.prefs : {}).filter(([k, v]) => idOk(k) && STORES.some(s => s.id === v))),
@@ -57,6 +59,7 @@ try {
 }
 // 1) Speichern: scheitert es (Speicher voll oder gesperrt), sagt die App es sichtbar
 const save = () => {
+  BH = null;
   try { const j = JSON.stringify(S); localStorage.setItem(LS, j); LAST_RAW = j; if (SAVE_FAILED) { SAVE_FAILED = false; saveWarnBar(false); } return true; }
   catch (e) { SAVE_FAILED = true; saveWarnBar(true); return false; }
 };
@@ -254,12 +257,20 @@ function inferQty(o, p) {
   return Object.keys(out).length ? out : null;
 }
 const SHELF_RX = /\/produkte\/(?:konserven|tiefkuehl)/i; // ALDI nennt das Regal in der Adresse der Produktseite
+const fold5 = s => String(s).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
+const catsSays = (q, cats, hit, o) => { // lässt die Produktart des Prospekts (cats) den Treffer im Namen gelten? Ablehnen nur, wenn cats selbst eine andere Produktart nennt oder die Ware kein Lebensmittel ist
+  if (rx(q).test(cats)) return true;
+  const h = fold5(hit), c = fold5(cats); if (h.length >= 5 ? c.includes(h.slice(0, 5)) : new RegExp('(?<![a-z])' + h.replace(/[^a-z0-9]/g, '') + '(?![a-z])').test(c)) return true; // ab 5 Buchstaben zählt der Wortanfang, kürzere Treffer nur als ganzes Wort
+  if (q.cat === 'Obst & Gemüse' && /obst|gemüse|beere|frucht/i.test(cats)) return true;
+  const other = (window.NOISE_RX && NOISE_RX.test(cats)) || PRODUCTS.some(p2 => p2 !== q && !p2.custom && !p2.virtual && rx(p2).test(cats));
+  return !(other || (q.cat !== 'Drogerie & Gesundheit' && o.food !== true));
+};
 const HEAD_CATS = new Set(['Obst & Gemüse', 'Milchprodukte', 'Öle & Grundnahrung', 'Getränke', 'Drogerie & Gesundheit']);
 function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
   const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p) { const cands = [], nameSrc = o.store === 'aldi' ? o.name.split(',')[0] : o.name; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = q.custom ? (o.store === 'aldi' ? o.name.split(',')[0] : o.name) : HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; const nz = x => q.custom ? stripOwn(q, x) : x; if (window.NOISE_RX && NOISE_RX.test(nz(m.index < (o.store === 'aldi' && src === head ? o.name.split(',')[0].length : o.name.length) ? o.name : text))) continue; /* Sperrwort zählt nur dort, wo das Produktwort steht: im Namen (ganz) oder, wenn nur die Kategorie trifft, Name und Kategorie */ if (q.custom && (o.food === false || FB_NOISE.test(nz(text)))) continue; if (q.animal && animalClash(q, o.name)) continue; if (COMPOUND_CATS.has(q.cat)) { const rest = src.slice(m.index + m[0].length); if (/^-[A-Za-zÄÖÜäöü]/.test(rest) && !/^-(?:rispe|mix|netz|schale|trio|duo|pack|beutel|auswahl|set)/i.test(rest)) continue; } /* „Tomaten-Dip“ ist keine Tomate, „Tomaten-Rispe“ schon */ const inName = rx(q).test(HEAD_CATS.has(q.cat) ? nameSrc : o.name); if (q.cat === 'Obst & Gemüse' && (CAN_RX.test(text) || SHELF_RX.test(o.src || '') || (!inName && CLAIM_RX.test(o.name)))) continue; cands.push({ q, l: m[0].length, inName }); }
+  if (!p) { const cands = [], nameSrc = o.store === 'aldi' ? o.name.split(',')[0] : o.name; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = q.custom ? (o.store === 'aldi' ? o.name.split(',')[0] : o.name) : HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; const nz = x => q.custom ? stripOwn(q, x) : x; if (window.NOISE_RX && NOISE_RX.test(nz(m.index < (o.store === 'aldi' && src === head ? o.name.split(',')[0].length : o.name.length) ? o.name : text))) continue; /* Sperrwort zählt nur dort, wo das Produktwort steht: im Namen (ganz) oder, wenn nur die Kategorie trifft, Name und Kategorie */ if (q.custom && (o.food === false || FB_NOISE.test(nz(text)))) continue; if (q.animal && animalClash(q, o.name)) continue; if (COMPOUND_CATS.has(q.cat)) { const rest = src.slice(m.index + m[0].length); if (/^-[A-Za-zÄÖÜäöü]/.test(rest) && !/^-(?:rispe|mix|netz|schale|trio|duo|pack|beutel|auswahl|set)/i.test(rest)) continue; } /* „Tomaten-Dip“ ist keine Tomate, „Tomaten-Rispe“ schon */ const inName = rx(q).test(HEAD_CATS.has(q.cat) ? nameSrc : o.name); if (q.cat === 'Obst & Gemüse' && (CAN_RX.test(text) || SHELF_RX.test(o.src || '') || (!inName && CLAIM_RX.test(o.name)))) continue; if (HEAD_CATS.has(q.cat) && !q.custom && o.store !== 'aldi' && inName && String(o.cats || '').trim() && !catsSays(q, o.cats, m[0], o)) continue; /* cats nennt eine andere Produktart: das Wort im Namen ist nur Geschmack oder Beiwort */ cands.push({ q, l: m[0].length, inName }); }
     const longest = a => a.reduce((b, c) => (!b || c.l > b.l ? c : b), null); const pool = cands.some(c => c.inName && c.q.cat !== 'Obst & Gemüse') ? cands.filter(c => c.q.cat !== 'Obst & Gemüse') : cands; let best = longest(pool); /* Obst im Namen eines Milchprodukts ist nur der Geschmack (Fruchtkefir Erdbeere) */
     if (best && !best.inName) { const nm = longest(pool.filter(c => c.inName)); if (nm && !(best.q.group && best.q.group.includes(nm.q.id)) && !(nm.q.group && nm.q.group.includes(best.q.id))) best = nm; } /* trifft nur ein Wort aus der Kategorie, schlägt ein anderes Produkt aus dem Namen (Lenor Waschmittel ist kein Color-Waschmittel) */
     if (best) p = best.q; }
@@ -347,7 +358,7 @@ function offerCard(o, opt = {}) {
   <div class="row" style="margin-top:2px"><span class="price">${eur(o.price)}</span>${o.regular ? `<span class="old">${eur(o.regular)}</span>` : ''}${o.up ? `<span class="mute">${eur(o.up.v)} / ${unitLbl(o.up.base)}</span>` : ''}${p ? `<button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}</div></div></div>
   <div class="row" style="margin:8px 0 2px">${t.join('')}</div>
   ${o.pct != null ? `<div class="mute">Ersparnis laut ${esc(o.kind)}</div>` : ''}${cmp ? `<div class="small" style="margin-top:3px"><b>${esc(cmp)}</b></div>` : ''}${usualBlock(o, true)}${nextLine(nh)}
-  ${o.note ? `<div class="mute">${esc(o.note)}</div>` : ''}${o.incomplete ? `<div class="mute">⚠ ${esc(o.incomplete)}</div>` : ''}
+  ${o.why ? `<div class="small" style="margin-top:3px">🔁 ${esc(o.why)}</div>` : ''}${o.note ? `<div class="mute">${esc(o.note)}</div>` : ''}${o.incomplete ? `<div class="mute">⚠ ${esc(o.incomplete)}</div>` : ''}
   <div class="row sp" style="margin-top:8px"><span class="mute">gültig ${fmtD(o.valid[0])}–${fmtD(o.valid[1])}${o.src ? ` · <a href="${esc(o.src)}" target="_blank" rel="noopener">Quelle</a>` : ''}</span><span class="row" style="gap:6px">${laterBtn}${add}</span></div></div>`;
 }
 
@@ -387,7 +398,7 @@ function parseAdd(txt) {
 const qtyLabel = q => !q ? '' : (/[a-zäöü]/i.test(q) ? q : '× ' + q);
 
 // Hauptprodukte: Was du immer wieder in die Liste einträgst oder kaufst, erkennt die App selbst und zeigt es ganz oben bei „Schnell hinzufügen"
-const freq = p => Math.max(S.adds[p.id] || 0, S.buys[p.id] || 0);
+const freq = p => Math.max(S.adds[p.id] || 0, S.buys[p.id] || 0, buyHist(p.id).n);
 function noteAdd(pid) { // zählt höchstens einmal pro Tag und Produkt; ab 3 Tagen wird es automatisch ein Favorit
   const p = pid ? PROD(pid) : null; if (!p) return null;
   const day = isoDay(TODAY);
@@ -396,7 +407,7 @@ function noteAdd(pid) { // zählt höchstens einmal pro Tag und Produkt; ab 3 Ta
   return null;
 }
 function noteRec(pid, day) { const r = (S.rec = S.rec || {})[pid] = S.rec[pid] || []; if (r[r.length - 1] !== day) r.push(day); if (r.length > 8) r.shift(); } // die letzten Kauf-/Eintragstage
-const recScore = p => { const d = (S.rec && S.rec[p.id]) || []; let s = 0; d.forEach(x => { s += Math.pow(0.5, Math.max(0, (+TODAY - +d0(x)) / 864e5) / 30); }); return s + Math.max(0, freq(p) - d.length) * 0.25; }; // jüngere Tage zählen mehr (Halbwertszeit 30 Tage)
+const recScore = p => { const d = mergeDays([...((S.rec && S.rec[p.id]) || []), ...buyHist(p.id).days]); let s = 0; d.forEach(x => { s += Math.pow(0.5, Math.max(0, (+TODAY - +d0(x)) / 864e5) / 30); }); return s + Math.max(0, freq(p) - d.length) * 0.25; }; // jüngere Tage zählen mehr (Halbwertszeit 30 Tage)
 const byUse = (a, b) => recScore(b) - recScore(a) || a.name.localeCompare(b.name, 'de');
 function orderCats(cs) { // Rubriken, aus denen du oft kaufst, zuerst; sonst Reihenfolge wie im Laden (Obst & Gemüse zuerst, Haushalt zuletzt)
   const sc = {}; PRODUCTS.forEach(p => { sc[p.cat] = (sc[p.cat] || 0) + recScore(p); });
@@ -530,7 +541,7 @@ function offersBody() {
   const none = w === 'local' ? 'Keine Treffer. Tippe oben auf „Angebote suchen" oder „Neueste Angebote".' : w === 'walk' ? 'Aktuell keine Lidl-Angebote zu deinen Produkten.' : 'Aktuell keine Großmarkt-Angebote zu deinen Produkten.';
   if (t === 'week' || t === 'next') {
     const st = t === 'week' ? 'now' : 'next', m = offs.filter(o => o.state === st && o.p).sort(byPct);
-    const a = m.filter(o => onList(o.p.id)), b = m.filter(o => !a.includes(o) && watched(o.p.id)), c = m.filter(o => !a.includes(o) && !b.includes(o));
+    const a = m.filter(o => onList(o.p.id)), b = m.filter(o => !a.includes(o) && watched(o.p.id)), c = m.filter(o => !a.includes(o) && !b.includes(o)).sort((x, y) => (buyHist(y.p.id).n > 0) - (buyHist(x.p.id).n > 0)); // schon gekaufte Produkte zuerst
     return `${intro}${t === 'next' ? nextStatusLine() + '<div class="banner info">📌 Tippe bei einem Angebot auf „Merken“. Das Produkt erscheint dann in der Woche, in der es günstiger ist, oben bei „Schnell hinzufügen“ und in deiner Liste.</div>' : ''}${t === 'next' && !m.length ? empty('🗓️', 'Noch keine Angebote für nächste Woche bekannt. Sie erscheinen meist ab Samstag.') : ''}
     ${a.length ? `<h2>Auf deiner Liste</h2>${grid(lim(a, 30).map(o => offerCard(o)).join(''))}${more(a, 30)}` : ''}${b.length ? `<h2>👁 Deine Favoriten</h2>${grid(lim(b, 30).map(o => offerCard(o)).join(''))}${more(b, 30)}` : ''}
     ${c.length ? `<h2>Weitere Treffer aus deiner Dauerliste</h2>${grid(lim(c, 24).map(o => offerCard(o)).join(''))}${more(c, 24)}` : ''}${t === 'week' && !m.length && w !== 'walk' ? empty('🔎', SRC.live ? none : 'Noch nichts geladen. Tippe oben auf „Angebote suchen".') : ''}`;
@@ -901,7 +912,7 @@ function topSummary() {
   const byPct = (a, b) => score(b) - score(a);
   const food = o => o.p || o.food;
   const near = dedupe(offs.filter(o => o.store.tier === 'A' && food(o) && !o.dubious && o.pct != null && o.pct >= 0.15).sort(byPct)).slice(0, 8);
-  const habit = dedupe(offs.filter(o => o.p && (freq(o.p) > 0 || watched(o.p.id)) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, 8);
+  const habit = dedupe(offs.filter(o => o.p && habitOk(o.p) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, 8).map(o => ({ ...o, why: grundText(o.p) }));
   const top = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= 0.3 && !near.includes(o)).sort(byPct)).slice(0, 8);
   const sec = (title, sub, a) => a.length ? `<h2>${title}</h2><div class="mute" style="margin:-4px 4px 8px">${sub}</div><div class="hs">${a.map(o => offerCard(o)).join('')}</div>` : '';
   return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', 'Ab 30 % Ersparnis, auch bei Lidl (Spaziergang)', top);
@@ -918,7 +929,7 @@ function eye(id) { const i = byId(id); if (!i) return; if (!i.pid) { const c = m
 function watchP(id, noRender) { S.watch = watched(id) ? S.watch.filter(x => x !== id) : [...S.watch, id]; save(); if (!noRender) { render(); } }
 function addCustom() { const v = $('#wn').value.trim(); if (!v) return; const c = mkCustom(v); if (!watched(c.id)) S.watch.push(c.id); save(); render(); toast('„' + v + '" ist jetzt ein Favorit. Tippe oben auf „Angebote suchen".'); }
 function watchKey(i) { const k = SUGG[i][0]; if (k.startsWith('n:')) { const c = mkCustom(k.slice(2)); if (!watched(c.id)) S.watch.push(c.id); } else if (!watched(k)) S.watch.push(k); S.buys[k] = 0; save(); render(); }
-function finish() { S.list.filter(i => i.done).forEach(i => { const k = i.pid || 'n:' + i.name.toLowerCase(); S.buys[k] = (S.buys[k] || 0) + 1; if (i.pid) noteRec(i.pid, isoDay(TODAY)); }); S.list = S.list.filter(i => !i.done); shortCheckEnd();
+function finish() { S.list.filter(i => i.done).forEach(i => { const k = i.pid || 'n:' + i.name.toLowerCase(); S.buys[k] = (S.buys[k] || 0) + 1; if (i.pid) { noteRec(i.pid, isoDay(TODAY)); const g = (S.got = S.got || {})[i.pid] = S.got[i.pid] || [], t0 = isoDay(TODAY); if (!g.includes(t0)) { g.push(t0); if (g.length > 20) g.shift(); } } }); S.list = S.list.filter(i => !i.done); shortCheckEnd();
   const auto = [];
   Object.entries(S.buys).forEach(([k, n]) => { // was du oft kaufst, wird automatisch zum Favorit
     if (n < 3) return; let id = k;
