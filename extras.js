@@ -368,3 +368,11 @@ function repeatBlock() {
   const rs = S.repeat || [];
   return `<h2>🔁 Wiederkehrend</h2><div class="card">${rs.length ? rs.map(r => `<div class="row sp" style="padding:4px 0"><div class="grow" style="min-width:0;overflow-wrap:anywhere"><b>${esc(r.name)}</b><div class="mute small">${esc(repLabel(r))}</div></div><button class="btn sm" onclick="repDel('${r.id}')">Entfernen</button></div>`).join('') : '<div class="small">Noch nichts. Tippe bei einem Artikel auf deiner Liste auf „🔁 Wiederkehrend“, zum Beispiel für Milch jeden Samstag.</div>'}</div>`;
 }
+
+/* ---------- Starke Angebote: Schwelle direkt auf der Startseite einstellen ---------- */
+function topPctSheet() {
+  const cur = S.set.topPct, opts = [10, 15, 20, 25, 30, 40, 50];
+  $('#sheetbox').innerHTML = `<div class="row sp"><h3>⭐ Starke Angebote ab …</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div><div class="mute small" style="margin:4px 0 8px">Ab wie viel Prozent Ersparnis soll ein Angebot hier erscheinen? Die stärksten stehen immer zuerst.</div><div class="chips">${opts.map(v => `<button class="chip ${v === cur ? 'on' : ''}" onclick="setTopPct(${v})">${v} %</button>`).join('')}</div>`;
+  $('#sheet').hidden = false;
+}
+function setTopPct(v) { S.set.topPct = Math.min(90, Math.max(5, +v || 30)); save(); closeSheet(); render(); }

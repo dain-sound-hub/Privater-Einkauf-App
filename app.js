@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 123, t: '12.10. 20:46' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 124, t: '12.10. 20:51' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -913,9 +913,9 @@ function topSummary() {
   const food = o => o.p || o.food;
   const near = dedupe(offs.filter(o => o.store.tier === 'A' && food(o) && !o.dubious && o.pct != null && o.pct >= 0.15).sort(byPct)).slice(0, 8);
   const habit = dedupe(offs.filter(o => o.p && habitOk(o.p) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, 8).map(o => ({ ...o, why: grundText(o.p) }));
-  const top = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= S.set.topPct / 100 && !near.includes(o)).sort(byPct)).slice(0, 8);
+  const topAll = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= S.set.topPct / 100 && !near.includes(o)).sort(byPct)), top = topAll.slice(0, 20);
   const sec = (title, sub, a) => a.length ? `<h2>${title}</h2><div class="mute" style="margin:-4px 4px 8px">${sub}</div><div class="hs">${a.map(o => offerCard(o)).join('')}</div>` : '';
-  return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', `Ab ${S.set.topPct} % Ersparnis, die stärksten zuerst. Die Schwelle stellst du unter Mehr → Einstellungen ein.`, top);
+  return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', `<button class="chip" onclick="topPctSheet()" aria-label="Schwelle für starke Angebote ändern">Ab ${S.set.topPct} % Ersparnis ▾</button> <span class="mute small">${topAll.length > top.length ? 'die 20 stärksten von ' + topAll.length : topAll.length + ' Angebote'}, stärkste zuerst</span>`, top);
 }
 const byId = id => S.list.find(i => i.id === id);
 const tick = id => { const i = byId(id); if (!i) return; i.done = !i.done; shortCheckEnd(); save(); render(); };
