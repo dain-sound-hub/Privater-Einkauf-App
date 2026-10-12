@@ -30,8 +30,9 @@ if (loadErr) { console.error('FEHLER beim Laden der App-Dateien:', loadErr); pro
   await new Promise(r => setTimeout(r, 400)); // Angebote werden asynchron geladen
   const run = c => vm.runInContext(c, sb);
   sb.__t = {};
-  const offerCase = c => { sb.__t.o = { store: c.laden || 'aldi', name: c.name, desc: c.desc || '', cats: c.cats || '', price: c.preis || 2, valid: ['2026-10-05', '2999-01-01'], ...(c.menge ? { amount: c.menge, unit: c.einheit } : {}), ...(c.grundpreis ? { unitPrice: c.grundpreis, base: c.basis } : {}), ...(c.hinweis ? { note: c.hinweis } : {}), ...(c.quelle ? { src: c.quelle } : {}), ...(c.lebensmittel ? { food: true } : {}) }; return run('(() => { const e = enrich(__t.o); return { pid: e.p ? e.p.id : null, up: e.up ? +e.up.v.toFixed(2) + "/" + e.up.base : null, price: e.price, count: e.count || null }; })()'); };
+  const offerCase = c => { sb.__t.h = (c.historie || []).map(h => ({ pid: c.erwartet, ...h })); run('S.hist = __t.h'); sb.__t.o = { store: c.laden || 'aldi', name: c.name, desc: c.desc || '', cats: c.cats || '', price: c.preis || 2, valid: ['2026-10-05', '2999-01-01'], ...(c.menge ? { amount: c.menge, unit: c.einheit } : {}), ...(c.grundpreis ? { unitPrice: c.grundpreis, base: c.basis } : {}), ...(c.hinweis ? { note: c.hinweis } : {}), ...(c.quelle ? { src: c.quelle } : {}), ...(c.lebensmittel ? { food: true } : {}) }; return run('(() => { const e = enrich(__t.o); return { pid: e.p ? e.p.id : null, up: e.up ? +e.up.v.toFixed(2) + "/" + e.up.base : null, price: e.price, count: e.count || null, pct: e.pct == null ? null : Math.round(e.pct * 100) }; })()'); };
   const bonCase = c => { sb.__t.b = c.zeile; return run('(() => { S.aliases = {}; const x = { kind: "item", name: __t.b, price: 1, qty: 1 }; matchBonItem(x); return { pid: x.pid || null }; })()'); };
+  const bonTextCase = c => { sb.__t.bt = c.bon_text; sb.__t.op = { ref: c.foto_tag, today: c.heute }; return run('(() => { const p = parseReceipt(__t.bt, __t.op); return { pid: p.store || null, sug: p.sug || null, date: p.date || null, time: p.time || null, guess: !!p.dateGuess }; })()'); };
   const inputCase = c => { sb.__t.i = c.text; return run('(() => { const a = parseAdd(__t.i); return { pid: a.pid || null, name: a.name, qty: a.qty }; })()'); };
 
   const files = [path.join(__dirname, 'katalog.json')];
@@ -39,10 +40,10 @@ if (loadErr) { console.error('FEHLER beim Laden der App-Dateien:', loadErr); pro
   let ok = 0, bad = 0; const fails = [], openN = [];
   for (const f of files) {
     if (!fs.existsSync(f)) continue; const cat = JSON.parse(fs.readFileSync(f, 'utf8'));
-    for (const [kind, fn] of [['angebote', offerCase], ['bons', bonCase], ['eingaben', inputCase]]) for (const c of cat[kind] || []) {
+    for (const [kind, fn] of [['angebote', offerCase], ['bons', bonCase], ['eingaben', inputCase], ['bon_texte', bonTextCase]]) for (const c of cat[kind] || []) {
       let r; try { r = fn(c); } catch (e) { r = { pid: 'FEHLER ' + e.message }; }
-      const exp = c.erwartet === undefined ? null : c.erwartet, gotOk = r.pid === exp && (c.grundpreis_erwartet === undefined || r.up === c.grundpreis_erwartet) && (c.menge_erwartet === undefined || r.qty === c.menge_erwartet) && (c.preis_erwartet === undefined || r.price === c.preis_erwartet) && (c.stueck_erwartet === undefined || r.count === c.stueck_erwartet);
-      if (c.offen) { openN.push(`${c.name || c.zeile || c.text}: ${gotOk ? 'JETZT RICHTIG (Eintrag "offen" entfernen)' : 'noch offen'}`); continue; } if (gotOk) ok++; else { bad++; fails.push(`${path.basename(f)} [${kind}] „${c.name || c.zeile || c.text}“ → erhalten ${JSON.stringify(r)}, erwartet ${JSON.stringify({ pid: exp, ...(c.grundpreis_erwartet !== undefined ? { up: c.grundpreis_erwartet } : {}), ...(c.preis_erwartet !== undefined ? { price: c.preis_erwartet } : {}), ...(c.stueck_erwartet !== undefined ? { count: c.stueck_erwartet } : {}), ...(c.menge_erwartet !== undefined ? { qty: c.menge_erwartet } : {}) })}${c.grund ? ' (' + c.grund + ')' : ''}`); }
+      const exp = kind === 'bon_texte' ? (c.laden === undefined ? null : c.laden) : (c.erwartet === undefined ? null : c.erwartet), gotOk = r.pid === exp && (c.datum === undefined || r.date === c.datum) && (c.zeit === undefined || r.time === c.zeit) && (c.vorschlag === undefined || r.sug === c.vorschlag) && (c.grundpreis_erwartet === undefined || r.up === c.grundpreis_erwartet) && (c.menge_erwartet === undefined || r.qty === c.menge_erwartet) && (c.preis_erwartet === undefined || r.price === c.preis_erwartet) && (c.stueck_erwartet === undefined || r.count === c.stueck_erwartet) && (c.pct_erwartet === undefined || r.pct === c.pct_erwartet);
+      if (c.offen) { openN.push(`${c.name || c.zeile || c.text || (c.bon_text || '').slice(0, 40).replace(/\n/g, ' / ')}: ${gotOk ? 'JETZT RICHTIG (Eintrag "offen" entfernen)' : 'noch offen'}`); continue; } if (gotOk) ok++; else { bad++; fails.push(`${path.basename(f)} [${kind}] „${c.name || c.zeile || c.text || (c.bon_text || '').slice(0, 40).replace(/\n/g, ' / ')}“ → erhalten ${JSON.stringify(r)}, erwartet ${JSON.stringify({ pid: exp, ...(c.grundpreis_erwartet !== undefined ? { up: c.grundpreis_erwartet } : {}), ...(c.preis_erwartet !== undefined ? { price: c.preis_erwartet } : {}), ...(c.stueck_erwartet !== undefined ? { count: c.stueck_erwartet } : {}), ...(c.menge_erwartet !== undefined ? { qty: c.menge_erwartet } : {}) })}${c.grund ? ' (' + c.grund + ')' : ''}`); }
     }
   }
   console.log(`${ok} von ${ok + bad} Fällen richtig.`);
@@ -64,6 +65,12 @@ if (loadErr) { console.error('FEHLER beim Laden der App-Dateien:', loadErr); pro
   if (di > 0) { // Zuordnung aller aktuellen Angebote in eine Datei schreiben (zum Vergleichen vorher/nachher mit einem Diff)
     const rows = run('SRC.offers.map(enrich).map(o => o.store.short + " | " + o.name + " | " + (o.p ? o.p.id : "-") + " | " + (o.up ? o.up.v.toFixed(2) + "/" + o.up.base : "-"))');
     fs.writeFileSync(process.argv[di + 1], rows.join('\n') + '\n'); console.log('Zuordnung von ' + rows.length + ' Angeboten gespeichert: ' + process.argv[di + 1]);
+  }
+  const ji = process.argv.indexOf('--js');
+  if (ji > 0) { // beliebigen Auswertungs-Code gegen die App-Logik laufen lassen (optional mit --export <Datei> als Datenstand); Ergebnis wird als JSON ausgegeben
+    const ex = process.argv.indexOf('--export');
+    if (ex > 0) { sb.__t.exp = JSON.parse(fs.readFileSync(process.argv[ex + 1], 'utf8')).daten; run('S = sanitize(__t.exp); S.custom.forEach(regCustom); CACHE = null; S.remapV = 0; bonRemapOld(true); BH = null;'); }
+    console.log(JSON.stringify(run(fs.readFileSync(process.argv[ji + 1], 'utf8')), null, 1));
   }
   const hi = process.argv.indexOf('--habit');
   if (hi > 0) { // Warum erscheint ein Angebot unter „Das kaufst du öfter, jetzt im Angebot“? Zeigt Produkt und Grund (Favorit oder Kauf-/Eintragshäufigkeit) mit den Daten einer Exportdatei

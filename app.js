@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 125, t: '12.10. 20:56' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 130, t: '12.10. 21:58' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -38,7 +38,7 @@ function sanitize(x) {
     watch: Array.isArray(o.watch) ? o.watch.filter(idOk) : DEF.watch.slice(),
     custom: arr(o.custom).filter(c => c && idOk(c.id) && typeof c.name === 'string' && c.name.trim()).slice(0, 500).map(c => ({ id: c.id, name: c.name.slice(0, 80) })),
     manual: arr(o.manual).filter(m => m && typeof m === 'object' && typeof m.name === 'string' && Number(m.price) > 0 && STORES.some(s => s.id === m.store) && Array.isArray(m.valid) && dateOk(m.valid[0]) && dateOk(m.valid[1])).map(m => ({ id: String(m.id ?? 'm' + Date.now()).slice(0, 40), store: m.store, name: m.name.slice(0, 80), price: Number(m.price), regular: num(m.regular, null), amount: num(m.amount, null), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(m.unit) ? m.unit : null, valid: [m.valid[0], m.valid[1]], manual: true })),
-    hist: arr(o.hist).filter(h => h && (!dateOk(h.date) || h.date >= minDay) && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })),
+    hist: (() => { const m = new Map(); arr(o.hist).slice(-5000).filter(h => h && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0 && +h.up < 1e4).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) && h.date <= today ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })).filter(h => !h.date || h.date >= minDay).forEach((h, i) => m.set(h.date ? h.pid + '|' + h.date + '|' + h.store : '?' + h.pid + '|' + h.up + '|' + h.store, h)); return [...m.values()].slice(-400); })(), // erst bereinigen, dann kürzen; ein Eintrag je Produkt, Tag und Laden (der neueste)
     buys: Object.fromEntries(Object.entries(o.buys && typeof o.buys === 'object' && !Array.isArray(o.buys) ? o.buys : {}).filter(([k, n]) => k.length <= 90 && Number.isFinite(+n) && +n >= 0).slice(0, 3000).map(([k, n]) => [k, +n])),
     set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20), topPct: Math.min(90, Math.max(5, num(set.topPct, 30))), noDragTip: !!set.noDragTip, theme: ['light', 'dark'].includes(set.theme) ? set.theme : 'auto' }
   };
@@ -201,7 +201,7 @@ function unitPrice(o, p) {
   const base = o.base || (p && p.base) || null;
   if (o.unitPrice) { // stimmt der Grundpreis der Quelle nicht annähernd zu Preis und Menge (1 €/l statt 26 €/l), wird er neu gerechnet; glatte Mehrfachpackungen (4 x 75 ml) sind in Ordnung
     const a = o.amount, u = o.unit, mm = { g: [0.001, 'kg'], kg: [1, 'kg'], ml: [0.001, 'l'], l: [1, 'l'] }[u];
-    if (a && mm && (!base || base === mm[1])) { const own = o.price / (a * mm[0]), r = o.unitPrice / own, inv = 1 / r, multi = x => Math.abs(Math.round(x) - x) < 0.04 && Math.round(x) >= 2 && Math.round(x) <= 24; if ((r > 2.5 || r < 0.4) && !multi(r) && !multi(inv)) return { v: own, base: mm[1] }; }
+    if (a && mm && (!base || base === mm[1])) { const own = o.price / (a * mm[0]), r = o.unitPrice / own, inv = 1 / r, multi = x => Math.abs(Math.round(x) - x) < 0.04 && Math.round(x) >= 2 && Math.round(x) <= 24; if ((r > 2.5 || r < 0.4) && !multi(r) && !multi(inv)) return { v: own, base: mm[1] }; if (Math.abs(o.unitPrice - own) <= 0.006) return { v: own + 1e-9, base: mm[1] }; /* nur Rundung auf ganze Cent: exakt rechnen */ }
     return { v: o.unitPrice, base: base || 'kg' };
   }
   if (!o.amount || !o.unit) return null;
@@ -215,8 +215,10 @@ function unitPrice(o, p) {
 const qtyBase = o => o.p && o.p.base === 'st' ? (o.count || (o.unit === 'st' && o.amount) || null) : !o.amount || !o.unit ? null : ({ g: o.amount / 1000, ml: o.amount / 1000 }[o.unit] ?? o.amount);
 function refPrice(p) {
   if (!p) return null;
-  const h = S.hist.filter(x => x.pid === p.id && x.up).map(x => x.up).sort((a, b) => a - b);
-  if (h.length >= 2) return { v: h[Math.floor(h.length / 2)], note: 'dein Mittelwert aus ' + h.length + ' Einträgen' };
+  const seen = new Set(), h = [];
+  S.hist.forEach((x, i) => { if (x.pid !== p.id || !x.up) return; const k = x.date ? x.date + '|' + (x.store || '') : '?' + i; if (seen.has(k)) return; seen.add(k); h.push(x.up); }); // ein Eintrag je Kauftag und Laden: ein doppelter Bon ist ein Kauf
+  h.sort((a, b) => a - b);
+  if (h.length >= 2) { const v = h.length % 2 ? h[(h.length - 1) / 2] : (h[h.length / 2 - 1] + h[h.length / 2]) / 2; return { v, note: 'dein Mittelwert aus ' + h.length + ' Käufen' }; } // echter Median, bei 2 Käufen der Mittelwert
   return p.ref ? { v: p.ref, note: p.refNote || 'historische Referenz' } : null;
 }
 // Ersparnis in Euro: Normalpreis minus Angebotspreis, sonst Unterschied zum Referenzpreis mal Menge
@@ -256,6 +258,7 @@ function inferQty(o, p) {
   }
   return Object.keys(out).length ? out : null;
 }
+const REF_MIN = 0.05; // kleinere Unterschiede zum eigenen Preis (Rundung, Marke) sind keine Ersparnis
 const SHELF_RX = /\/produkte\/(?:konserven|tiefkuehl)/i; // ALDI nennt das Regal in der Adresse der Produktseite
 const fold5 = s => String(s).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
 const catsSays = (q, cats, hit, o) => { // lässt die Produktart des Prospekts (cats) den Treffer im Namen gelten? Ablehnen nur, wenn cats selbst eine andere Produktart nennt oder die Ware kein Lebensmittel ist
@@ -286,7 +289,7 @@ function enrich(o) {
   if (p && p.meat && (o.food === false || MEAT_NOISE.test(text))) { p = null; up = unitPrice(o, null); } // „Rindengefäß“, Lammfell-Kissen & Co. sind kein Fleisch
   let pct = null, kind = null;
   if (o.regular && o.regular > o.price) { pct = (o.regular - o.price) / o.regular; kind = o.regularIsUvp ? 'UVP' : 'Normalpreis'; }
-  else if (up && p && p.base && up.base === p.base) { const r = refPrice(p); if (r && r.v > up.v) { pct = (r.v - up.v) / r.v; kind = 'Referenz: ' + r.note; } }
+  else if (up && p && p.base && up.base === p.base) { const r = refPrice(p); if (r && r.v > up.v) { const pc = (r.v - up.v) / r.v; if (pc >= REF_MIN) { pct = pc; kind = 'Referenz: ' + r.note; } } }
   if (pct != null && pct > 0.9) pct = null;
   const dubious = pct != null && ((o.regularIsUvp && pct > 0.5) || pct > 0.7); // UVP-Rabatte über 50 % sind meist Schein-Rabatte
   const from = d0(o.valid?.[0] || TODAY), to = d0(o.valid?.[1] || '2999-01-01');
@@ -619,7 +622,7 @@ V.pro = () => {
 };
 V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow">Bon fotografieren: Die App liest ihn, lernt, wo du was kaufst, und findet Spartipps.<div class="mute"><button class="lnk" onclick="bonList()">${S.bons.length} Bons gespeichert, ansehen</button> · 📷 Foto-Lesen: ${aiKey() ? '✓ eingerichtet' : 'noch nicht eingerichtet'} <button class="lnk" onclick="aiSheet()">${aiKey() ? 'ändern' : 'einrichten'}</button></div></div><button class="btn pri sm" onclick="go('bon')">📷 Bon</button></div>
   <h2>🎨 Darstellung</h2><div class="card">${SEG(S.set.theme || 'auto', [['auto', 'Automatisch'], ['light', '☀️ Hell'], ['dark', '🌙 Dunkel']], 'setTheme')}<div class="mute small" style="margin-top:6px">Automatisch folgt der Einstellung deines Handys.</div></div>
-  ${repeatBlock()}<h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
+  ${repeatBlock()}${diagBlock()}<h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
   ${storageCard()}<h2>Datenstand</h2><div class="card"><div>${SRC.live ? `Letzte Suche: <b>${new Date(SRC.fetched).toLocaleString('de-DE')}</b><br><span class="mute">${SRC.offers.length} Angebote · ${esc(SRC.source)}</span>` : 'Noch keine Suche. Tippe oben auf „Angebote suchen".'}</div>
   <div class="mute" style="margin-top:8px">Wichtig: Die Angebote sind Händler-weit. Ob genau deine Filiale in Chorweiler mitmacht, wird nicht geprüft. <b>ALDI SÜD</b> kommt direkt von der ALDI-Webseite: ${SRC.aldi && SRC.aldi.ok ? '✓ ' + SRC.aldi.count + ' Produkte geladen' : '⚠ aktuell nicht geladen' + (SRC.aldi && SRC.aldi.error ? ' (' + esc(SRC.aldi.error) + ')' : '') + ', bitte Prospekt-Link bei Läden nutzen'}. Abgedeckt sind REWE, Netto, Lidl, METRO, ALDI und teilweise dm. Penny ist bewusst nicht dabei.</div></div>
   <h2>Läden</h2>${['A', 'B', 'D'].map(t => `<div class="card"><h3><i class="dot t${t}"></i>${TIER_LABEL[t]}</h3>${STORES.filter(s => s.tier === t).map(s => `<details style="margin-top:8px"><summary><b>${esc(s.short)}</b> <span class="mute">${t === 'A' ? '3 Min zu Fuß' : t === 'B' ? s.walk + ' Min zu Fuß' : s.car ? 'ca. ' + s.car + ' Min Auto' : ''}</span></summary><div class="mute" style="padding:6px 0">${esc(s.addr)}<br>Öffnungszeiten: ${esc(s.hours)}${s.transit ? '<br>' + esc(s.transit) : ''}${s.note ? '<br>' + esc(s.note) : ''}</div><div class="row">${s.links.map(l => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join(' · ')}</div></details>`).join('')}</div>`).join('')}

@@ -435,6 +435,118 @@
       "lebensmittel": true,
       "erwartet": null,
       "grund": "Erdnussbutter-Riegel ist keine Butter"
+    },
+    {
+      "name": "QUELLBRUNN Natürliches Mineralwasser, Naturell 1,5 l",
+      "preis": 0.29,
+      "menge": 1.5,
+      "einheit": "l",
+      "grundpreis": 0.19,
+      "basis": "l",
+      "hinweis": "Dauerpreis (kein Wochenangebot)",
+      "historie": [
+        {
+          "up": 0.193,
+          "date": "2026-09-24",
+          "store": "aldi"
+        },
+        {
+          "up": 0.193,
+          "date": "2026-10-08",
+          "store": "aldi"
+        }
+      ],
+      "erwartet": "wasser",
+      "grundpreis_erwartet": "0.19/l",
+      "pct_erwartet": null,
+      "grund": "Quelle rundet 0,1933 auf 0,19 €/l: kein Schein-Rabatt gegen eigenen Kauf zum selben Preis"
+    },
+    {
+      "name": "QUELLBRUNN Natürliches Mineralwasser, Naturell 1,5 l",
+      "preis": 0.29,
+      "menge": 1.5,
+      "einheit": "l",
+      "grundpreis": 0.19,
+      "basis": "l",
+      "historie": [
+        {
+          "up": 0.193,
+          "date": "2026-10-08",
+          "store": "aldi"
+        },
+        {
+          "up": 0.193,
+          "date": "2026-10-08",
+          "store": "aldi"
+        }
+      ],
+      "erwartet": "wasser",
+      "pct_erwartet": null,
+      "grund": "doppelter Bon am selben Tag ist ein Kauf"
+    },
+    {
+      "name": "MILSANI Frische Milch 1,5 % 1 l, fettarm",
+      "preis": 0.85,
+      "historie": [
+        {
+          "up": 0.95,
+          "date": "2026-09-01",
+          "store": "aldi"
+        },
+        {
+          "up": 1.19,
+          "date": "2026-09-20",
+          "store": "rewe"
+        }
+      ],
+      "erwartet": "milch",
+      "pct_erwartet": 21,
+      "grund": "Median aus 2 Käufen = Mittelwert, nicht der höhere Wert"
+    },
+    {
+      "name": "MILSANI Frische Milch 1,5 % 1 l, fettarm",
+      "preis": 0.85,
+      "historie": [
+        {
+          "up": 1.19,
+          "date": "2026-09-01",
+          "store": "rewe"
+        },
+        {
+          "up": 1.19,
+          "date": "2026-09-20",
+          "store": "rewe"
+        }
+      ],
+      "erwartet": "milch",
+      "grundpreis_erwartet": "0.85/l",
+      "pct_erwartet": 29,
+      "grund": "echte Ersparnis bleibt"
+    },
+    {
+      "name": "Metzgerfrisch Frische Puten-Ministeaks",
+      "desc": "Je 800 g. Standartpackung: 400 g",
+      "preis": 7.99,
+      "menge": 400,
+      "einheit": "g",
+      "grundpreis": 9.99,
+      "basis": "kg",
+      "laden": "lidl",
+      "erwartet": "putenbrust",
+      "grundpreis_erwartet": "9.99/kg",
+      "grund": "große Abweichung zur Menge der Quelle: Quellwert behalten"
+    },
+    {
+      "name": "Gutes Land Schlagsahne",
+      "preis": 3,
+      "menge": 200,
+      "einheit": "g",
+      "grundpreis": 3.75,
+      "basis": "kg",
+      "laden": "netto",
+      "erwartet": null,
+      "grundpreis_erwartet": "3.75/kg",
+      "grund": "Mehrfachpackung: Quellwert gilt"
     }
   ],
   "bons": [
@@ -710,6 +822,223 @@
     {
       "text": "Möhren",
       "erwartet": null
+    }
+  ],
+  "bon_texte": [
+    {
+      "bon_text": "HEIDELBEEREN 2,49 B\nJA! MIWA STILL 1,74 A\nSUMME EUR 4,23\nGeg. EC-Cash EUR 4,23",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": null,
+      "vorschlag": "rewe",
+      "datum": null,
+      "grund": "Kopf und Fuß fehlen: Eigenmarke nur als Vorschlag"
+    },
+    {
+      "bon_text": "Peter Knakowski OHG\nFlorenzer Str. 24 - 29\nBROT 1,29 B\nSUMME EUR 1,29\nDatum: 10.10.2026\nUhrzeit: 17:28:11 Uhr",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "Laden über die Adresse"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nDatum: 1O.10.2026\nUhrzeit: 17.28.11 Uhr",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "O statt 0, Punkte in der Uhrzeit"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nDatum: 10,10,2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "grund": "Komma als Trenner"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nDatum: 10.10.2024",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "grund": "Jahr verlesen: Jahr vom Foto-Tag"
+    },
+    {
+      "bon_text": "Lidl Vertriebs GmbH\nBROT 1,29 A\nBonus-Stand 05.10.2026\nSUMME 1,29\n10.10.26 17:28 Bon 2345",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "lidl",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "früheres Datum im Rauschen darf nicht gewinnen"
+    },
+    {
+      "bon_text": "MILCH 1,09 A\nNetto-Warenwert\nSUMME 1,09\n10.10.26 17:28\nwww.lidl.de",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "lidl",
+      "datum": "2026-10-10",
+      "grund": "Netto-Warenwert ist kein Laden"
+    },
+    {
+      "bon_text": "E center Mustermann\nBROT 1,29 A\nSUMME 1,29\n10.10.26 17:28 Uhr",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "edeka",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "Untermarke"
+    },
+    {
+      "bon_text": "REWE Peter Knakowski OHG\nBROT 1,29 B\nSUMME EUR 1,29\n** Kundenbeleg **\nDatum: 10.10.2026\nUhrzeit: 17:28:11 Uhr",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "bon_text": "PENNY Markt GmbH\nBROT 1,29 A\nSUMME 1,29\nDatum: 10.10.2026 Uhrzeit: 17:28:11\nEin Unternehmen der REWE Group",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "penny",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "darf nicht kaputtgehen: Kopf schlägt Fuß"
+    },
+    {
+      "bon_text": "REWE\nMo-Sa 07:00 Uhr - 22:00 Uhr\nBROT 1,29 B\nSUMME 1,29\nUhrzeit: 10.10.11 Uhr\nGültig bis 10.10.2027",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": null,
+      "grund": "darf nicht kaputtgehen: Uhrzeit oder Gültig-bis ist kein Datum, keine Jahresreparatur"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nGültig bis 05.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": null,
+      "grund": "Datum aus Gültig-bis-Zeile ist kein Bon-Datum"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nCoupon 20% gültig vom 01.10.2026 bis 11.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": null,
+      "grund": "Coupon-Zeitraum ist kein Bon-Datum"
+    },
+    {
+      "bon_text": "REWE\nJOGHURT 1,29 B\nMHD: 08.10.2026\nSUMME EUR 1,29",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": null,
+      "grund": "MHD ist kein Bon-Datum"
+    },
+    {
+      "bon_text": "REWE\nMo-Sa 07:00-22:00 Uhr\nBROT 1,29 B\nSUMME EUR 1,29\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "zeit": null,
+      "grund": "Öffnungszeiten ohne Stichwort sind keine Uhrzeit"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nMo-Sa 7.00-22.00 Uhr",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "zeit": null,
+      "grund": "Zeitspanne mit Wochentagen ist keine Uhrzeit"
+    },
+    {
+      "bon_text": "Kaufland\nK-CLASSIC MILCH 0,99 B\nSUMME 0,99\nDatum: 10.10.26 Uhrzeit: 17:28",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "kaufland",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "2-stelliges Jahr nicht als Sekunden lesen"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\n10.10.26 Uhr",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "zeit": null,
+      "grund": "Datumsteile sind keine Uhrzeit"
+    },
+    {
+      "bon_text": "Penny-Markt GmbH\nEin Unternehmen der REWE Group\nPfand 0,25\nJA! MILCH 1,09 B\nSUMME EUR 1,34\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "penny",
+      "grund": "REWE Group im Kopf ist kein REWE-Laden"
+    },
+    {
+      "bon_text": "Ein Unternehmen der REWE Group\nJA! MILCH 1,09 B\nJA! KÄSE 1,09 B\nSUMME EUR 2,18\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": null,
+      "vorschlag": "rewe",
+      "grund": "Konzernzeile ist kein Ladenname, JA! nur Vorschlag"
+    },
+    {
+      "bon_text": "Mailänder Passage 1\nBROT 1,29 B\nSUMME EUR 1,29\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": null,
+      "grund": "Adresse gehört zu Netto und dm: Gleichstand nie sicher"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nBon-Nr 12.10.2026-00123",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": null,
+      "grund": "Bon-Nummer mit Datumsform ist kein Datum"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\nTel. 0221/12.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": null,
+      "grund": "Telefonnummer ist kein Datum"
+    },
+    {
+      "bon_text": "REWE\nBROT 1,29 B\nSUMME EUR 1,29\n10.10.2026, 17:28",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "datum": "2026-10-10",
+      "zeit": "17:28",
+      "grund": "Komma nach dem Jahr"
+    },
+    {
+      "bon_text": "(REWE)\nBROT 1,29 B\nSUMME EUR 1,29\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "grund": "Name mit Klammer"
+    },
+    {
+      "bon_text": "Metro\nBROT 1,00\nNetto 1,00\nMwSt 7% 0,07\nSumme 1,07\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "metro",
+      "grund": "Zeile Netto mit Betrag ist Steuer, kein Laden"
     }
   ]
 }

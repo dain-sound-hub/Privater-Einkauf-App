@@ -11,29 +11,61 @@ const LINE_RX = /^(.*?)\s+(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?(?:\s*([A-Za-z]|\d)
 const QTY_RX = /^(\d+)\s*(?:x|×|\*|stk\.?\s*x)\s*(\d{1,4}[.,]\d{2})(?:\s*(?:€|eur))?(?:\s+(\d{1,4}[.,]\d{2}))?\s*[A-Za-z*]?$/i;
 const WEIGHT_RX = /^(\d+[.,]\d{1,3})\s*kg\s*(?:x|×)\s*(\d{1,4}[.,]\d{2})/i;
 const num = s => parseFloat(String(s).replace(',', '.'));
-function detectStore(t) {
-  for (const l of String(t).split('\n')) { if (/\d[.,]\d{2}/.test(l) || /mwst|ust-?id|steuer/i.test(l)) continue; const h = BON_STORES.find(([rx]) => rx.test(l)); if (h) return h[1]; } // Kopfzeilen zuerst, Zeilen mit Preisen und Steuer zählen nicht
-  const h = BON_STORES.find(([rx]) => rx.test(t)); return h ? h[1] : null;
+/* ---------- Laden, Datum und Uhrzeit auf dem Bon erkennen: mehrere Hinweise, der beste gewinnt ---------- */
+// Doppelgänger aus der Texterkennung (kyrillisch/griechisch) auf lateinische Buchstaben zurückführen
+const bonHomo = s => s.replace(/[Аа]/g, 'A').replace(/[ЕеΕ]/g, 'E').replace(/[ОоΟ]/g, 'O').replace(/[РрΡ]/g, 'P').replace(/[Сс]/g, 'C').replace(/[НΗ]/g, 'H').replace(/[КΚ]/g, 'K').replace(/[МΜ]/g, 'M').replace(/[ТΤ]/g, 'T').replace(/[ХΧ]/g, 'X');
+// Namen (tolerant: REVVE, nahkauf …), Webadressen und Untermarken
+const BON_EXTRA = [[/\bre(?:w|vv)e(?!l)|\bnahkauf\b|rewe\.de/i, 'rewe'], [/\bnetto(?!\s*-?\s*(?:warenwert|wert|betrag|umsatz|summe))\b|netto-online/i, 'netto'], [/\bdm\s*-?\s*drogerie|dm\.de\b/i, 'dm'], [/\blidl\b|lidl\.de/i, 'lidl'], [/\baldi\b|aldi-(?:sued|nord)/i, 'aldi'], [/\bkaufland\b/i, 'kaufland'], [/\bpenny\b/i, 'penny'], [/\bedeka\b|\be\s?center\b|\bmarktkauf\b|\be\s?aktiv\s?markt\b|\bedeka\.de/i, 'edeka'], [/\bselgros\b/i, 'selgros'], [/\bmetro\b/i, 'metro'], [/handelshof/i, 'handelshof'], [/\brossmann\b/i, 'rossmann'], [/media\s*markt/i, 'mediamarkt'], [/\breal\s*(?:,-|gmbh|markt|\.de)/i, 'real']];
+// Eigenmarken zählen nur wenig: allein reichen sie für einen Vorschlag, nie für eine feste Zuordnung
+const BON_OWN = [[/\bja!/i, 'rewe'], [/\bk-?classic\b/i, 'kaufland'], [/gut\s*&\s*g(?:ü|ue)nstig/i, 'edeka'], [/\bmilbona\b|\bpilos\b/i, 'lidl'], [/\bmilsani\b|\bmoser roth\b/i, 'aldi'], [/\bbalea\b|\bdmbio\b/i, 'dm'], [/\bisana\b|\balterra\b/i, 'rossmann']];
+const bonFoldS = s => s.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/stra(?:ss|ß)e|str\./g, 'str');
+let BON_STREETS = null;
+const bonStreets = () => BON_STREETS || (BON_STREETS = STORES.filter(s => s.addr && /\d/.test(s.addr)).map(s => ({ id: s.id, st: bonFoldS(s.addr.split(',')[0]).replace(/\s*\d.*$/, '').trim() })).filter(x => x.st.length >= 6)); // Straßen der bekannten Läden
+function detectStoreEx(lines) { // { store, sug }: store bei sicherem Treffer, sonst sug als Vorschlag
+  const sc = {}; const add = (id, w) => { sc[id] = (sc[id] || 0) + w; };
+  lines.forEach((l0, i) => {
+    const l = bonHomo(l0), price = /\d[.,]\d{2}/.test(l), tax = /mwst|ust-?id|steuer/i.test(l), konzern = /unternehmen der|\bgroup\b|konzern/i.test(l), steuerNetto = /^netto\s+-?\d/i.test(l);
+    if (!konzern && !steuerNetto) for (const [rx, id] of BON_EXTRA) if (rx.test(l)) add(id, price || tax ? 1 : i < 14 ? 4 : 2.5); // Name im Kopf zählt mehr als im Text; „Ein Unternehmen der REWE Group“ ist kein Laden
+    if (!price) for (const s of bonStreets()) if (bonFoldS(l).includes(s.st)) add(s.id, 2);
+    for (const [rx, id] of BON_OWN) if (rx.test(l)) add(id, 0.6);
+  });
+  const rank = Object.entries(sc).sort((a, b) => b[1] - a[1]), best = rank[0];
+  if (best && rank[1] && best[1] - rank[1][1] < 1) return { store: null, sug: best[0] }; // Gleichstand (z. B. zwei Läden an derselben Adresse): nur ein Vorschlag
+  return best && best[1] >= 2 ? { store: best[0] } : best ? { store: null, sug: best[0] } : { store: null };
 }
-function detectDateAt(lines) { // gibt Datum und die Zeile zurück, aus der es kam
-  const idx = [...lines.map((l, i) => /datum|date/i.test(l) ? i : -1).filter(i => i >= 0), ...lines.map((l, i) => i)];
-  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
-  const minIso = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
-  const real = (y, mo, d) => { // echter Kalendertag (kein 31.02.), ab 2020, nicht nach heute, nicht älter als ca. 400 Tage
-    if (y < 2020 || y > 2100) return null; const iso = y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0'), x = new Date(iso + 'T12:00:00');
-    return !isNaN(x) && x.toISOString().slice(0, 10) === iso && iso <= today && iso >= minIso ? iso : null;
-  };
-  for (const i of idx) {
-    const l = lines[i]; let m = l.match(/(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4}|\d{2})\b/);
-    if (m) { const iso = real(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2], +m[1]); if (iso) return { iso, i }; }
-    m = l.match(/(\d{4})-(\d{2})-(\d{2})/); if (m) { const iso = real(+m[1], +m[2], +m[3]); if (iso) return { iso, i }; }
+function detectStore(t) { return detectStoreEx(String(t).split('\n')).store; }
+const bonIso = (y, m, d) => { const s = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'), x = new Date(s + 'T12:00:00'); return !isNaN(x) && x.toISOString().slice(0, 10) === s ? s : null; };
+// Ziffern-Verwechslungen (O statt 0, l statt 1) nur direkt zwischen Ziffern und Trennern korrigieren
+const bonDigits = l => bonHomo(l).replace(/(?<=[\d.,\/\- ])[Oo](?=[\d.,\/\-])|(?<=[\d.,\/\-])[Oo]|[Oo](?=\d[.,\/\-]\d)/g, '0').replace(/(?<![A-Za-z])[lI|](?=\d)|(?<=\d)[lI|](?![A-Za-z])/g, '1');
+function detectDateAt(lines, ref, todayIso) { // plausibelstes Datum aus ALLEN Zeilen: { iso, i, fixed } (fixed = Jahr vom Foto-Tag übernommen)
+  todayIso = todayIso || new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  const min = new Date(new Date(todayIso) - 400 * 864e5).toISOString().slice(0, 10), found = [];
+  lines.forEach((l0, i) => {
+    const l = bonDigits(l0);
+    for (const m of l.matchAll(/(?<![\d.\/])(?<!\d,)(\d{1,2})\s?[.,\/-]\s?(\d{1,2})\s?[.,\/-]\s?(\d{4}|\d{2})(?!\d|,\d|-\d)/g)) found.push({ d: +m[1], mo: +m[2], y: m[3].length === 2 ? 2000 + +m[3] : +m[3], i, l });
+    for (const m of l.matchAll(/(20\d\d)-(\d{2})-(\d{2})/g)) found.push({ d: +m[3], mo: +m[2], y: +m[1], i, l });
+  });
+  const r = ref || todayIso, cands = [], ok = x => x && x <= todayIso && x >= min;
+  for (const c of found) {
+    if (c.mo < 1 || c.mo > 12 || c.d < 1 || c.d > 31) continue;
+    let s = bonIso(c.y, c.mo, c.d), fixed = false;
+    if (/g(?:ü|ue)ltig|\bbis\b|mhd|haltbar|coupon|aktion/i.test(c.l)) continue; // Gültig-bis, Coupon, MHD und Aktionszeiträume sind kein Bon-Datum
+    const dateLine = !/uhrzeit|\buhr\b/i.test(c.l); // in Zeilen mit Uhr(zeit) wird das Jahr nie repariert
+    if (!ok(s)) { if (!dateLine) continue; const ry = +r.slice(0, 4); for (const y of [ry, ry - 1]) { const t = bonIso(y, c.mo, c.d); if (ok(t) && t <= r) { s = t; fixed = true; break; } } if (!ok(s)) continue; } // verlesenes Jahr: Tag und Monat behalten, Jahr vom Foto-Tag
+    const dist = Math.abs(new Date(r) - new Date(s)) / 864e5;
+    const w = (/datum|date/i.test(c.l) ? 3 : 0) + (/\d{1,2}[:.]\d{2}/.test(c.l.replace(/\d{1,2}\s?[.,\/-]\s?\d{1,2}\s?[.,\/-]\s?\d{2,4}/, '')) ? 2 : 0) + (c.i > lines.length * 0.6 ? 1 : 0) - (/g(?:ü|ue)ltig|bis|mhd|coupon|aktion/i.test(c.l) ? 4 : 0) - (fixed ? 2 : 0) - Math.min(3, dist / 10);
+    cands.push({ iso: s, i: c.i, w, fixed });
   }
-  return null;
+  cands.sort((a, b) => b.w - a.w);
+  return cands[0] || null;
 }
-function detectDate(lines) { const d = detectDateAt(lines); return d ? d.iso : null; }
-function detectTime(lines) { // Uhrzeit aus der Zeile des gültigen Datums („08.10.26 19:21“), sonst aus der nächsten
-  const d = detectDateAt(lines); if (!d || /uhr\s*-/i.test(lines[d.i])) return null;
-  const m = (lines[d.i] + ' ' + (lines[d.i + 1] || '')).match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/); return m ? m[1].padStart(2, '0') + ':' + m[2] : null;
+function detectDate(lines, ref, todayIso) { const d = detectDateAt(lines, ref, todayIso); return d ? d.iso : null; }
+function detectTime(lines, d) { // Uhrzeit: „17:28:11 Uhr“, sonst die Datumszeile (±1), sonst eine „Uhrzeit“-Zeile; Punkte als Trenner nur zusammen mit „Uhr“
+  const rx = /(?<![\d:.T])([01]?\d|2[0-3])[:.]([0-5]\d)(?:[:.][0-5]\d)?(?![\d,])/;
+  const tryL = (l, strict) => { if (/\d{1,2}[:.]\d{2}\s*[-–]\s*\d{1,2}[:.]\d{2}|\b(?:mo|di|mi|do|fr|sa|so)\.?\s*[-–]\s*(?:mo|di|mi|do|fr|sa|so)\b/i.test(l)) return null; /* Öffnungszeiten */ const t = bonHomo(l).replace(/(?<!\d)(?:0?[1-9]|[12]\d|3[01])\s?[.,\/-]\s?(?:0?[1-9]|1[0-2])\s?[.,\/-]\s?(?:\d{4}|\d{2})(?!\d)/g, ' '), u = t.match(/(?<![\d.])([01]?\d|2[0-3])[:.]([0-5]\d)(?:[:.][0-5]\d)?\s*uhr/i); if (u) return u[1].padStart(2, '0') + ':' + u[2]; const m = t.match(rx); if (!m) return null; if (/\./.test(m[0]) && !(strict || /uhr/i.test(l))) return null; return m[1].padStart(2, '0') + ':' + m[2]; };
+  if (d) for (const j of [d.i, d.i + 1, d.i - 1]) if (lines[j] && !/uhr\s*-/i.test(lines[j])) { const t = tryL(lines[j], false); if (t) return t; }
+  for (const l of lines) if (/uhrzeit|zeit:|\buhr\b/i.test(l) && !/uhr\s*-|öffnung/i.test(l)) { const t = tryL(l, true); if (t) return t; }
+  return null;
 }
 const SORT_KEEP_DAYS = 7, ASK_MAX_AGE_DAYS = 30; // aussortierte Fotos bleiben 7 Tage; ältere Bons als 30 Tage lösen kein „Schon gekauft?“ mehr aus
 const bonTs = (date, time, saved) => { const hasT = /^\d{1,2}:\d{2}$/.test(time || ''), ts = new Date(date + 'T' + (hasT ? String(time).padStart(5, '0') : '23:59') + ':59').getTime(); return !hasT && saved > 0 ? Math.min(ts, saved) : ts; }; // Zeitpunkt des Einkaufs (ohne Uhrzeit: Ende des Tages, aber nie später als das Speichern des Bons)
@@ -58,10 +90,11 @@ function classifyBon(name, price) {
   return 'item';
 }
 const cleanTranscript = s => String(s || '').replace(/\r/g, '').replace(/```[a-z]*/gi, '').replace(/\*\*|__/g, '').replace(/\|/g, ' ').replace(/^[ \t]*[-•]\s+/gm, '');
-function parseReceipt(text) {
+function parseReceipt(text, opt) { // opt.ref = Tag des Fotos (Bezugspunkt für unsicheres Datum), opt.today nur für Tests
   const all = cleanTranscript(text).split('\n').map(s => s.replace(/[ \t]+/g, ' ').trim().slice(0, 160).replace(/(?:^|(?<=\s))(?:[A-Za-zÄÖÜäöü] ){2,}[A-Za-zÄÖÜäöü](?=\s|$)/g, m => m.replace(/ /g, ''))).filter(Boolean);
   const cut = all.length > 400, lines = cut ? [...all.slice(0, 300), ...all.slice(-100)] : all; // zu lang: Anfang und Ende (Summe, Datum) behalten
-  const out = { store: detectStore(lines.slice(0, 14).join('\n')) || detectStore(lines.join('\n')), date: detectDate(lines), time: detectTime(lines), total: null, count: null, truncated: cut, taxMap: {}, items: [], skipped: [] };
+  opt = opt || {}; const stx = detectStoreEx(lines), dd = detectDateAt(lines, opt.ref, opt.today);
+  const out = { store: stx.store, sug: stx.sug || null, date: dd ? dd.iso : null, dateGuess: !!(dd && dd.fixed), time: detectTime(lines, dd), total: null, count: null, truncated: cut, taxMap: {}, items: [], skipped: [] };
   let pending = null, last = null;
   const push = (name, qty, price, unit, tax) => { const it = { raw: name, name: cleanBonName(name), qty, price, unit: unit || null, tax: tax && /[A-Za-z]/.test(tax) ? tax.toUpperCase() : null, kind: classifyBon(name, price), include: true, pid: null, how: '' }; it.pack = packOf(it.name); out.items.push(it); last = it; pending = null; };
   for (const L of lines) {
@@ -369,7 +402,7 @@ function bonView() {
       ${it.kind === 'pfand' ? '<span class="tag">Pfand</span>' : p ? `<button class="tag t-ok" onclick="bonAssign(${i})">✓ ${esc(p.name)}${it.how === 'ähnlich' ? ' (ähnlich, bitte prüfen)' : it.how === 'KI' ? ' (Vorschlag der KI, bitte prüfen)' : it.how === 'Marke' ? ' (an der Marke erkannt)' : ''}</button>` : it.sugPid && PROD(it.sugPid) ? `<button class="tag t-warn" onclick="bonSetPid(${i},'${it.sugPid}')">💡 Vielleicht „${esc(PROD(it.sugPid).name)}“? Antippen zum Übernehmen</button> <button class="lnk" onclick="bonAssign(${i})">anders zuordnen</button>` : `<button class="tag" onclick="bonAssign(${i})">🆕 wird als neues Produkt gemerkt${it.newName ? ': ' + esc(it.newName) : ''} · ändern</button>${it.what ? `<div class="mute small">Vermutlich: ${esc(it.what)}</div>` : ''}`}
       ${plan ? `<div class="mute small">${plan}</div>` : ''}</div><b>${eur(netPrice(it))}</b></div>`;
   };
-  return `${back}<div class="card"><h3>🧾 Bon gelesen</h3><div class="fgrid" style="margin-top:8px"><label class="f">Laden<select id="bs" onchange="BON.parsed.store=this.value">${b.store ? '' : '<option value="">– bitte wählen –</option>'}${stores.map(s => `<option value="${s.id}" ${s.id === b.store ? 'selected' : ''}>${esc(s.short || s.name)}</option>`).join('')}</select></label><label class="f">Datum<input id="bd" type="date" value="${b.date || ''}" onchange="BON.parsed.date=this.value"></label></div><div class="small" style="margin-top:8px">${esc(sumLine)}</div></div>
+  return `${back}<div class="card"><h3>🧾 Bon gelesen</h3><div class="fgrid" style="margin-top:8px"><label class="f">Laden<select id="bs" onchange="BON.parsed.store=this.value">${b.store || b.sug ? '' : '<option value="">– bitte wählen –</option>'}${stores.map(s => `<option value="${s.id}" ${s.id === (b.store || b.sug) ? 'selected' : ''}>${esc(s.short || s.name)}${!b.store && s.id === b.sug ? ' (Vorschlag)' : ''}</option>`).join('')}</select></label><label class="f">Datum<input id="bd" type="date" value="${b.date || bonGuessDate()}" onchange="BON.parsed.date=this.value"></label></div><div class="small" style="margin-top:8px">${esc(sumLine)}</div></div>
     ${bonCheck(b, diff)}${bonPhotosView()}
     <h2>Positionen (${items.length})</h2><div class="card tight">${items.map((it) => row(it, b.items.indexOf(it))).join('') || '<div class="empty">Keine Positionen erkannt. Prüfe den Text.</div>'}${b.total != null ? `<div class="item" style="border-top:2px solid var(--line)"><div class="grow"><b>Summe laut Bon</b></div><b>${eur(b.total)}</b></div>` : ''}</div>
     ${b.skipped.length ? `<details class="card tight"><summary class="mute">${b.skipped.length} Zeilen ignoriert (Adresse, Zahlung, Steuer …)</summary><div class="mute small" style="padding:6px 0">${b.skipped.map(esc).join('<br>')}</div></details>` : ''}
@@ -391,7 +424,10 @@ function bonCheck(b, diff) { // nur ein Hinweis: gespeichert wird immer, gelesen
   const comp = bonComplete(b), n = b.items.filter(i => i.kind === 'item' || i.kind === 'bag').reduce((s, i) => s + (i.qty || 1), 0), why = [];
   if (comp === false) why.push(b.count != null ? `Auf dem Bon stehen ${b.count} Artikel, gelesen wurden ${n}.` : `Summe laut Bon ${eur(b.total)}, gelesene Positionen ${eur(bonSum(b.items))}.`);
   if (BON.lowRead) why.push(`${BON.lowRead} Stelle(n) waren nicht lesbar (mit [?] markiert).`);
-  if (!b.date) why.push('Das Datum wurde nicht gefunden. Es wird das heutige eingetragen, du kannst es oben ändern.');
+  if (!b.date) why.push('Das Datum wurde nicht sicher gefunden. Vorgeschlagen ist der Tag des Fotos, bitte oben prüfen.');
+  { const m = BON.cur && BQ.list.find(x => x.id === BON.cur), r = m && bonRef(m); if (b.date && r && Math.abs(new Date(b.date) - new Date(r)) / 864e5 > 60) why.push('Das Datum liegt weit vom Tag des Fotos entfernt. Bitte oben prüfen (Jahr verlesen?).'); }
+  if (b.dateGuess) why.push('Das Jahr war nicht lesbar und wurde vom Foto-Tag übernommen. Bitte das Datum oben prüfen.');
+  if (!b.store) why.push(b.sug ? 'Der Laden ist nur ein Vorschlag (' + bonStoreName(b.sug) + '). Bitte oben bestätigen.' : 'Der Laden wurde nicht gefunden. Bitte oben wählen.');
   if (BON.dupWarn) why.push(BON.dupWarn);
   if (!why.length) return '<div class="card" style="border-color:var(--ok,#2e9e5b)"><b>✓ Alles gelesen.</b></div>';
   return `<div class="card help"><b>ℹ️ Vielleicht nicht ganz vollständig</b><div class="small" style="margin-top:4px">Du kannst trotzdem speichern. Alles Gelesene wird genutzt.</div><ul class="small">${why.map(w => '<li>' + esc(w) + '</li>').join('')}</ul><div class="row"><button class="btn sm" onclick="bonAddTo('${BON.cur}')">📷 Foto ergänzen</button><button class="btn sm" onclick="bqReread('${BON.cur}')">🔄 Nochmal lesen</button></div></div>`;
@@ -448,7 +484,7 @@ function bonResolveNew(items) { // unbekannte Zeilen: KI-Vorschlag übernehmen o
 // Doppelt gescannter Bon: fehlende Artikel im gespeicherten Bon ergänzen und „Schon gekauft?“ trotzdem prüfen (der erste Scan kann Zeilen verpasst haben)
 async function bqDupMerge(m) {
   if (!m.text || m.merged) return 0;
-  const b = parseReceipt(m.text); if (m.ai) bonApplyAi(b.items, m.ai);
+  const b = parseReceipt(m.text, { ref: bonRef(m) }); if (m.ai) bonApplyAi(b.items, m.ai);
   const items = b.items.filter(i => i.kind === 'item' && i.include), date = bonDateOf(m, b).date, names = bonNames(items);
   const rec = S.bons.find(x => x.store === b.store && x.date === date && b.total != null && x.total != null && Math.abs(x.total - b.total) < 0.005 && !(x.time && b.time && Math.abs(toMin(x.time) - toMin(b.time)) > 10) && (bonJac(x.items.map(i => bonNorm(i.n)), names) >= 0.6 || bonCover(x.items.map(i => bonNorm(i.n)), names) >= 0.95)); // nur ergänzen, wenn es wirklich derselbe Bon ist
   let add = 0;
@@ -484,7 +520,7 @@ function bonCommit(b, items, store, date, qid, opt) {
     if (!i.pid) return;
     const p = PROD(i.pid); if (!p) return;
     if (i.aliasKey && i.aliasKey.length >= 3 && i.how === 'gewählt') S.aliases[i.aliasKey] = i.pid; // gelernt wird nur, was du selbst gewählt hast; Vermutungen (ähnlich, Marke) bleiben Vermutungen
-    if (i.pack && (i.pack.base === p.base || !p.base)) { const up = netPrice(i) / (i.pack.amount * (i.qty || 1)); if (up > 0 && isFinite(up)) S.hist.push({ pid: p.id, up: +up.toFixed(3), date, store }); }
+    if (i.pack && (i.pack.base === p.base || !p.base)) { const up = netPrice(i) / (i.pack.amount * (i.qty || 1)); if (up > 0 && isFinite(up) && dateSane(date)) { const old = S.hist.find(h => h.pid === p.id && h.date === date && h.store === store); if (old) old.up = +up.toFixed(3); else S.hist.push({ pid: p.id, up: +up.toFixed(3), date, store }); } } // ein Eintrag je Produkt, Tag und Laden; keiner bei unplausiblem Datum
     if (seen.has(p.id)) return; seen.add(p.id);
     const parents = PRODUCTS.filter(q => q.group && q.id !== p.id && q.group.includes(p.id) && !(q.virtual && q.id !== 'fleisch')); // Sammelprodukt: „Hähnchenbrust“ auf dem Bon zählt auch für „Hähnchen“ und „Fleisch“
     if (!S.list.some(l => l.pid === p.id || parents.some(q => q.id === l.pid))) spont.push(p.name);
@@ -492,7 +528,7 @@ function bonCommit(b, items, store, date, qid, opt) {
     parents.forEach(q => { if (!seenP.has(q.id)) { seenP.add(q.id); const g = bonNote(q.id, date); if (g) favNew.push(g); } });
   });
   S.hist = S.hist.slice(-400);
-  TIPS = null;
+  TIPS = null; CACHE = null; // Referenz hat sich geändert: Angebote neu bewerten
   const total = items.reduce((s, i) => s + netPrice(i), 0);
   lines.push(`<b>${items.length} Positionen</b> bei <b>${esc(bonStoreName(store))}</b> am ${esc(fmtD(date))}, zusammen ${eur(total)}${partial ? ' (nur teilweise gelesen)' : ''}.`);
   const bts = bonTs(date, b.time, rec.saved), cand = []; // noch offene Listen-Artikel, die auf dem Bon waren (und schon vor dem Bon-Datum auf der Liste standen)
@@ -510,12 +546,12 @@ function bonCommit(b, items, store, date, qid, opt) {
 // Automatisch speichern, sobald ein Bon gelesen ist (nur wenn Laden bekannt und kein Verdacht auf doppelt)
 async function bqAutoSave(m) {
   if (m.status !== 'gelesen' || !m.text) return false;
-  const b = parseReceipt(m.text); if (m.ai) bonApplyAi(b.items, m.ai);
+  const b = parseReceipt(m.text, { ref: bonRef(m) }); if (m.ai) bonApplyAi(b.items, m.ai);
   if (!m.allowDup) { m.warn = ''; bqDupCheck(m, b); } // vor dem Speichern noch einmal: ist das ein Bon, den es schon gibt?
   if (m.status === 'doppelt') { await bqSaveMeta(m); const add = await bqDupMerge(m).catch(() => 0); feedbackText('🔁 Dieser Bon ist doppelt (' + esc(m.dupText || 'schon vorhanden') + '). Er wird nicht mitgerechnet.' + (add ? ' Ich habe ' + add + ' fehlende Artikel im gespeicherten Bon ergänzt.' : '')); return true; }
   if (m.warn) { m.hold = 'evtl. doppelt'; await bqSaveMeta(m); return false; }
   const store = b.store, dd = bonDateOf(m, b), date = dd.date;
-  if (!store) { m.hold = 'Laden nicht erkannt: bitte Laden wählen'; await bqSaveMeta(m); return false; }
+  if (!store) { m.hold = b.sug ? 'Laden nicht sicher (Vorschlag: ' + bonStoreName(b.sug) + '): bitte bestätigen' : 'Laden nicht erkannt: bitte Laden wählen'; await bqSaveMeta(m); return false; }
   const items = b.items.filter(i => i.kind === 'item' && i.include); if (!items.length) { m.hold = 'keine Artikel erkannt'; await bqSaveMeta(m); return false; }
   const pairs = await bqAiPair(items, date, b.time).catch(() => []);
   const res = bonCommit(b, items, store, date, m.id, { lowRead: m.lowRead || 0, pairs });
@@ -622,8 +658,26 @@ const AI_URL = 'https://api.anthropic.com/v1/messages', AI_MODEL = 'claude-haiku
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const lsSet = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); return true; } catch (e) { return false; } };
 const aiKey = () => lsGet(AI_KEY_STORE), aiProv = () => lsGet(AI_PROV_STORE) || 'gemini';
+/* ---------- Bon-Diagnose: nur auf diesem Gerät, damit Fehler mit echten Daten analysiert werden können ---------- */
+const DIAG_KEY = 'einkauf.diag';
+const diagGet = () => { try { const a = JSON.parse(localStorage.getItem(DIAG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+function bonDiag(m, text, p) { // merkt sich je gelesenem Bon, was die Foto-Lesung geliefert und die App erkannt hat (letzte 30)
+  try { const a = diagGet(); a.push({ t: Date.now(), v: APP_BUILD.v, foto: Number.isFinite(+m.created) ? isoDay(new Date(m.created)) : '', laden: p.store || null, vorschlag: p.sug || null, datum: p.date || null, jahrGeschaetzt: !!p.dateGuess, zeit: p.time || null, summe: p.total, artikel: p.items.length, text: String(text || '').slice(0, 3000) }); localStorage.setItem(DIAG_KEY, JSON.stringify(a.slice(-20))); } catch (e) { }
+}
+function diagBlock() {
+  const a = diagGet().filter(x => x && typeof x === 'object'), bad = a.filter(x => !x.laden || !x.datum).length;
+  return `<h2>🩺 Bon-Diagnose</h2><div class="card"><div class="small">Die App merkt sich auf diesem Gerät die letzten ${a.length} gelesenen Bons (Rohtext und was erkannt wurde)${a.length ? '. ' + bad + ' davon ohne sicheren Laden oder ohne Datum' : ''}. Nichts davon wird hochgeladen. Wenn etwas nicht erkannt wird, kannst du die Diagnose als Datei sichern und mir geben.</div><div class="row" style="margin-top:8px"><button class="btn sm" onclick="diagExport()" ${a.length ? '' : 'disabled'}>Diagnose sichern</button><button class="btn sm" onclick="diagClear()" ${a.length ? '' : 'disabled'}>Löschen</button></div></div>`;
+}
+async function diagExport() {
+  const name = 'bon-diagnose-' + isoDay(TODAY) + '.json', json = JSON.stringify({ app: 'einkaufsliste-bon-diagnose', exportiert: new Date().toISOString(), eintraege: diagGet() }, null, 1), file = new File([json], name, { type: 'application/json' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Bon-Diagnose' }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); feedbackText('✓ Diagnose gesichert: ' + esc(name));
+}
+function diagClear() { try { localStorage.removeItem(DIAG_KEY); } catch (e) { } render(); }
+const bonRef = m => Number.isFinite(+m.created) ? isoDay(new Date(m.created)) : ''; // Tag des Fotos: Bezugspunkt für ein unsicheres Datum
+const bonGuessDate = () => { const m = BON.cur && BQ.list.find(x => x.id === BON.cur); return m ? bonRef(m) : ''; };
 const AI_PROMPT = 'The images show ONE German supermarket receipt. Several images are consecutive parts of the same receipt from top to bottom: where they overlap, write the overlapping lines only once. ' +
-  'Transcribe the receipt line by line exactly as printed: one output line per printed line, in the same order, with product names, quantity lines such as "5 Stk x 1,09", deposit (Pfand) lines, prices with decimal comma and the tax letter after the price, the SUMME/total line and the date line. ' +
+  'Transcribe the receipt line by line exactly as printed: one output line per printed line, in the same order, with product names, quantity lines such as "5 Stk x 1,09", deposit (Pfand) lines, prices with decimal comma and the tax letter after the price, the shop name or logo text at the very top (for example REWE, ALDI, Lidl, Netto, dm), the address and phone lines, the SUMME/total line, and the footer lines with date and time (for example "Datum: 10.10.2026" and "Uhrzeit: 17:28:11 Uhr") even when they are at the very bottom or partly cut off. ' +
   'Do not translate, correct, merge, summarize or invent anything. Write [?] where a part is unreadable. ' +
   'If the image clearly is not a shop receipt at all (for example a person, a product, a landscape, a screenshot or another kind of document), answer exactly: KEIN_BON. If it is a receipt but is mostly unreadable, answer exactly: NICHT_LESBAR. Output only the transcription, without any comment.';
 // Schärfe und Helligkeit auf einem kleinen Graubild prüfen (Schwellen an echten Bon-Fotos kalibriert)
@@ -846,12 +900,13 @@ async function bqRun(force) {
         let text = await aiAsk(fotos, AI_PROMPT, 2500);
         if (/^\W*KEIN_BON/i.test(text || '')) throw Object.assign(new Error('Auf dem Foto war kein Kassenbon.'), { fatal: true, sort: true });
         if (!text || /^\W*NICHT_LESBAR/i.test(text)) throw Object.assign(new Error('Auf dem Foto war kein Bon lesbar. Neues Foto machen oder löschen.'), { fatal: true });
-        let parsed = parseReceipt(text);
+        let parsed = parseReceipt(text, { ref: bonRef(m) });
         if (!parsed.items.length) throw Object.assign(new Error('Keine Positionen erkannt. Schärferes, näheres Foto machen.'), { fatal: true, sort: !parsed.store && parsed.total == null && !parsed.date && !/\d[.,]\d{2}/.test(text) }); // weder Laden, Summe, Datum noch ein Preis: kein Kassenbon
-        if (parsed.total == null) { // unten fehlt etwas: mit einem anderen Modell noch einmal versuchen und das vollständigere nehmen
-          try { const t2 = await aiAsk(fotos, AI_PROMPT + ' Do not stop early: the transcription must include the last lines (SUMME/total, payment and date).', 2500, aiAsk.meta && aiAsk.meta.model), p2 = parseReceipt(t2); if (p2.total != null || p2.items.length > parsed.items.length) { text = t2; parsed = p2; } } catch (e) { /* erstes Ergebnis behalten */ }
+        const sc = p => (p.store ? 1 : 0) + (p.date ? 1 : 0) + (p.total != null ? 1 : 0);
+        if (parsed.total == null || !parsed.store || !parsed.date) { // etwas fehlt (Summe, Laden oder Datum): mit einem anderen Modell noch einmal versuchen und das vollständigere nehmen
+          try { const t2 = await aiAsk(fotos, AI_PROMPT + ' Do not stop early: the transcription must include the last lines (SUMME/total, payment and date).', 2500, aiAsk.meta && aiAsk.meta.model), p2 = parseReceipt(t2, { ref: bonRef(m) }); if (sc(p2) > sc(parsed) || (sc(p2) === sc(parsed) && p2.items.length > parsed.items.length)) { text = t2; parsed = p2; } } catch (e) { /* erstes Ergebnis behalten */ }
         }
-        Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '', warn: '', hold: '' }); bqDupCheck(m, parsed);
+        bonDiag(m, text, parsed); Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '', warn: '', hold: '' }); bqDupCheck(m, parsed);
         if (m.status === 'doppelt') { const add = await bqDupMerge(m).catch(() => 0); feedbackText('🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.' + (add ? ' Ich habe ' + add + ' fehlende Artikel im gespeicherten Bon ergänzt.' : '')); }
       } catch (e) {
         if (e.sort && !m.keep) { m.status = 'aussortiert'; m.err = ''; }
@@ -891,7 +946,7 @@ async function bqStorageInfo() {
 }
 async function bonOpen(id) {
   const m = BQ.list.find(x => x.id === id); if (!m || !m.text) return;
-  BON.text = m.text; BON.parsed = parseReceipt(m.text); if (m.ai) bonApplyAi(BON.parsed.items, m.ai); BON.lowRead = m.lowRead || 0; BON.cur = id; BON.fromPhoto = true; BON.err = ''; BON.allowDup = !!m.allowDup; BON.dupWarn = m.warn || '';
+  BON.text = m.text; BON.parsed = parseReceipt(m.text, { ref: bonRef(m) }); if (m.ai) bonApplyAi(BON.parsed.items, m.ai); BON.lowRead = m.lowRead || 0; BON.cur = id; BON.fromPhoto = true; BON.err = ''; BON.allowDup = !!m.allowDup; BON.dupWarn = m.warn || '';
   BON.curPhotos = await bqFotosGet(id); render(); scrollTo(0, 0);
 }
 function bonClose() { BON.parsed = null; BON.cur = null; BON.fromPhoto = false; BON.curPhotos = []; BON.text = ''; render(); }
@@ -927,7 +982,7 @@ const fnvHash = s => { let h = 2166136261; for (let i = 0; i < s.length; i += 7)
 const bonJac = (A, B) => { const a = new Set(A), b = new Set(B), inter = [...b].filter(x => a.has(x)).length; return inter / Math.max(1, a.size + b.size - inter); }; // Anteil gleicher Artikelnamen
 const bonCover = (A, B) => { const a = new Set(A), b = new Set(B), inter = [...b].filter(x => a.has(x)).length; return inter / Math.max(1, Math.min(a.size, b.size)); };
 const toMin = tm => { const p = String(tm).split(':'); return +p[0] * 60 + +p[1]; };
-const bonDateOf = (m, parsed) => parsed.date ? { date: parsed.date, guess: false } : { date: isoDay(new Date(m.created)), guess: true }; // fehlt das Datum, gilt der Tag des Fotos (beim Prüfen und beim Speichern gleich)
+const bonDateOf = (m, parsed) => parsed.date ? { date: parsed.date, guess: !!parsed.dateGuess } : { date: isoDay(new Date(m.created)), guess: true }; // fehlt das Datum, gilt der Tag des Fotos (beim Prüfen und beim Speichern gleich)
 function bonDupOf(store, date, total, names, skipId, time) {
   const cands = S.bons.map(b => ({ store: b.store, date: b.date, total: b.total, time: b.time, names: b.items.map(i => bonNorm(i.n)), saved: true }));
   BQ.list.forEach(m => { if (m.id !== skipId && m.sig && m.status === 'gelesen') cands.push({ ...m.sig, saved: false }); });
@@ -998,7 +1053,7 @@ function bonApplyAi(items, ai) { // KI-Vorschläge auf noch unbekannte Zeilen an
 }
 async function bqAiMatch(m) { // fragt die KI (nur Namen, keine Preise, kein Foto) nach den unbekannten Zeilen
   if (m.aiDone || !m.text) return;
-  const parsed = parseReceipt(m.text), unk = [...new Set(parsed.items.filter(i => i.kind === 'item' && !i.pid).map(i => i.name))].slice(0, 25);
+  const parsed = parseReceipt(m.text, { ref: bonRef(m) }), unk = [...new Set(parsed.items.filter(i => i.kind === 'item' && !i.pid).map(i => i.name))].slice(0, 25);
   if (!unk.length) { m.aiDone = true; return; }
   const prompt = `German supermarket receipt, store: ${bonStoreName(parsed.store || 'unbekannt')}. The names on the receipt are abbreviated and may be only a brand name. Our product list: ${PRODUCTS.filter(p => !p.custom).map(p => p.name).join('; ')}.\n` +
     `For each receipt name decide which product from the list it is. If it is none of them, set "p" to null and give in "g" a short generic German product name (1 to 3 words, no brand, no size, e.g. "Hähnchenflügel", "Flüssigseife", "Einmalhandschuhe"). Answer ONLY with a JSON array, no other text: [{"n":"<name exactly as given>","p":"<exact product name from the list or null>","c":"high|medium|low","w":"<what it is in German, max 5 words>","g":"<generic name or empty>"}].\nNames: ${JSON.stringify(unk)}`;

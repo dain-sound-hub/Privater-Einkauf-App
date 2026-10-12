@@ -42,3 +42,8 @@ Diese Datei fasst zusammen, was aus gefundenen Fehlern als **allgemeine Regel** 
 25. **Grundpreis der Quelle** gegen Preis und Menge prüfen (Abweichung über 2,5-fach und keine glatte Mehrfachpackung bis 24 → neu rechnen). parseUnit nimmt keine Zahl direkt vor der Einheit als Preis.
 26. **Dauerpreis und Wochenangebot** (ALDI) zum gleichen Preis sind ein Angebot.
 27. **Marke ist keine Farbe/Qualität:** bonBrand ignoriert Farb- und Qualitätswörter (Rote Paprika hat keine Marke).
+
+## Ergänzt am 12.10. (Scheinrabatt Quellbrunn)
+28. **Rundung ist kein Rabatt:** Weicht der Grundpreis der Quelle nur um Cent-Rundung (höchstens 0,006 €) von Preis/Menge ab, wird exakt gerechnet (mit kleinem Aufschlag, damit 2,975 als 2,98 angezeigt wird). Eine Ersparnis gegen die eigene Historie zählt erst ab 5 % (`REF_MIN`).
+29. **Historie zählt Kauftage:** Ein Eintrag je Produkt, Tag und Laden (der neueste gewinnt), keiner aus Bons mit unplausiblem Datum; die Referenz ist der echte Median aus mindestens 2 Käufen. Einträge ohne Datum werden nur zusammengelegt, wenn sie völlig gleich sind. Beim Laden fremder Daten erst bereinigen, dann kürzen.
+30. **Jede Änderung an S.hist leert den Angebots-Zwischenspeicher (CACHE).**
