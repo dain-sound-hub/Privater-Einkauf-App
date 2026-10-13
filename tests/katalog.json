@@ -73,8 +73,8 @@
     {
       "name": "Pfanni Speisekartoffeln Unsere Besten",
       "cats": "Pfanni vorwiegend festkochende Kartoffel Speisekartoffeln Speisezwiebeln festkochende Kartoffeln",
-      "erwartet": null,
-      "grund": "Name nennt anderes Gemüse (Kartoffel), Kategorie-Wort Zwiebel zählt nicht"
+      "erwartet": "kartoffeln",
+      "grund": "Speisekartoffeln sind Kartoffeln (echtes Produkt); das Kategorie-Wort Zwiebel zählt nicht"
     },
     {
       "name": "BON-RI Basmati Reis 1 kg",
@@ -613,10 +613,7 @@
       "preis": 1.99,
       "menge": 1,
       "einheit": "kg",
-      "eigene": [
-        "Bananen"
-      ],
-      "erwartet": "eigen:Bananen",
+      "erwartet": "bananen",
       "grund": "darf nicht kaputtgehen"
     },
     {
@@ -701,6 +698,145 @@
       ],
       "erwartet": null,
       "grund": "Vorsatz bio ändert nichts"
+    },
+    {
+      "name": "Rotkäppchen Sekt Flaschengärung Riesling",
+      "laden": "lidl",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Marke Rotkäppchen ist kein Käse"
+    },
+    {
+      "name": "Lipton Ice Tea XXL Pfirsich",
+      "laden": "lidl",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Eistee ist kein Steinobst"
+    },
+    {
+      "name": "Curafit Plus Heiße Zitrone oder Holunder",
+      "laden": "netto",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Heiße Zitrone ist kein Obst"
+    },
+    {
+      "name": "CHOCEUR Nussknacker Vollmilch 100 g",
+      "laden": "aldi",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Nussknacker ist keine Wurst"
+    },
+    {
+      "name": "Rauch Happy Day Mango",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Saft ist kein Obst"
+    },
+    {
+      "name": "Milbona Gouda jung",
+      "laden": "lidl",
+      "preis": 2,
+      "erwartet": "schnittkaese",
+      "grund": "Gouda gehört zum Sammelprodukt Käse",
+      "menge": 400,
+      "einheit": "g"
+    },
+    {
+      "name": "Marca Italia Mozzarella Bufala Mini",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": "mozzarella",
+      "grund": "Mozzarella"
+    },
+    {
+      "name": "ALL SEASONS Mozzarella Sticks",
+      "laden": "aldi",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Mozzarella Sticks sind Snack"
+    },
+    {
+      "name": "Bio-Wiener Würstchen 200 g",
+      "laden": "aldi",
+      "preis": 2,
+      "erwartet": "bratwurst",
+      "grund": "Würstchen gehören zu Wurst"
+    },
+    {
+      "name": "Deutsche Möhren mit Grün",
+      "laden": "lidl",
+      "preis": 2,
+      "erwartet": "moehren",
+      "grund": "Möhren"
+    },
+    {
+      "name": "Halloween Kürbis",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Deko-Kürbis ist kein Gemüse"
+    },
+    {
+      "name": "Nektarinen 1 kg",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": "steinobst",
+      "grund": "Sperrwort braucht Wortgrenze (nektar ≠ Nektarine)"
+    },
+    {
+      "name": "Landliebe Landkäse sanft-aromatisch",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": "schnittkaese",
+      "grund": "Sperrwort braucht Wortgrenze (aroma ≠ aromatisch)",
+      "cats": "Schnittkäse Landliebe Käse"
+    },
+    {
+      "name": "Toastkäse 200 g",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": "schnittkaese",
+      "grund": "Stichwort darf kein Sperrwort sein"
+    },
+    {
+      "name": "Salatmix Rucola 150 g",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": "blattsalat",
+      "grund": "Stichwort darf kein Sperrwort sein"
+    },
+    {
+      "name": "Möhren Würfel",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Regal Tiefkühl auch bei kaufda",
+      "cats": "Möhren",
+      "quelle": "https://www.kaufda.de/Angebote/Tiefkuehlgemuese"
+    },
+    {
+      "name": "Mozzarella-Kugeln 125 g",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": "mozzarella",
+      "grund": "Formwort nach Bindestrich"
+    },
+    {
+      "name": "Knoblauch Netz 250 g",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": null,
+      "grund": "Knoblauch ist kein Lauch"
+    },
+    {
+      "name": "Fromi Comté",
+      "laden": "rewe",
+      "preis": 2,
+      "erwartet": "hartkaese",
+      "grund": "bekannte Sorte",
+      "cats": "Comté"
     }
   ],
   "bons": [
@@ -730,7 +866,8 @@
     },
     {
       "zeile": "KALBSLEBERWURST",
-      "erwartet": null
+      "erwartet": "aufschnitt",
+      "grund": "Leberwurst ist Aufschnitt, kein Kalbfleisch"
     },
     {
       "zeile": "PUTENBRUST AUFSCHNITT 100G",
@@ -971,19 +1108,68 @@
     },
     {
       "zeile": "BIO OBST",
-      "eigene": [
-        "Obst"
-      ],
-      "erwartet": "eigen:Obst",
+      "erwartet": "obst",
       "grund": "darf nicht kaputtgehen"
     },
     {
       "zeile": "BANANEN",
-      "eigene": [
-        "Bananen"
-      ],
-      "erwartet": "eigen:Bananen",
+      "erwartet": "bananen",
       "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "zeile": "FRÜCHTE TEE",
+      "erwartet": null,
+      "grund": "Tee ist kein Obst"
+    },
+    {
+      "zeile": "KATZE WURST",
+      "erwartet": null,
+      "grund": "Tierfutter ist keine Wurst"
+    },
+    {
+      "zeile": "KAESE SAHNE",
+      "erwartet": null,
+      "grund": "Käse-Sahne ist kein Käse"
+    },
+    {
+      "zeile": "KNOBLAUCH",
+      "erwartet": null,
+      "grund": "Knoblauch ist kein Lauch"
+    },
+    {
+      "zeile": "MEERRETTICH",
+      "erwartet": null,
+      "grund": "Meerrettich ist kein Rettich"
+    },
+    {
+      "zeile": "NEKTARINEN",
+      "erwartet": "steinobst",
+      "grund": "Sperrwort braucht Wortgrenze"
+    },
+    {
+      "zeile": "SUESSKARTOFFELN",
+      "erwartet": "fruchtgemuese",
+      "grund": "ß = ss"
+    },
+    {
+      "zeile": "FRISCHKAESE NATUR",
+      "erwartet": null,
+      "grund": "Frischkäse ist kein Käse"
+    },
+    {
+      "zeile": "KAESEKUCHEN",
+      "erwartet": null,
+      "grund": ""
+    },
+    {
+      "zeile": "KARTOFFELSALAT",
+      "erwartet": null,
+      "grund": ""
+    },
+    {
+      "zeile": "GEMUESEBRUEHE",
+      "erwartet": null,
+      "grund": ""
     }
   ],
   "eingaben": [
@@ -1019,28 +1205,112 @@
     },
     {
       "text": "Käse",
-      "erwartet": null
+      "erwartet": "kaese",
+      "grund": "Sammelprodukt Käse"
     },
     {
       "text": "Möhren",
-      "erwartet": null
+      "erwartet": "moehren"
     },
     {
       "text": "Tiefkühl Obst",
-      "eigene": [
-        "Obst"
-      ],
       "erwartet": null,
-      "offen": true,
       "grund": "Eingabe mit Tiefkühl darf nicht frischem Obst zugeordnet werden"
     },
     {
       "text": "Obst",
-      "eigene": [
-        "Obst"
-      ],
-      "erwartet": "eigen:Obst",
-      "grund": "darf nicht kaputtgehen"
+      "erwartet": "obst",
+      "grund": "Sammelprodukt Obst"
+    },
+    {
+      "text": "Wurst",
+      "erwartet": "wurst",
+      "grund": "Sammelwort oder Sorte findet das richtige Produkt"
+    },
+    {
+      "text": "Aufschnitt",
+      "erwartet": "aufschnitt",
+      "grund": "Sammelwort oder Sorte findet das richtige Produkt"
+    },
+    {
+      "text": "Salami",
+      "erwartet": "aufschnitt",
+      "grund": "Sammelwort oder Sorte findet das richtige Produkt"
+    },
+    {
+      "text": "Gouda",
+      "erwartet": "schnittkaese",
+      "grund": "Sammelwort oder Sorte findet das richtige Produkt"
+    },
+    {
+      "text": "Gemüse",
+      "erwartet": "gemuese",
+      "grund": "Sammelwort oder Sorte findet das richtige Produkt"
+    },
+    {
+      "text": "Äpfel",
+      "erwartet": "apfel",
+      "grund": "Sammelwort oder Sorte findet das richtige Produkt"
+    },
+    {
+      "text": "frisches Obst",
+      "erwartet": "obst",
+      "grund": "Sammelwort oder Sorte findet das richtige Produkt"
+    },
+    {
+      "text": "Frischkäse",
+      "erwartet": null,
+      "grund": "Frischkäse gehört nicht zu Käse"
+    },
+    {
+      "text": "TK Obst",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "getrocknetes Obst",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "Obst Dose",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "TK Gemüse",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "Gemüse Brühe",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "Kartoffel Salat",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "Orangen Saft",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "Pfirsich Eistee",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "Rahmspinat",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
+    },
+    {
+      "text": "Käse Sahne Torte",
+      "erwartet": null,
+      "grund": "verarbeitet: kein frisches Obst, Gemüse oder Käse"
     }
   ],
   "bon_texte": [

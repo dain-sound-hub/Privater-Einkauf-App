@@ -216,7 +216,7 @@ function matchBonItem(it) {
   if (!(window.NOISE_RX && (NOISE_RX.test(it.name) || NOISE_RX.test(n)))) {
     let best = null, len = 0;
     for (const p of PRODUCTS) {
-      if (p.virtual && p.id !== 'fleisch') continue;
+      if (p.virtual && !p.sam) continue;
       if (p.not && new RegExp(p.not, 'i').test(n)) continue;
       let m = rx(p).exec(n); if (!m) m = p.kwBon && new RegExp(p.kwBon, 'i').exec(n); if (!m) { m = rx(p).exec(it.name); if (m && bonBlocked(p, it.name, m)) m = null; } else if (bonBlocked(p, n, m)) m = null;
       if (m && m[0].length > len) { best = p; len = m[0].length; }
@@ -249,7 +249,7 @@ function buyHist(pid) { // Kauftage aus Bons (mit Bon-Datum, ohne unsichere Date
   return BH[pid] = { days, stores: days.map(d => bonMap.get(d) || ''), n: days.length + legacy, last: days[days.length - 1] || '' };
 }
 const habitDays = p => { const base = buyHist(p.id).days; return [...base, ...mergeDays(((S.rec && S.rec[p.id]) || []).filter(d => !nearAny(d, base)))].sort(); }; // Tage, an denen du das Produkt eingetragen, abgehakt oder gekauft hast
-const habitOk = p => watched(p.id) || habitDays(p).length >= 2; // „öfter“ = Favorit oder an mindestens 2 verschiedenen Tagen
+const habitOk = p => viaWatch(p.id) || habitDays(p).length >= 2; // „öfter“ = Favorit oder an mindestens 2 verschiedenen Tagen
 function grundText(p) { // warum wird dieses Angebot unter „Das kaufst du öfter“ gezeigt?
   const h = buyHist(p.id), parts = [];
   const fy = d => fmtD(d) + (d.slice(0, 4) !== String(new Date().getFullYear()) ? d.slice(0, 4) : ''); // Jahr nur, wenn es nicht dieses ist
@@ -277,10 +277,11 @@ function savingTips() {
   if (TIPS) return TIPS;
   const minPct = (S.set.tipPct || 20) / 100, tips = [];
   for (const p of PRODUCTS) {
+    if (p.group) continue; // Sammelprodukte vergleichen verschiedene Sorten: kein Spartipp
     const st = stammladen(p.id); if (!st) continue;
     const ref = refUnit(p.id, st.store); if (!ref) continue;
     const info = productInfo(p);
-    const cand = info.now.filter(o => o.store.id !== st.store && o.store.tier !== 'D' && o.up && o.up.base === ref.base && !o.dubious && !o.bulk).sort(rank);
+    const cand = info.now.filter(o => o.store.id !== st.store && o.store.tier !== 'D' && o.up && o.up.base === ref.base && !o.dubious && !o.bulk && !isPerm(o)).sort(rank);
     const best = cand[0]; if (!best) continue;
     const pct = (ref.v - best.up.v) / ref.v; if (pct < minPct) continue;
     const packs = qtyBase(best) ? Math.ceil(ref.packAmount / qtyBase(best)) : null;
@@ -523,7 +524,7 @@ function bonCommit(b, items, store, date, qid, opt) {
     if (i.aliasKey && i.aliasKey.length >= 3 && i.how === 'gewählt') S.aliases[i.aliasKey] = i.pid; // gelernt wird nur, was du selbst gewählt hast; Vermutungen (ähnlich, Marke) bleiben Vermutungen
     if (i.pack && (i.pack.base === p.base || !p.base)) { const up = netPrice(i) / (i.pack.amount * (i.qty || 1)); if (up > 0 && isFinite(up) && dateSane(date)) { const old = S.hist.find(h => h.pid === p.id && h.date === date && h.store === store); if (old) old.up = +up.toFixed(3); else S.hist.push({ pid: p.id, up: +up.toFixed(3), date, store }); } } // ein Eintrag je Produkt, Tag und Laden; keiner bei unplausiblem Datum
     if (seen.has(p.id)) return; seen.add(p.id);
-    const parents = PRODUCTS.filter(q => q.group && q.id !== p.id && q.group.includes(p.id) && !(q.virtual && q.id !== 'fleisch')); // Sammelprodukt: „Hähnchenbrust“ auf dem Bon zählt auch für „Hähnchen“ und „Fleisch“
+    const parents = PRODUCTS.filter(q => q.group && q.id !== p.id && q.group.includes(p.id) && !(q.virtual && !q.sam)); // Sammelprodukt: „Hähnchenbrust“ auf dem Bon zählt auch für „Hähnchen“ und „Fleisch“
     if (!S.list.some(l => l.pid === p.id || parents.some(q => q.id === l.pid))) spont.push(p.name);
     const f = bonNote(p.id, date); if (f) favNew.push(f);
     parents.forEach(q => { if (!seenP.has(q.id)) { seenP.add(q.id); const g = bonNote(q.id, date); if (g) favNew.push(g); } });
