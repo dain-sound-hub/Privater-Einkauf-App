@@ -53,3 +53,6 @@ Diese Datei fasst zusammen, was aus gefundenen Fehlern als **allgemeine Regel** 
 32. **Datum aus allen Zeilen:** Ziffern-Verwechslungen nur zwischen Ziffern korrigieren; Zeilen mit gültig/bis/MHD/Coupon/Aktion nie; kein Datum in Bon- oder Telefonnummern; ein verlesenes Jahr wird vom Foto-Tag übernommen, nur in reinen Datums-/Fußzeilen, nie bei Uhr/Uhrzeit, und braucht Bestätigung. Datum über 400 Tage oder in der Zukunft wird beim Speichern abgelehnt.
 33. **Uhrzeit:** nie aus Öffnungszeiten (Zeitspannen, Wochentage) und nie aus Datumsteilen.
 34. **Nie leer fragen:** Fehlt Laden oder Datum, steht ein Vorschlag da (Laden-Hinweis, Foto-Tag). Rohtext und Erkennung werden lokal in der Bon-Diagnose festgehalten (20 Einträge, wird beim Speicherengpass zuerst geopfert).
+
+## Ergänzt am 13.10. (Route, Sammelbegriffe)
+35. **Sammelbegriff als eigenes Produkt:** Ein eigenes Produkt, dessen Name nur ein Obst-/Gemüsewort oder ein Sammelbegriff ist (Obst, Gemüse, Früchte, Beeren, Salat), gehört zur Rubrik Obst & Gemüse und bekommt alle Frisch-Sperren (CAN_RX, Regal, Bindestrich, Bon), auch auf dem Fundstellen-Weg (customOk). Tiefkühl, getrocknet, Trocken-/Dörr- und Dose zählen nie als frisches Obst.

@@ -137,6 +137,15 @@ document.addEventListener('mousedown', dragStart);
 document.addEventListener('mousemove', dragMove);
 document.addEventListener('mouseup', dragEnd);
 document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.crow')) e.preventDefault(); });
+// Tippen außerhalb eines aufgeklappten Artikels (oder Hinweisfensters) klappt es wieder ein. Überall dieselbe Regel.
+document.addEventListener('click', e => {
+  const t = e.target; if (!t || !t.closest) return;
+  if (UI.open.size && !t.closest('.crow, .cdet, .sheet, #dock, input, textarea, select, label')) {
+    UI.open.clear();
+    document.querySelectorAll('.crow.open').forEach(r => { r.classList.remove('open'); const n = r.nextElementSibling; if (n && n.classList.contains('cdet')) n.remove(); });
+  }
+  document.querySelectorAll('details[open]:not([data-keep])').forEach(d => { if (!d.contains(t)) d.open = false; });
+}, true);
 
 /* ---------- Schnelleinkauf: eine Kurzliste neben der Hauptliste, hin- und herschaltbar ---------- */
 // S.short = { on: Kurzliste gibt es, view: 'short' | 'all', later: Artikel, die NICHT in der Kurzliste sind, known: bekannte Artikel }

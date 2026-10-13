@@ -547,6 +547,160 @@
       "erwartet": null,
       "grundpreis_erwartet": "3.75/kg",
       "grund": "Mehrfachpackung: Quellwert gilt"
+    },
+    {
+      "name": "ALL SEASONS TK Obst-Sortiment, Erdbeeren 750 g",
+      "desc": "750 g",
+      "laden": "aldi",
+      "preis": 3.29,
+      "menge": 750,
+      "einheit": "g",
+      "grundpreis": 4.39,
+      "basis": "kg",
+      "quelle": "https://www.aldi-sued.de/produkte/tiefkuehlung/k/1588161425467141",
+      "eigene": [
+        "Obst"
+      ],
+      "erwartet": null,
+      "grund": "Sammelbegriff Obst meint frisches Obst: Tiefkühl zählt nicht"
+    },
+    {
+      "name": "Seeberger Obst-Mix getrocknet",
+      "laden": "rewe",
+      "preis": 2.99,
+      "menge": 200,
+      "einheit": "g",
+      "eigene": [
+        "Obst"
+      ],
+      "erwartet": null,
+      "grund": "getrocknetes Obst ist kein frisches Obst"
+    },
+    {
+      "name": "ALL SEASONS TK-Himbeeren 500 g",
+      "laden": "aldi",
+      "preis": 2.79,
+      "eigene": [
+        "Himbeeren"
+      ],
+      "erwartet": null,
+      "grund": "eigenes Produkt mit Obst-Namen: TK zählt nicht"
+    },
+    {
+      "name": "Gemüse-Mix tiefgefroren",
+      "laden": "lidl",
+      "preis": 1.49,
+      "menge": 750,
+      "einheit": "g",
+      "eigene": [
+        "Gemüse"
+      ],
+      "erwartet": null,
+      "grund": "Sammelbegriff Gemüse: Tiefkühl zählt nicht"
+    },
+    {
+      "name": "FARMER NATURALS Trocken-Ananas 100 g",
+      "laden": "aldi",
+      "preis": 1.99,
+      "erwartet": null,
+      "grund": "Trockenobst ist kein Frischobst (CAN_RX trocken)"
+    },
+    {
+      "name": "Chiquita Bananen",
+      "desc": "siehe Etikett 1 kg",
+      "cats": "Chiquita Bananen",
+      "laden": "rewe",
+      "preis": 1.99,
+      "menge": 1,
+      "einheit": "kg",
+      "eigene": [
+        "Bananen"
+      ],
+      "erwartet": "eigen:Bananen",
+      "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "name": "Henglein Kartoffelknödel tiefgekühlt",
+      "laden": "rewe",
+      "preis": 1.79,
+      "eigene": [
+        "Kartoffelknödel"
+      ],
+      "erwartet": "eigen:Kartoffelknödel",
+      "grund": "darf nicht kaputtgehen: kein Obst-/Gemüse-Name, TK bleibt erlaubt"
+    },
+    {
+      "name": "BÄRENMARKE Vollmilch 3,8 % 1 l",
+      "desc": "1 l",
+      "laden": "aldi",
+      "preis": 0.88,
+      "menge": 1,
+      "einheit": "l",
+      "grundpreis": 0.88,
+      "basis": "l",
+      "hinweis": "Dauerpreis (kein Wochenangebot)",
+      "historie": [
+        {
+          "up": 1.19,
+          "date": "2026-10-08",
+          "store": "aldi"
+        }
+      ],
+      "erwartet": "milch",
+      "pct_erwartet": null,
+      "grund": "Dauerpreis, nur 1 eigener Kauf: kein Prozentwert erfinden"
+    },
+    {
+      "name": "BÄRENMARKE Vollmilch 3,8 % 1 l",
+      "desc": "1 l",
+      "laden": "aldi",
+      "preis": 0.88,
+      "menge": 1,
+      "einheit": "l",
+      "grundpreis": 0.88,
+      "basis": "l",
+      "hinweis": "Dauerpreis (kein Wochenangebot)",
+      "historie": [
+        {
+          "up": 1.19,
+          "date": "2026-10-08",
+          "store": "aldi"
+        },
+        {
+          "up": 1.19,
+          "date": "2026-09-30",
+          "store": "aldi"
+        }
+      ],
+      "erwartet": "milch",
+      "pct_erwartet": 26,
+      "grund": "ab 2 eigenen Käufen ist die Ersparnis echt"
+    },
+    {
+      "name": "ALL SEASONS TK Obst-Sortiment, Erdbeeren 750 g",
+      "desc": "750 g",
+      "laden": "aldi",
+      "preis": 3.29,
+      "menge": 750,
+      "einheit": "g",
+      "quelle": "https://www.aldi-sued.de/produkte/tiefkuehlung/k/1588161425467141",
+      "eigene": [
+        "Frisch Obst"
+      ],
+      "erwartet": null,
+      "grund": "auch mit Vorsatz frisch/bio ist es der Sammelbegriff"
+    },
+    {
+      "name": "Gemüse-Mix tiefgefroren",
+      "laden": "lidl",
+      "preis": 1.49,
+      "menge": 750,
+      "einheit": "g",
+      "eigene": [
+        "Bio Gemüse"
+      ],
+      "erwartet": null,
+      "grund": "Vorsatz bio ändert nichts"
     }
   ],
   "bons": [
@@ -782,6 +936,54 @@
     {
       "zeile": "CHRISTIN WEIN",
       "erwartet": null
+    },
+    {
+      "zeile": "TK OBST MIX",
+      "eigene": [
+        "Obst"
+      ],
+      "erwartet": null,
+      "grund": "TK-Obst ist kein Kauf von frischem Obst"
+    },
+    {
+      "zeile": "OBST GETR.",
+      "eigene": [
+        "Obst"
+      ],
+      "erwartet": null,
+      "grund": "getr. = getrocknet"
+    },
+    {
+      "zeile": "GEMUESE TK",
+      "eigene": [
+        "Gemüse"
+      ],
+      "erwartet": null,
+      "grund": "TK-Gemüse"
+    },
+    {
+      "zeile": "BANANEN GETR.",
+      "eigene": [
+        "Bananen"
+      ],
+      "erwartet": null,
+      "grund": "getrocknete Bananen"
+    },
+    {
+      "zeile": "BIO OBST",
+      "eigene": [
+        "Obst"
+      ],
+      "erwartet": "eigen:Obst",
+      "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "zeile": "BANANEN",
+      "eigene": [
+        "Bananen"
+      ],
+      "erwartet": "eigen:Bananen",
+      "grund": "darf nicht kaputtgehen"
     }
   ],
   "eingaben": [
@@ -822,6 +1024,23 @@
     {
       "text": "Möhren",
       "erwartet": null
+    },
+    {
+      "text": "Tiefkühl Obst",
+      "eigene": [
+        "Obst"
+      ],
+      "erwartet": null,
+      "offen": true,
+      "grund": "Eingabe mit Tiefkühl darf nicht frischem Obst zugeordnet werden"
+    },
+    {
+      "text": "Obst",
+      "eigene": [
+        "Obst"
+      ],
+      "erwartet": "eigen:Obst",
+      "grund": "darf nicht kaputtgehen"
     }
   ],
   "bon_texte": [
