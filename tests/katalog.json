@@ -1039,6 +1039,43 @@
       "foto_tag": "2026-10-10",
       "laden": "metro",
       "grund": "Zeile Netto mit Betrag ist Steuer, kein Laden"
+    },
+    {
+      "bon_text": "Lidl\nARTIKEL 1 1,09 A\nARTIKEL 2 1,09 A\nARTIKEL 3 1,09 A\nARTIKEL 4 1,09 A\nARTIKEL 5 1,09 A\nARTIKEL 6 1,09 A\nARTIKEL 7 1,09 A\nARTIKEL 8 1,09 A\nARTIKEL 9 1,09 A\nARTIKEL 10 1,09 A\nARTIKEL 11 1,09 A\nARTIKEL 12 1,09 A\nARTIKEL 13 1,09 A\nARTIKEL 14 1,09 A\nARTIKEL 15 1,09 A\nARTIKEL 16 1,09 A\nARTIKEL 17 1,09 A\nARTIKEL 18 1,09 A\nARTIKEL 19 1,09 A\nARTIKEL 20 1,09 A\nSUMME 21,90\nNetto\nNetto\n10.10.26 12:00",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "lidl",
+      "datum": "2026-10-10",
+      "grund": "Wort Netto im Text schlägt keinen Ladennamen im Kopf"
+    },
+    {
+      "bon_text": "REWE Markt GmbH\nARTIKEL 1 1,09 A\nARTIKEL 2 1,09 A\nARTIKEL 3 1,09 A\nARTIKEL 4 1,09 A\nARTIKEL 5 1,09 A\nARTIKEL 6 1,09 A\nARTIKEL 7 1,09 A\nARTIKEL 8 1,09 A\nARTIKEL 9 1,09 A\nARTIKEL 10 1,09 A\nARTIKEL 11 1,09 A\nARTIKEL 12 1,09 A\nARTIKEL 13 1,09 A\nARTIKEL 14 1,09 A\nARTIKEL 15 1,09 A\nARTIKEL 16 1,09 A\nARTIKEL 17 1,09 A\nARTIKEL 18 1,09 A\nARTIKEL 19 1,09 A\nARTIKEL 20 1,09 A\nSUMME 21,80\nNetto\nNetto\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "grund": "viele schwache Treffer schlagen keinen Namen im Kopf"
+    },
+    {
+      "bon_text": "BROT 1,29 B\nNetto-Füllmenge 500g\nSUMME 1,29\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": null,
+      "grund": "Netto-Füllmenge ist kein Laden"
+    },
+    {
+      "bon_text": "Florenzer Str. 24 - 29\nBROT 1,29 B\nSUMME 1,29\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": "rewe",
+      "grund": "Straße mit Hausnummer des Ladens ist sicher"
+    },
+    {
+      "bon_text": "Florenzer Str.\nBROT 1,29 B\nSUMME 1,29\n10.10.2026",
+      "heute": "2026-10-12",
+      "foto_tag": "2026-10-10",
+      "laden": null,
+      "vorschlag": "rewe",
+      "grund": "Straße allein ist nur ein Vorschlag"
     }
   ]
 }

@@ -47,3 +47,9 @@ Diese Datei fasst zusammen, was aus gefundenen Fehlern als **allgemeine Regel** 
 28. **Rundung ist kein Rabatt:** Weicht der Grundpreis der Quelle nur um Cent-Rundung (höchstens 0,006 €) von Preis/Menge ab, wird exakt gerechnet (mit kleinem Aufschlag, damit 2,975 als 2,98 angezeigt wird). Eine Ersparnis gegen die eigene Historie zählt erst ab 5 % (`REF_MIN`).
 29. **Historie zählt Kauftage:** Ein Eintrag je Produkt, Tag und Laden (der neueste gewinnt), keiner aus Bons mit unplausiblem Datum; die Referenz ist der echte Median aus mindestens 2 Käufen. Einträge ohne Datum werden nur zusammengelegt, wenn sie völlig gleich sind. Beim Laden fremder Daten erst bereinigen, dann kürzen.
 30. **Jede Änderung an S.hist leert den Angebots-Zwischenspeicher (CACHE).**
+
+## Ergänzt am 13.10. (Bon ohne Laden/Datum)
+31. **Laden aus mehreren Hinweisen:** je Art des Hinweises (Name, Adresse, Eigenmarke) zählt ein Laden nur einmal; Name im Kopf 4, später 2,5, Straße mit Hausnummer 3, Straße allein 1,5, Eigenmarke 0,6. Gleichstand und Werte unter 2 sind nur ein Vorschlag. „Ein Unternehmen der REWE Group“ und Steuerzeilen („Netto 1,00“, „Netto-Füllmenge“) zählen nicht.
+32. **Datum aus allen Zeilen:** Ziffern-Verwechslungen nur zwischen Ziffern korrigieren; Zeilen mit gültig/bis/MHD/Coupon/Aktion nie; kein Datum in Bon- oder Telefonnummern; ein verlesenes Jahr wird vom Foto-Tag übernommen, nur in reinen Datums-/Fußzeilen, nie bei Uhr/Uhrzeit, und braucht Bestätigung. Datum über 400 Tage oder in der Zukunft wird beim Speichern abgelehnt.
+33. **Uhrzeit:** nie aus Öffnungszeiten (Zeitspannen, Wochentage) und nie aus Datumsteilen.
+34. **Nie leer fragen:** Fehlt Laden oder Datum, steht ein Vorschlag da (Laden-Hinweis, Foto-Tag). Rohtext und Erkennung werden lokal in der Bon-Diagnose festgehalten (20 Einträge, wird beim Speicherengpass zuerst geopfert).

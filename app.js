@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 130, t: '12.10. 21:58' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 133, t: '13.10. 05:31' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -60,7 +60,7 @@ try {
 // 1) Speichern: scheitert es (Speicher voll oder gesperrt), sagt die App es sichtbar
 const save = () => {
   BH = null;
-  try { const j = JSON.stringify(S); localStorage.setItem(LS, j); LAST_RAW = j; if (SAVE_FAILED) { SAVE_FAILED = false; saveWarnBar(false); } return true; }
+  try { const j = JSON.stringify(S); try { localStorage.setItem(LS, j); } catch (e0) { localStorage.removeItem('einkauf.diag'); localStorage.setItem(LS, j); } /* voll: erst die Bon-Diagnose opfern, dann noch einmal */ LAST_RAW = j; if (SAVE_FAILED) { SAVE_FAILED = false; saveWarnBar(false); } return true; }
   catch (e) { SAVE_FAILED = true; saveWarnBar(true); return false; }
 };
 function saveWarnBar(on) { // bleibt stehen, solange nicht gespeichert werden kann
@@ -634,7 +634,7 @@ V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow
   <label class="f">gültig bis<input id="mv" type="date"></label></div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="addOffer()">Speichern</button><span class="mute">Merkt sich den Preis auch als dein Referenzpreis.</span></div>
   ${S.manual.map((o, i) => `<div class="item"><div class="grow">${esc(o.name)} · ${eur(o.price)} · ${esc(STORE(o.store).short)}</div><button class="ico" onclick="delOffer(${i})">✕</button></div>`).join('')}</div>
   <h2>Einstellungen</h2><div class="card"><div class="fgrid"><label class="f">Wert deiner Zeit (€/Std.)<input type="number" id="sh" value="${S.set.hourly}"></label><label class="f">Vorrat ab … % Ersparnis<input type="number" id="sp" value="${S.set.stockPct}"></label><label class="f">Max. Autofahrt (Min)<input type="number" id="sc" value="${S.set.carMax}"></label><label class="f">Spartipp ab … % günstiger<input type="number" id="st" value="${S.set.tipPct}"></label><label class="f">Starke Angebote ab … % Ersparnis<input type="number" id="sg" min="5" max="90" value="${S.set.topPct}"></label></div><button class="btn" style="margin-top:10px" onclick="saveSet()">Speichern</button></div>
-  <h2>Zurücksetzen</h2><div class="card row"><button class="btn danger" onclick="if(confirm('Alle Daten dieser App löschen? Mach vorher eine Sicherung.')){localStorage.removeItem(LS);location.reload()}">Alles löschen</button></div>`;
+  <h2>Zurücksetzen</h2><div class="card row"><button class="btn danger" onclick="if(confirm('Alle Daten dieser App löschen? Mach vorher eine Sicherung.')){localStorage.removeItem(LS);localStorage.removeItem('einkauf.diag');location.reload()}">Alles löschen</button></div>`;
 
 /* ================= Aktionen ================= */
 function toast(t) { feedbackText(esc(t)); } // alle Meldungen erscheinen in der festen Leiste über dem Menü
