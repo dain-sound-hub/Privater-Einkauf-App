@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 139, t: '13.10. 13:36' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 140, t: '13.10. 16:36' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -440,7 +440,7 @@ function orderCats(cs) { // Rubriken, aus denen du oft kaufst, zuerst; sonst Rei
 }
 const mainProducts = () => PRODUCTS.filter(p => freq(p) >= 2).sort((a, b) => recScore(b) - recScore(a) || a.name.localeCompare(b.name, 'de'));
 const chipHtml = p => {
-  const on = onList(p.id), i = productInfo(p), b = i.nearBest || i.best;
+  const on = onList(p.id), i = productInfo(p), b0 = i.nearBest || i.best, b = b0 && !isPerm(b0) ? b0 : null; // Dauerpreise sind keine Ersparnis
   return `<button class="chip ${on ? 'on' : ''} ${freq(p) >= 2 ? 'main' : ''}" data-pid="${p.id}" onclick="chipTap('${p.id}')" aria-pressed="${on}">${on ? '✓' : iconFor(p)} ${esc(p.name.split(' /')[0])}${!on && b && b.pct != null && !b.dubious ? ` <b style="color:var(--acc)">−${Math.round(b.pct * 100)}%<span class="qst"> ${esc(b.store.short)}</span></b>` : ''}</button>`;
 };
 function toggleP(id) { if (onList(id)) { S.list = S.list.filter(i => !(i.pid === id && !i.done)); save(); render(); } else addP(id); }
