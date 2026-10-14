@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 158, t: '14.10. 20:23' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 160, t: '14.10. 20:27' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fremde Werte nie als Text in Handler einsetzen (Regel 50): Angebots-IDs bestehen nur aus Buchstaben, Ziffern und . : _ - (sonst wird eine feste Ersatz-ID aus dem Wert gebildet); jsq() macht aus einem Wert ein sicheres JavaScript-Zeichenkettenliteral für ein HTML-Attribut
 const safeOfferId = (v, fb) => { const s = (typeof v === 'string' || typeof v === 'number') ? String(v).slice(0, 80) : ''; if (/^[\w.:-]{1,80}$/.test(s)) return s; if (!s) return fb; let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) >>> 0; return 'x' + h.toString(36); };
 const jsq = v => String(JSON.stringify(String(v))).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -259,6 +259,11 @@ const CLAIM_RX = /kartoffel|möhre|karotte|kohl|salat|spinat|pilz|champignon|zuc
 const LITER_G_OK = new Set(['kefir', 'ayran', 'buttermilch']); // nur diese Flüssigkeiten werden auch in Gramm verkauft; Milch in Gramm ist Schokolade
 // Fehlende Menge, Stückzahl und Grundpreis aus dem Text holen (Name, Beschreibung, Hinweis); vorhandene Werte der Quelle bleiben, außer der Preis steht erkennbar je kg oder je 100 g
 const noNutri = s => s.replace(/\d+(?:[.,]\d+)?\s?g\s*(?:protein|eiweiß|fett|zucker|kohlenhydrate)[^,]*?(?:je|pro)\s?100\s?g/gi, ' ').replace(/\d+(?:[.,]\d+)?\s?g\s*(?:protein|eiweiß|fett|zucker|kohlenhydrate)/gi, ' '); // „20 g Protein pro 100 g“ ist eine Nährwertangabe, keine Menge und kein Preis
+const multiN = s => { // „2 x 20 WL“ = 40 Waschladungen, „16 x 150-St.-Pckg.“ = 16 Rollen (150 Blatt je Rolle), „6 x 4 Stück“ = 24
+  const w = /(\d+)\s?[x×]\s?(\d+)[\s-]*(?:wl|wäschen|waschladungen?|waschgänge)(?![a-zäöü])/i.exec(s); if (w) return { n: +w[1] * +w[2], M: +w[2] };
+  const x = /(\d+)\s?[x×]\s?(\d+)[\s-]*(?:stück|stk|st)\b/i.exec(s); if (x) return { n: +x[2] >= 50 ? +x[1] : +x[1] * +x[2], M: +x[2] };
+  return null;
+};
 function inferQty(o, p) {
   const nd = noNutri(o.name + ' ' + (o.desc || '')), t = nd + ' ' + (o.note || ''), tc = nd.replace(/\bab\s+\d+/gi, ' '), out = {}, per = p.base === 'kg' || p.base === 'l'; // tc: ohne Mindestabnahme („ab 4 Stück“)
   if (per) {
@@ -274,7 +279,7 @@ function inferQty(o, p) {
     if (m) { const M = +m[2].replace(',', '.'), u = m[3].toLowerCase() === 'liter' ? 'l' : m[3].toLowerCase(); if (!o.amount || (o.amount === M && o.unit === u)) { out.amount = +m[1] * M; out.unit = u; } }
     else if (!o.amount && !o.unitPrice) { const s = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s?(kg|g|ml|l)\b/i.exec(nd); if (s) { out.amount = +s[1].replace(',', '.'); out.unit = s[2].toLowerCase(); } } // ALDI schreibt die Größe in den Namen
   } else if (p.base === 'st' && !o.count && !(o.unit === 'st' && o.amount)) {
-    const w = /(\d+)\s?[x×]\s?(\d+)[\s-]*(?:wl|wäschen|waschladungen?|waschgänge)(?![a-zäöü])/i.exec(tc), c = /(\d+)\s?[x×]\s?\d+[\s-]*blatt/i.exec(tc) || /(\d+)[\s-]*(?:wl|wäschen|waschladungen?|waschgänge)(?![a-zäöü])/i.exec(tc) || /(\d+)[\s-]*rollen?\b/i.exec(tc) || /(\d+)[\s-]*(?:stück|stk|st)\b/i.exec(tc), n = w ? +w[1] * +w[2] : c ? +c[1] : 0; // „2 x 20 WL“ sind 40 Waschladungen
+    const w = /(\d+)\s?[x×]\s?(\d+)[\s-]*(?:wl|wäschen|waschladungen?|waschgänge)(?![a-zäöü])/i.exec(tc), c = /(\d+)\s?[x×]\s?\d+[\s-]*blatt/i.exec(tc) || /(\d+)[\s-]*(?:wl|wäschen|waschladungen?|waschgänge)(?![a-zäöü])/i.exec(tc) || /(\d+)[\s-]*rollen?\b/i.exec(tc) || /(\d+)[\s-]*(?:stück|stk|st)\b/i.exec(tc), n = multiN(tc) ? multiN(tc).n : c ? +c[1] : 0; // „2 x 20 WL“ sind 40 Waschladungen
     if (n > 0 && n < 1000) out.count = n;
     else if (/(?:^|[\s,])(?:je\s)?(?:stück|st\.)\s*$/i.test(o.desc || '') || /^(?:je\s)?(?:stück|st\.)$/i.test(o.note || '')) out.count = 1; // „Kl. I Stück“: der Preis gilt für ein Stück
   }
@@ -295,7 +300,7 @@ function enrich(o) {
   const text = o.name + ' ' + (o.cats || ''), full = text + ' ' + (o.desc || '');
   const head = o.store === 'aldi' ? o.name.split(',')[0] + ' ' + (o.cats || '') : text; // ALDI schreibt die Sorte hinter das Komma („Pringles 200g, Sweet Paprika"): für frische Produkte zählt nur der Teil davor
   let p = o.pidLocked && o.pid ? PROD(o.pid) : null;
-  if (!p) { const cands = [], nameSrc = o.store === 'aldi' ? o.name.split(',')[0] : o.name; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = q.custom ? (o.store === 'aldi' ? o.name.split(',')[0] : o.name) : HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; const nz = x => q.custom ? stripOwn(q, x) : x; if (window.NOISE_RX && NOISE_RX.test(nz(m.index < (o.store === 'aldi' && src === head ? o.name.split(',')[0].length : o.name.length) ? o.name : text))) continue; /* Sperrwort zählt nur dort, wo das Produktwort steht: im Namen (ganz) oder, wenn nur die Kategorie trifft, Name und Kategorie */ if (q.custom && (o.food === false || FB_NOISE.test(nz(text)))) continue; if (q.animal && animalClash(q, o.name)) continue; if (COMPOUND_CATS.has(q.cat)) { const rest = src.slice(m.index + m[0].length); if (/^-[A-Za-zÄÖÜäöü]/.test(rest) && !/^-(?:rispe|mix|netz|scheiben|würfel|kugeln?|stücke?|block|rolle|minis?|schale|trio|duo|pack|beutel|auswahl|set)/i.test(rest)) continue; } /* „Tomaten-Dip“ ist keine Tomate, „Tomaten-Rispe“ schon */ const inName = rx(q).test(HEAD_CATS.has(q.cat) ? nameSrc : o.name); if (q.cat === 'Obst & Gemüse' && (CAN_RX.test(text) || SHELF_RX.test(o.src || '') || (!inName && CLAIM_RX.test(o.name)))) continue; if (HEAD_CATS.has(q.cat) && !q.custom && o.store !== 'aldi' && inName && String(o.cats || '').trim() && !catsSays(q, o.cats, m[0], o)) continue; /* cats nennt eine andere Produktart: das Wort im Namen ist nur Geschmack oder Beiwort */ cands.push({ q, l: m[0].length, inName }); }
+  if (!p) { const cands = [], nameSrc = o.store === 'aldi' ? o.name.split(',')[0] : o.name; for (const q of PRODUCTS) { if (q.virtual) continue; if (q.not && new RegExp(q.not, 'i').test(text)) continue; const src = q.custom ? (o.store === 'aldi' ? o.name.split(',')[0] : o.name) : HEAD_CATS.has(q.cat) ? head : text, m = rx(q).exec(src); if (!m) continue; const nz = x => q.custom ? stripOwn(q, x) : x; if (window.NOISE_RX && NOISE_RX.test(nz(m.index < (o.store === 'aldi' && src === head ? o.name.split(',')[0].length : o.name.length) ? o.name : text))) continue; /* Sperrwort zählt nur dort, wo das Produktwort steht: im Namen (ganz) oder, wenn nur die Kategorie trifft, Name und Kategorie */ if (q.custom && (o.food === false || FB_NOISE.test(nz(text)))) continue; if (q.animal && animalClash(q, o.name)) continue; if (COMPOUND_CATS.has(q.cat)) { const rest = src.slice(m.index + m[0].length); if (/^-[A-Za-zÄÖÜäöü]/.test(rest) && !/^-(?:rispe|mix|netz|scheiben|würfel|kugeln?|stücke?|block|rolle|minis?|schale|trio|duo|pack|beutel|auswahl|set)/i.test(rest)) continue; } /* „Tomaten-Dip“ ist keine Tomate, „Tomaten-Rispe“ schon */ const inName = rx(q).test(HEAD_CATS.has(q.cat) ? nameSrc : o.name); if (q.cat === 'Obst & Gemüse' && (CAN_RX.test(full) || SHELF_RX.test(o.src || '') || (!inName && CLAIM_RX.test(o.name)))) continue; if (HEAD_CATS.has(q.cat) && !q.custom && o.store !== 'aldi' && inName && String(o.cats || '').trim() && !catsSays(q, o.cats, m[0], o)) continue; /* cats nennt eine andere Produktart: das Wort im Namen ist nur Geschmack oder Beiwort */ cands.push({ q, l: m[0].length, inName }); }
     const longest = a => a.reduce((b, c) => (!b || c.l > b.l ? c : b), null); const pool = cands.some(c => c.inName && c.q.cat !== 'Obst & Gemüse') ? cands.filter(c => c.q.cat !== 'Obst & Gemüse') : cands; let best = longest(pool); /* Obst im Namen eines Milchprodukts ist nur der Geschmack (Fruchtkefir Erdbeere) */
     if (best && !best.inName) { const nm = longest(pool.filter(c => c.inName)); if (nm && !(best.q.group && best.q.group.includes(nm.q.id)) && !(nm.q.group && nm.q.group.includes(best.q.id))) best = nm; } /* trifft nur ein Wort aus der Kategorie, schlägt ein anderes Produkt aus dem Namen (Lenor Waschmittel ist kein Color-Waschmittel) */
     if (best) p = best.q; }
@@ -303,17 +308,19 @@ function enrich(o) {
   if (!p && o.found) p = PRODUCTS.find(q => q.custom && q.q && o.found.some(f => f.toLowerCase() === q.q[0]) && customOk(o, q)) || null;
   if (p && p.cat === 'Fleisch') { const g = meatGrams(o), stueck = g >= 120 && !POULTRY_RX.test(o.name) && /steak|kotelett|schnitzel|medaillon|filet|rücken|keule|hüft|entrec/i.test(o.name); if (g != null && g < 200 && !stueck && !/(?:je|pro)\s?100\s?g/i.test(noNutri(o.name + ' ' + (o.desc || ''))) && !(g === 100 && !/\d+\s?g\b/i.test(o.name))) p = null; } // unter 200 g ist es Aufschnitt, kein Frischfleisch (100 g ohne Gramm im Namen ist Theken-Preis je 100 g)
   if (p) { const q2 = inferQty(o, p); if (q2) o = { ...o, ...q2 }; }
+  { const mn = o.count ? multiN(noNutri(o.name + ' ' + (o.desc || ''))) : null; if (mn && mn.n !== o.count && o.count === mn.M) o = { ...o, count: mn.n }; }
   if (o.regular && o.regular > o.price) { const r = o.regular / o.price, N = Math.round(r); if (N >= 2 && Math.abs(r - N) < 0.03 && [...(o.name + ' ' + (o.desc || '')).matchAll(/(?<![\d,.])(\d{1,2})\s?(?:x|×|er\b|-er\b)/gi)].some(m => +m[1] === N)) o = { ...o, regular: null }; } // „6 x 0,75 l“: der „Normalpreis“ ist der Preis der ganzen Packung (N × Einzelpreis), kein Rabatt (Regel 43)
   if (o.regular && /einzelpreis/i.test((o.note || '') + ' ' + (o.desc || ''))) { const r = o.regular / o.price; if (r >= 1.9 && Math.abs(r - Math.round(r)) < 0.06) o = { ...o, regular: null }; } // „Einzelpreis“: der Normalpreis ist der Preis der ganzen Packung (3 x Einzelpreis), das ist kein Rabatt
   let store = STORE(o.store), up = unitPrice(o, p);
   if (p && p.base === 'l' && !p.custom && up && up.base === 'kg' && !LITER_G_OK.has(p.id) && !o.pidLocked) { p = null; up = unitPrice(o, null); }
   else if (p && p.base && p.base !== 'st' && up && up.base === 'st' && !o.pidLocked) { p = null; up = unitPrice(o, null); }
   else if (p && up && (p.base === 'l' || p.base === 'kg') && up.base !== p.base && up.base !== 'st') up = { v: up.v, base: p.base }; // Dichte ≈ 1 (Kefir in g, Milch in l)
-  if (p && p.meat && (o.food === false || MEAT_NOISE.test(text))) { p = null; up = unitPrice(o, null); } // „Rindengefäß“, Lammfell-Kissen & Co. sind kein Fleisch
+  if (p && p.meat && (o.food === false || MEAT_NOISE.test(text) || o.unit === 'ml' || o.unit === 'l')) { p = null; up = unitPrice(o, null); } // „Rindengefäß“, Lammfell-Kissen & Co. sind kein Fleisch
   let pct = null, kind = null;
   if (o.regular && o.regular > o.price) { pct = (o.regular - o.price) / o.regular; kind = o.regularIsUvp ? 'UVP' : 'Normalpreis'; }
   else if (up && p && p.base && up.base === p.base) { const r = refPrice(p); if (r && r.v > up.v) { const pc = (r.v - up.v) / r.v; if (pc >= REF_MIN) { pct = pc; kind = 'Referenz: ' + r.note; } } }
   if (pct != null && pct > 0.9) pct = null;
+  if (pct != null && (o.appRequired === true || /(?:nur )?mit\s+(?:rewe\s+)?(?:payback|bonus|coupon|lidl\s?plus|netto\s?plus|app)\b|(?:payback|bonus|app)-?preis|\bbonus\b.*\b(?:app|karte)\b/i.test((o.note || '') + ' ' + (o.desc || '')))) { pct = null; kind = null; } // Regel 44
   const dubious = pct != null && ((o.regularIsUvp && pct > 0.5) || pct > 0.7); // UVP-Rabatte über 50 % sind meist Schein-Rabatte
   const from = d0(o.valid?.[0] || TODAY), to = d0(o.valid?.[1] || '2999-01-01');
   const state = to < TODAY ? 'expired' : from > TODAY ? 'next' : 'now';
@@ -322,7 +329,7 @@ function enrich(o) {
   const gourmet = !!(p && p.meat && !POULTRY_RX.test(o.name) && (GOURMET_RX.test(o.name) || (up && up.base === 'kg' && up.v > 22))); // Edelstück (Steak, Filet …) oder über 22 €/kg: nur Zusatzinfo
   return { ...o, p, store, up, pct, kind, dubious, bulk, state, daysLeft: Math.round((to - TODAY) / 864e5), excluded, gourmet };
 }
-const MEAT_NOISE = /rinde(?!r)|fell|leder|wolle|kissen|gefäß|deko|spielzeug|plüsch|kerze|schuh|haustier|futter|whiskas|dreamies|felix|knusper|(?:^|[^a-zäöüß])(?:hund|katze)|(?:decke|korb|körbe|figur)n?(?![a-zäöüß])|holz(?:figur|deko|brett)|picker|salat|pasta|nudel|wrap|sandwich|\bcup\b|soup|suppe|maggi|pastete|wiener|hot ?dog|aspik|sülze|nugget|cordon|spezialität|ofenschale|menü|menu|backwelt|\bteller\b|frikadelle|gebacken|gegart|aufschnitt|panier|high protein|hälse|geräuchert|gebraten|gekocht|gepökelt|(?:leber|herz(?:en)?|nieren?|zungen?|mägen|magen)(?![a-zäöüß])|innerei|bouillon|fond\b|extrakt|feinkost|fertig/i;
+const MEAT_NOISE = /fonds?\b|rinde(?!r)|fell|leder|wolle|kissen|gefäß|deko|spielzeug|plüsch|kerze|schuh|haustier|futter|whiskas|dreamies|felix|knusper|(?:^|[^a-zäöüß])(?:hund|katze)|(?:decke|korb|körbe|figur)n?(?![a-zäöüß])|holz(?:figur|deko|brett)|picker|salat|pasta|nudel|wrap|sandwich|\bcup\b|soup|suppe|maggi|pastete|wiener|hot ?dog|aspik|sülze|nugget|cordon|spezialität|ofenschale|menü|menu|backwelt|\bteller\b|frikadelle|gebacken|gegart|aufschnitt|panier|high protein|hälse|geräuchert|gebraten|gekocht|gepökelt|(?:leber|herz(?:en)?|nieren?|zungen?|mägen|magen)(?![a-zäöüß])|innerei|bouillon|fond\b|extrakt|feinkost|fertig/i;
 const POULTRY_RX = /hähn|hühn|\bpute|\bputen|chicken|geflügel/i; // Geflügel ist alltäglich, auch als Filet oder Steak
 const ANIMALS = { haehnchen: /hähn|hühn|huhn|chicken|geflügel/i, pute: /\bpute|\bputen/i, rind: /\brind|jungbull|\bbulle|\bochs/i, schwein: /schwein/i, lamm: /\blamm/i, kalb: /\bkalb/i, ente: /\benten?(?![a-zäöü])|\bgans\b|\bgänse(?:brust|keule|braten)/i, wild: /hirsch[a-zäöü-]*(?:gulasch|braten|keule|rücken|steak|filet|fleisch|ragout|hack)|\bwild(?:fleisch|gulasch|braten|schwein|ragout|keule|rücken|hack)|vom wild\b|\breh(?:rücken|keule|gulasch)/i };
 const animalClash = (q, name) => { const hit = Object.keys(ANIMALS).filter(a => ANIMALS[a].test(name)); const mine = q.animal.split('|'); return hit.length > 0 && (!hit.some(a => mine.includes(a)) || (hit.length > 1 && hit.some(a => !mine.includes(a)))); }; // eine andere Tierart im Namen schlägt das Teilstück (Kalbs-Tafelspitz ist kein Rind, Hähnchen-Hack kein gemischtes Hack)
@@ -350,8 +357,8 @@ function productInfo(p) {
   // Großmarkt (Tier D) ist nur eine Option unter „Wege" und nie der Standard-Vorschlag der Liste
   return { p, now, next, gourmet, nearBest, best: now.find(o => o.store.tier !== 'D') || null, nextBest: next.find(o => o.store.tier !== 'D') || null };
 }
-function decision(info, item) {
-  const { p, nearBest, best, nextBest } = info, b = nearBest || best;
+function decision(info, item, chosen) { // chosen: das Angebot, das die Zeile tatsächlich zeigt (auch null = keins); ohne Angabe das beste City-Center-Angebot
+  const { p, nearBest, best, nextBest } = info, b = arguments.length > 2 ? chosen : (nearBest || best);
   if (!b) { const pf = prefOf(p, item && item.name); return { tag: 'Kein Angebot', cls: '', why: pf ? prefNote(pf) + '.' : 'Aktuell kein bekanntes Angebot. Normal in der Nah-Runde kaufen.' }; }
   if (nextBest && b.up && nextBest.up && nextBest.up.base === b.up.base && nextBest.up.v < b.up.v * 0.9 && !(item && item.urgent))
     return { tag: 'Lohnt sich warten', cls: 't-warn', why: `Nächste Woche ${eur(nextBest.price)}${nextBest.up ? ' (' + eur(nextBest.up.v) + ' / ' + unitLbl(nextBest.up.base) + ')' : ''} bei ${nextBest.store.short} (ab ${fmtD(nextBest.valid[0])}), deutlich günstiger.` };
@@ -382,7 +389,7 @@ function offerCard(o, opt = {}) {
   if (p && p.stock && !o.dubious && o.pct != null && o.pct * 100 >= S.set.stockPct) t.push('<span class="tag t-stock">Vorrat</span>');
   if (o.state === 'next') t.push('<span class="tag t-warn">ab ' + fmtD(o.valid[0]) + '</span>');
   if (o.appRequired) t.push('<span class="tag t-warn">nur mit App/Coupon</span>');
-  const nh = p && o.state === 'now' ? nextHint(productInfo(p)) : null;
+  const nh = p && o.state === 'now' ? nextHint(productInfo(p), o) : null;
   const laterBtn = !opt.noAdd && (o.state === 'next' || nh) ? `<button class="btn sm" onclick="rememberOffer(${jsq(o.id)})">📌 Merken</button>` : '';
   const add = opt.noAdd || o.state === 'next' || (p && onList(p.id)) ? '' : p ? `<button class="btn sm" onclick="addP('${p.id}')">+ Liste</button>` : `<button class="btn sm" onclick="addOfferItem(${jsq(o.id)})">+ Liste</button>`; // auch Neues, das du sonst nie kaufst
   const badge = o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}" ${o.dubious ? 'title="Vergleich mit Hersteller-UVP, vermutlich Schein-Rabatt"' : ''}>${o.dubious ? '≈ ' : ''}−${Math.round(o.pct * 100)} %</span>${saveTag(o)}` : '';
@@ -516,7 +523,7 @@ function cRow(c) {
     <span class="pr${b && !it.done && b.pct != null && !b.dubious && b.pct >= 0.1 ? ' sale' : ''}">${right}</span>${it.done || route ? '' : `<button class="star${it.fav ? ' on' : ''}" onclick="event.stopPropagation();toggleFav('${id}')" aria-label="${it.fav ? 'Stern entfernen' : 'Im Blick behalten, in mehreren Läden schauen'}" title="Im Blick behalten">${it.fav ? '★' : '☆'}</button>`}<button class="chk ${it.done ? 'on' : ''}" onclick="event.stopPropagation();tick('${id}')" aria-label="${it.done ? 'wieder offen' : 'abhaken'}">${it.done ? '✓' : ''}</button>${askOv(id, it)}</div>${open ? cDetail(c) : ''}`;
 }
 function cDetail(c) {
-  const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? decision(info, it) : null), pf = prefOf(p, it.name);
+  const it = c.it, id = it.id, p = c.p, b = c.b, info = c.info !== undefined ? c.info : (p ? productInfo(p) : null), dec = c.dec !== undefined ? c.dec : (info ? ('b' in c ? decision(info, it, c.b || null) : decision(info, it)) : null), pf = prefOf(p, it.name);
   const tbl = info ? info.now.filter(x => !(b && x.id === b.id)).slice(0, 5) : [], tip = !it.done && p ? tipFor(p.id) : null, us = !it.done && p ? (b ? usualBlock(b) : usualBlock(null, false, p)) : '';
   return `<div class="cdet">${it.name.length > 26 ? `<div class="small" style="margin-bottom:6px"><b>${esc(it.name)}</b>${it.qty ? ' · ' + esc(qtyLabel(it.qty)) : ''}</div>` : ''}${it.store ? `<div class="mvnote">📍 Von dir nach <b>${esc(STORE(it.store).short)}</b> verschoben. <button class="lnk" onclick="moveItem('${id}','auto')">Verschiebung aufheben</button></div>` : ''}<div class="row nowrap" style="gap:10px">${c.ctx === 'route' ? '' : thumb(imgFor(it, b), iconFor(p, it.name), 'md', true)}<div class="grow small">${b
     ? `<b>${eur(b.price)}</b> bei <b>${esc(b.store.short)}</b>${b.up ? ` · ${eur(b.up.v)}/${unitLbl(b.up.base)}` : ''}${b.pct != null ? ` <span class="pct ${b.dubious ? 'dub' : ''}">−${Math.round(b.pct * 100)} %</span>${saveTag(b)}` : ''}${p ? ` <button class="info" onclick="compare('${p.id}')" title="Preisvergleich" aria-label="Preisvergleich">i</button>` : ''}${dec && dec.cls ? ` <span class="tag ${dec.cls}">${dec.tag}</span>` : ''}<div class="mute">${esc(b.name.slice(0, 44))}${b.desc ? ' · ' + esc(b.desc.slice(0, 40)) : ''}</div>`
@@ -524,7 +531,7 @@ function cDetail(c) {
     ${dec ? `<div class="small" style="margin-top:6px">${esc(dec.why)}</div>` : !p ? '<div class="small mute" style="margin-top:6px">Noch kein Produkt zugeordnet. Mit 👁 wird es ein Favorit und bei der nächsten Suche gefunden.</div>' : ''}
     ${info && info.gourmet && info.gourmet.length ? `<div class="small mute" style="margin-top:6px">🥩 Edelstück im Angebot: ${esc(info.gourmet[0].name.slice(0, 32))} ${eur(info.gourmet[0].price)} bei ${esc(info.gourmet[0].store.short)}${info.gourmet[0].pct != null && !info.gourmet[0].dubious ? ' (−' + Math.round(info.gourmet[0].pct * 100) + ' %)' : ''}</div>` : ''}
     ${us}${tip && !us ? `<div class="small nxt">💡 ${esc(tipText(tip))}</div>` : ''}
-    ${!it.done ? nextLine(info ? nextHint(info) : null, `<button class="lnk" onclick="rememberItem('${id}')">📌 für nächste Woche merken</button>`) : ''}
+    ${!it.done ? nextLine(info ? nextHint(info, c.b) : null, `<button class="lnk" onclick="rememberItem('${id}')">📌 für nächste Woche merken</button>`) : ''}
     ${tbl.length ? `<table style="margin-top:6px">${tbl.map(x => `<tr><td><i class="dot t${x.store.tier}"></i>${esc(x.store.short)}</td><td class="mute">${esc(x.name.slice(0, 28))}</td><td>${eur(x.price)}${x.up ? ` <span class="mute">${eur(x.up.v)}/${unitLbl(x.up.base)}</span>` : ''}</td></tr>`).join('')}</table>` : ''}
     ${it.fav ? `<div class="mvnote">★ Im Blick: kein fester Laden. ${c.rec ? 'Empfohlen: <b>' + esc(c.rec) + '</b>. ' : ''}<button class="lnk" onclick="toggleFav('${id}')">Stern entfernen</button></div>` : ''}<div class="row" style="margin-top:8px"><label class="mute"><input type="checkbox" ${it.urgent ? 'checked' : ''} onchange="urgent('${id}')" style="width:auto"> dringend</label><label class="mute"><input type="checkbox" ${itemHeavy(it, p) ? 'checked' : ''} onchange="toggleHeavy('${id}')" style="width:auto"> schwer/sperrig (zuletzt kaufen)</label></div>
     ${it.pid ? `<div class="mute" style="margin-top:8px">Wo kaufst du das normalerweise?</div><div class="chips"><button class="chip ${(S.prefs[it.pid] || (pf || {}).id) ? '' : 'on'}" onclick="setPref('${it.pid}','')">Egal</button>${['netto', 'rewe', 'aldi', 'dm', 'lidl'].map(s => `<button class="chip ${(S.prefs[it.pid] || (pf || {}).id) === s ? 'on' : ''}" onclick="setPref('${it.pid}','${s}')">${STORE(s).short}</button>`).join('')}</div>` : ''}
@@ -539,7 +546,7 @@ V.list = () => {
   plan.stops.forEach(s => { const g = s.items.map(x => ({ ...byId2[x.it.id], b: x.offer, note: x.note })); groups[s.store.id] = g; order.push(s.store.id); open.push(...g); });
   const favs = plan.favs.map(x => ({ ...byId2[x.it.id], b: x.offer, note: x.note, rec: x.recName })); open.push(...favs);
   const done = rows.filter(x => x.it.done), later = rows.filter(x => !x.it.done && hiddenShort(x.it)).length;
-  const row = r => cRow({ it: r.it, p: r.p, b: r.b, info: r.info, dec: r.dec, note: r.note, rec: r.rec });
+  const row = r => cRow({ it: r.it, p: r.p, b: r.b, info: r.info, note: r.note, rec: r.rec });
   const qa = quickAdd();
   SUGG = Object.entries(S.buys).filter(([k, n]) => n >= 2 && (k.startsWith('n:') || !watched(k)) && !(k.startsWith('n:') && S.custom.some(c => c.name.toLowerCase() === k.slice(2)))).slice(0, 3);
   const help = S.hideHelp ? '' : `<div class="card help"><h3>👋 So funktioniert's</h3><ol>
@@ -872,9 +879,9 @@ function startRec(SR) {
 const isoDay = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const nextMonday = () => { const d = new Date(TODAY); d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7)); return isoDay(d); };
 // Gibt es nächste Woche ein deutlich besseres Angebot (mindestens 10 % günstiger) oder überhaupt erst dann eines?
-function nextHint(info) {
+function nextHint(info, chosen) {
   const nb = info && info.nextBest; if (!nb) return null;
-  const b = info.nearBest || info.best;
+  const b = arguments.length > 1 ? chosen : (info.nearBest || info.best);
   if (!b) return { o: nb, why: 'Nächste Woche im Angebot' };
   const cheaper = (nb.up && b.up && nb.up.base === b.up.base) ? nb.up.v < b.up.v * 0.9 : nb.price < b.price * 0.9;
   return cheaper ? { o: nb, why: 'Nächste Woche günstiger' } : null;

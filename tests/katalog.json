@@ -900,6 +900,118 @@
       "erwartet": "butter",
       "pct_erwartet": null,
       "grund": "REWE ohne Normalpreis und ohne eigene Käufe: keine Ersparnis erfinden"
+    },
+    {
+      "name": "Glücksblatt Monsterparty",
+      "desc": "Toilettenpapier Edition, 3-lagig 16 x 150-St.-Pckg.",
+      "cats": "Toilettenpapier",
+      "laden": "rewe",
+      "preis": 5.99,
+      "erwartet": "toilettenpapier",
+      "grundpreis_erwartet": "0.37/st",
+      "grund": "N x M St. = N Rollen (Regel 11/14)"
+    },
+    {
+      "name": "POWER FORCE Haushaltstücher 6 Stück",
+      "laden": "aldi",
+      "preis": 0.95,
+      "erwartet": null,
+      "grund": "Reinigungstücher sind keine Küchenrolle"
+    },
+    {
+      "name": "METRO PROFESSIONAL Grubentücher",
+      "desc": "100% Baumwolle, Waschbar bis 95 °C 10er-Pack",
+      "cats": "METRO Professional Küchentuch",
+      "laden": "metro",
+      "preis": 9.99,
+      "erwartet": null,
+      "grund": "Baumwolltuch ist keine Küchenrolle"
+    },
+    {
+      "name": "Dick & Durstig Küchentücher",
+      "desc": "2-lagig, 8 x 43 Blatt",
+      "laden": "netto",
+      "preis": 3.49,
+      "erwartet": "kuechenrolle",
+      "stueck_erwartet": 8,
+      "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "name": "GOURMET FINEST CUISINE Gourmet Fonds 400 ml, Rind",
+      "desc": "400 ml",
+      "laden": "aldi",
+      "preis": 1.39,
+      "menge": 400,
+      "einheit": "ml",
+      "erwartet": null,
+      "grund": "Fond(s) und Flüssigkeiten sind kein Fleisch"
+    },
+    {
+      "name": "GOURMET FINEST CUISINE Herzoginkartoffeln 600 g",
+      "desc": "600 g",
+      "laden": "aldi",
+      "preis": 1.69,
+      "erwartet": null,
+      "grund": "Herzoginkartoffeln sind keine frischen Kartoffeln"
+    },
+    {
+      "name": "Herzoginkartoffeln",
+      "desc": "tiefgefroren, 750-g-Pckg.",
+      "laden": "rewe",
+      "preis": 2.49,
+      "erwartet": null,
+      "grund": "Tiefkühl in der Beschreibung"
+    },
+    {
+      "name": "HEIMAT Speisekartoffeln",
+      "desc": "Deutschland versch. Kocheigenschaften 4 kg Netz",
+      "laden": "netto",
+      "preis": 2.99,
+      "erwartet": "kartoffeln",
+      "grund": "darf nicht kaputtgehen"
+    },
+    {
+      "name": "Kerrygold Butter",
+      "desc": "250-g-Pckg.",
+      "laden": "rewe",
+      "preis": 1.99,
+      "normalpreis": 2.99,
+      "hinweis": "Nur mit PAYBACK",
+      "erwartet": "butter",
+      "pct_erwartet": null,
+      "grund": "Regel 44: PAYBACK-Preis ist keine Ersparnis"
+    },
+    {
+      "name": "Kerrygold Butter",
+      "desc": "250-g-Pckg.",
+      "laden": "rewe",
+      "preis": 1.99,
+      "normalpreis": 2.99,
+      "erwartet": "butter",
+      "pct_erwartet": 33,
+      "grund": "darf nicht kaputtgehen: normaler Rabatt bleibt"
+    },
+    {
+      "name": "Milka Schokolade",
+      "desc": "100 g",
+      "laden": "lidl",
+      "preis": 1,
+      "normalpreis": 2,
+      "app": true,
+      "erwartet": null,
+      "pct_erwartet": null,
+      "grund": "App-Preis ist keine Ersparnis"
+    },
+    {
+      "name": "Formil Waschmittel Pulver",
+      "desc": "2 x 20 WL",
+      "laden": "rewe",
+      "preis": 5.99,
+      "zaehler_quelle": 20,
+      "erwartet": "wm_uni",
+      "stueck_erwartet": 40,
+      "grund": "2 x 20 WL sind 40 Waschladungen (Quelle liefert nur 20)",
+      "grundpreis_erwartet": "0.15/st"
     }
   ],
   "bons": [
@@ -1233,6 +1345,11 @@
       "zeile": "GEMUESEBRUEHE",
       "erwartet": null,
       "grund": ""
+    },
+    {
+      "zeile": "FONDS",
+      "erwartet": null,
+      "grund": "Fonds sind kein Fleisch"
     }
   ],
   "eingaben": [

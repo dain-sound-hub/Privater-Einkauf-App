@@ -79,3 +79,11 @@ Diese Datei fasst zusammen, was aus gefundenen Fehlern als **allgemeine Regel** 
 
 ## Ergänzt am 14.10. (Paket B: Sicherheit)
 50. **Fremde Werte nie als Text in Klick-Handler einsetzen:** Angebots-IDs (offers.json, manuelle Angebote, Import) werden beim Bereinigen auf [A-Za-z0-9_.:-] geprüft (sonst feste Ersatz-ID), und Handler bekommen Werte nur über jsq() (JSON-Literal, HTML-maskiert), nicht über esc() in einem JS-Text. Ablaufprüfung: node tests/pruefen.js --js tests/ablauf/sicherheit.js. Die CSP bleibt, bis alle Handler umgestellt sind.
+
+## Ergänzt am 14.10. (Pakete C und D)
+51. **Mengen aus dem Text:** „N x M St.“ zählt N Rollen, wenn M ≥ 50 (Blatt je Rolle), sonst N × M; „N x M WL“ zählt N × M. Liefert die Quelle nur M, gilt die Gesamtzahl aus dem Text.
+52. **Bedingte Preise (App, Coupon, PAYBACK, Bonus, Plus) bekommen nie Prozent** (appRequired und Hinweistext), auch nicht aus der eigenen Preis-Referenz.
+53. **Frisch-Sperren gelten auch für die Beschreibung;** Fonds und alles in ml/l sind kein Fleisch; Reinigungs-, Baumwoll- und Mikrofasertücher sind keine Küchenrolle; Herzogin-/Duchesse-Kartoffeln sind keine frischen Kartoffeln.
+54. **Entscheidung und Wartehinweis vergleichen mit dem Angebot der Zeile,** nicht mit dem besten City-Center-Angebot. Der bekannte Preis des Standardladens bleibt stehen, auch ohne Prozent. Wortgrenzen auch in route.js (Rucola ≠ Cola). Ablaufprüfung: node tests/pruefen.js --js tests/ablauf/route.js
+
+Bewusst offen (Entscheidung des Nutzers): Lidl mit Listenmenge (D1), Vergleich gegen geplante Route (D2), Route stabil halten (D3), Wurst bei der Abholung (D4), Vollbeleg-Archiv (D5), Fremdladen-Referenz p.ref (D6), Änderungen an research-core.js (C5/C7/C8/C10).

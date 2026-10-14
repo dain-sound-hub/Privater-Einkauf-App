@@ -2,7 +2,7 @@
 // Wird vor app.js geladen und nutzt dessen Funktionen erst beim Aufruf.
 // Schwer oder sperrig = passt nicht in den Rucksack. Normale Packungen (Weichspüler, Waschmittel) zählen nicht. „Wasser“ allein heißt Sixer/Kasten, „kleine Flasche Wasser“ passt in den Rucksack.
 const BULKY_RX = /klopapier|toilettenpapier|küchen(rolle|rollen|tuch|tücher|krepp)|haushaltstuch|haushaltstücher|servietten|windel|katzenstreu/i;
-const DRINK_RX = /wasser|getränk|bier|cola|limo|saft|sprudel|schorle|kasten|kiste/i;
+const DRINK_RX = /wasser|getränk|bier(?!schinken|wurst|käse)|(?<![a-zäöü])cola(?!krach)|limo|saft(?!orange)|sprudel|schorle|kasten|kiste(?!nk)/i; // Rucola ist kein Cola, Bierschinken kein Bier
 const BIG_RX = /xxl|groß|gross|kanister|karton|sixer|6er|12er|palette|vorrat|(^|\s)([3-9]|\d\d)\s?(kg|l)(\s|$)/i;
 const SMALL_RX = /klein|mini|to go|einzel|0[,.][2-5]\s?l|\b(250|330|500)\s?ml|(1|eine?)\s?flasche(\s|$)/i;
 function heavyKind(it, p) { // 'schwer' | 'sperrig' | null; deine Einstellung beim Artikel gilt immer
@@ -36,7 +36,7 @@ function planRoute(all) { // all = auch Artikel, die in der Kurzliste-Ansicht au
       const other = nowA.find(o => o.store.id !== pf.id);
       if (po && !(other && other.up && po.up && other.up.v < po.up.v * 0.9)) { r.offer = po; r.storeId = pf.id; r.note = why; }
       else if (other && other.pct != null && !other.dubious && other.pct >= 0.15) { r.offer = other; r.storeId = other.store.id; r.note = 'echtes Angebot'; }
-      else { r.storeId = pf.id; r.note = pf.fb ? why : 'dein Standard (kein besseres Angebot bekannt)'; }
+      else { r.storeId = pf.id; if (po) { r.offer = po; r.note = why + (other && other.up && po.up && other.up.v < po.up.v * 0.9 ? ' · ' + other.store.short + ' hat es für ' + eur(other.price) + ' (ohne bekannte Ersparnis)' : ''); } else r.note = pf.fb ? why : 'dein Standard (kein besseres Angebot bekannt)'; }
     } else if (r.near) { r.offer = r.near; r.storeId = r.near.store.id; }
   }
   // 2) Lidl-Spaziergang: nur Leichtes, nur wenn es sich lohnt (oder du es willst)
