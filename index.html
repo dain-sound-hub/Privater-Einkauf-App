@@ -402,6 +402,13 @@ nav.bottom .navfab::before{width:24px;height:4px}nav.bottom .navfab::after{width
 :root[data-theme="dark"] .bdg{color:#3a0b08}:root[data-theme="dark"] .crow .pc,:root[data-theme="dark"] .qa .chip b{color:var(--red)}
 /* Teilen: nur das Symbol, links auf der Höhe des Plus */
 .fabrow{position:relative}.shr{position:absolute;left:0;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--ink);padding:0;min-width:44px;min-height:44px;opacity:.5;display:grid;place-items:center}.shr svg{display:block}.shr:active{opacity:.9;transform:translateY(-50%) scale(.92)}
+/* Laden-Leisten (Alle Läden, Netto, REWE …) überall klein und schmal */
+.chips[aria-label="Laden wählen"]{gap:5px;margin-bottom:6px}
+.chips[aria-label="Laden wählen"] .chip{min-height:0;height:26px;padding:0 10px;font-size:12px;line-height:1;border-radius:13px;display:inline-flex;align-items:center;gap:4px;position:relative;box-shadow:none}
+.chips[aria-label="Laden wählen"] .chip::after{content:"";position:absolute;inset:-6px -2px}
+.chips[aria-label="Laden wählen"] .chip small{font-size:10px}
+.chips[aria-label="Laden wählen"] .sdot{width:7px;height:7px;margin:0}
+.qbar{gap:6px;margin:0 0 6px;align-items:center}.qbar .chips{margin:0!important;min-width:0}.qbar>.chip.arrow{min-height:0;height:26px;padding:0 10px;font-size:12px;flex:none}
 </style>
 </head>
 <body>

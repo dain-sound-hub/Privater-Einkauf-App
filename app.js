@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 147, t: '14.10. 15:11' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 149, t: '14.10. 15:18' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -459,11 +459,11 @@ function quickAdd() {
   const toggle = `<button class="chip arrow" onclick="toggleQa()" aria-expanded="${open}">${open ? '▴ Weniger' : '▾ Mehr'}</button>`;
   const title = main.length ? '⭐ Deine Hauptprodukte' : 'Schnell hinzufügen';
   if (!shown.length && !fill.length && !due.length && !open) return `<div class="qa"><div class="row sp qh"><span class="mute">Schnell hinzufügen</span>${toggle}</div></div>`;
-  let h = `<div class="qa"><div class="row sp qh"><span class="mute">${title}${due.length ? ' · 📌 jetzt günstiger' : ''}</span>${toggle}</div><div class="chips">${dueChips}${shown.map(chipHtml).join('')}${fill.map(chipHtml).join('')}</div>`;
+  const qsRow = open ? `<div class="row nowrap qbar"><div class="chips scroll grow" role="group" aria-label="Laden wählen"><button class="chip ${!qs ? 'on' : ''}" onclick="setQs('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && storeCount(s.id) > 0).map(s => `<button class="chip ${qs === s.id ? 'on' : ''}" onclick="setQs('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>${toggle}</div>${qs ? `<div class="mute small qh" style="margin:0 0 6px">Zeigt, was bei ${esc(STORE(qs).short)} im Angebot ist, und Produkte, die gerade in keinem Laden im Angebot sind.</div>` : ''}` : '';
+  let h = `<div class="qa">${open ? qsRow : `<div class="row sp qh"><span class="mute">${title}${due.length ? ' · 📌 jetzt günstiger' : ''}</span>${toggle}</div>`}<div class="chips">${dueChips}${shown.map(chipHtml).join('')}${fill.map(chipHtml).join('')}</div>`;
   if (open) {
     const cats = orderCats([...new Set(rest.map(p => p.cat))]);
-    h += `<div class="chips scroll" style="margin:8px 0 0" role="group" aria-label="Laden wählen"><button class="chip ${!qs ? 'on' : ''}" onclick="setQs('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && storeCount(s.id) > 0).map(s => `<button class="chip ${qs === s.id ? 'on' : ''}" onclick="setQs('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>${qs ? `<div class="mute small qh">Zeigt, was bei ${esc(STORE(qs).short)} im Angebot ist, und Produkte, die gerade in keinem Laden im Angebot sind.</div>` : ''}` +
-    (others.length ? `<div class="mute qh" style="margin-top:8px">Weitere Favoriten</div><div class="chips">${others.map(chipHtml).join('')}</div>` : '') +
+    h += (others.length ? `<div class="mute qh" style="margin-top:8px">Weitere Favoriten</div><div class="chips">${others.map(chipHtml).join('')}</div>` : '') +
       `<div class="mute small qh" style="margin-top:8px">Die App lernt mit: Was du in letzter Zeit oft brauchst, steht vorne. Ab 2 Einkaufstagen wird ein Produkt zum Hauptprodukt, ab 3 zum Favoriten.</div>` +
       cats.map(c => `<div class="mute qh" style="margin-top:8px">${ICON[c] || ''} ${c}</div><div class="chips">${rest.filter(p => p.cat === c).sort(byUse).map(chipHtml).join('')}</div>`).join('');
   }
