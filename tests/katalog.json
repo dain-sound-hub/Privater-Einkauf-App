@@ -837,6 +837,69 @@
       "erwartet": "hartkaese",
       "grund": "bekannte Sorte",
       "cats": "Comté"
+    },
+    {
+      "name": "Weinfreunde Grauer Burgunder",
+      "desc": "Qualitätswein trocken 6 x 0,75-l-Fl.",
+      "laden": "rewe",
+      "preis": 8.99,
+      "normalpreis": 53.94,
+      "erwartet": null,
+      "pct_erwartet": null,
+      "grund": "Normalpreis = 6 x Flaschenpreis, Packungspreis ist kein Rabatt"
+    },
+    {
+      "name": "Sonnen Bassermann Eintopf",
+      "desc": "versch. Sorten 6 x 800 g",
+      "laden": "netto",
+      "preis": 1.99,
+      "normalpreis": 11.94,
+      "erwartet": null,
+      "pct_erwartet": null,
+      "grund": "6 x Einzelpreis, kein 83-%-Rabatt"
+    },
+    {
+      "name": "Milka Feine Kugeln",
+      "desc": "versch. Sorten, 2 x 82 g - 90 g",
+      "laden": "netto",
+      "preis": 3.29,
+      "normalpreis": 6.58,
+      "normalpreis_uvp": true,
+      "erwartet": null,
+      "pct_erwartet": null,
+      "grund": "Preis ist der Einzelpreis, Normalpreis = 2 Stück"
+    },
+    {
+      "name": "Weinfreunde Perrin Preaux Réserve",
+      "desc": "trocken 6 x 0,75-l-Fl.",
+      "laden": "rewe",
+      "preis": 47,
+      "normalpreis": 59.94,
+      "erwartet": null,
+      "pct_erwartet": 22,
+      "grund": "darf nicht kaputtgehen: Packung gegen Packung bleibt echter Rabatt"
+    },
+    {
+      "name": "Lay's Chips",
+      "desc": "Versch. Sorten. Je 150/110 g",
+      "laden": "lidl",
+      "preis": 0.99,
+      "normalpreis": 1.99,
+      "erwartet": null,
+      "pct_erwartet": 50,
+      "grund": "darf nicht kaputtgehen: halber Preis ohne Packungsangabe bleibt"
+    },
+    {
+      "name": "Weihenstephan Butter oder die Streichzarte",
+      "desc": "versch. Sorten 250-g-Pckg./Becher",
+      "cats": "Butter Streichfett Weihenstephan",
+      "laden": "rewe",
+      "preis": 1.29,
+      "grundpreis": 5.16,
+      "basis": "kg",
+      "erwartet": "butter",
+      "pct_erwartet": null,
+      "grund": "REWE ohne Normalpreis und ohne eigene Käufe: keine Ersparnis erfinden"
     }
   ],
   "bons": [

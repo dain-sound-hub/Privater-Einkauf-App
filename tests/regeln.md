@@ -65,3 +65,9 @@ Diese Datei fasst zusammen, was aus gefundenen Fehlern als **allgemeine Regel** 
 40. **Produktbilder:** Prospekt-Titelbilder (/main.jpg) sind keine Produktfotos, dafür gilt das Symbol. Falsche Symbole (Wortgrenze bei cola/Rucola) wie Regel 1 verhindern.
 41. **Fenster** sperren das Scrollen der Seite dahinter (body.noscroll). Jede Ansicht, jedes Fenster nutzt dieselben Tokens (--gloss, --sh2).
 42. **Route** ist die Einkaufsliste im Laden: schmaler Kopf, Fortschritt x von y, Zeilen 36 px, Marke klein, Abgehaktes bleibt sichtbar im Block Erledigt.
+
+## Ergänzt am 14.10. (nur Angebote mit Ersparnis, Archiv)
+43. **Packungspreis ist kein Normalpreis:** Ist der Normalpreis ≈ N × Preis und nennen Name oder Beschreibung N Teile („6 x 0,75 l“, „6er“), ist es der Preis der ganzen Packung, also kein Rabatt.
+44. **Ersparnis nur aus dem Laden selbst oder eigenen Käufen:** kein Markt-Median, kein fremder Laden, keine Prozentzahl aus dem Text (Fett, Vol., Fruchtgehalt), kein Bonial-Rabattlabel. App-, Bonus-, Plus- und PAYBACK-Preise sind nie eine Ersparnis.
+45. **Startseite und Angebote zeigen nur Angebote mit bekannter Ersparnis (pct vorhanden).** Auf der Angebote-Seite schaltet eine Zeile unter der Suche die übrigen zu; ihr Zähler und jede Leer-Meldung kommen aus genau der angezeigten Menge (Laden, Reiter, Suche). Zähler, Meldungen und Anzeige nutzen dieselbe Filterfunktion.
+46. **Langzeit-Archiv:** Jeder gespeicherte Bon bleibt mit allen Positionen in IndexedDB „einkauf-archiv“ (nie gekürzt, nur Alles löschen leert es); Sicherung und Import enthalten es. Die App-Daten führen nur die letzten 60 Bons.

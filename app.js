@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 150, t: '14.10. 15:32' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 155, t: '14.10. 17:52' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -60,7 +60,7 @@ try {
 // 1) Speichern: scheitert es (Speicher voll oder gesperrt), sagt die App es sichtbar
 const save = () => {
   BH = null;
-  try { const j = JSON.stringify(S); try { localStorage.setItem(LS, j); } catch (e0) { localStorage.removeItem('einkauf.diag'); localStorage.setItem(LS, j); } /* voll: erst die Bon-Diagnose opfern, dann noch einmal */ LAST_RAW = j; if (SAVE_FAILED) { SAVE_FAILED = false; saveWarnBar(false); } return true; }
+  try { const j = JSON.stringify(S); try { localStorage.setItem(LS, j); } catch (e0) { localStorage.removeItem('einkauf.diag'); localStorage.setItem(LS, j); } /* voll: erst die Bon-Diagnose opfern, dann noch einmal */ LAST_RAW = j; if (SAVE_FAILED) { SAVE_FAILED = false; saveWarnBar(false); } if (typeof arcLater === 'function') arcLater(); return true; }
   catch (e) { SAVE_FAILED = true; saveWarnBar(true); return false; }
 };
 function saveWarnBar(on) { // bleibt stehen, solange nicht gespeichert werden kann
@@ -300,6 +300,7 @@ function enrich(o) {
   if (!p && o.found) p = PRODUCTS.find(q => q.custom && q.q && o.found.some(f => f.toLowerCase() === q.q[0]) && customOk(o, q)) || null;
   if (p && p.cat === 'Fleisch') { const g = meatGrams(o), stueck = g >= 120 && !POULTRY_RX.test(o.name) && /steak|kotelett|schnitzel|medaillon|filet|rücken|keule|hüft|entrec/i.test(o.name); if (g != null && g < 200 && !stueck && !/(?:je|pro)\s?100\s?g/i.test(noNutri(o.name + ' ' + (o.desc || ''))) && !(g === 100 && !/\d+\s?g\b/i.test(o.name))) p = null; } // unter 200 g ist es Aufschnitt, kein Frischfleisch (100 g ohne Gramm im Namen ist Theken-Preis je 100 g)
   if (p) { const q2 = inferQty(o, p); if (q2) o = { ...o, ...q2 }; }
+  if (o.regular && o.regular > o.price) { const r = o.regular / o.price, N = Math.round(r); if (N >= 2 && Math.abs(r - N) < 0.03 && [...(o.name + ' ' + (o.desc || '')).matchAll(/(?<![\d,.])(\d{1,2})\s?(?:x|×|er\b|-er\b)/gi)].some(m => +m[1] === N)) o = { ...o, regular: null }; } // „6 x 0,75 l“: der „Normalpreis“ ist der Preis der ganzen Packung (N × Einzelpreis), kein Rabatt (Regel 43)
   if (o.regular && /einzelpreis/i.test((o.note || '') + ' ' + (o.desc || ''))) { const r = o.regular / o.price; if (r >= 1.9 && Math.abs(r - Math.round(r)) < 0.06) o = { ...o, regular: null }; } // „Einzelpreis“: der Normalpreis ist der Preis der ganzen Packung (3 x Einzelpreis), das ist kein Rabatt
   let store = STORE(o.store), up = unitPrice(o, p);
   if (p && p.base === 'l' && !p.custom && up && up.base === 'kg' && !LITER_G_OK.has(p.id) && !o.pidLocked) { p = null; up = unitPrice(o, null); }
@@ -325,10 +326,13 @@ const animalClash = (q, name) => { const hit = Object.keys(ANIMALS).filter(a => 
 const meatGrams = o => { const mx = /(\d+)\s?[x×]\s?(\d+(?:[.,]\d+)?)\s?g\b/i.exec(o.name + ' ' + (o.desc || '')), m = /(\d+(?:[.,]\d+)?)\s?g\b/i.exec(o.name); if (mx) return +mx[1] * +mx[2].replace(',', '.'); return o.amount && o.unit === 'g' ? o.amount : o.amount && o.unit === 'kg' ? o.amount * 1000 : m ? +m[1].replace(',', '.') : null; };
 const GOURMET_RX = /steak|filet|entrec|tafelspitz|roastbeef|wagyu|angus|dry.?aged|karree|carr[ée]|lendenbraten|chateaubriand|t-bone|porterhouse|ribeye|rib-eye|medaillon|lachsschinken|keulenbraten|hirsch|wild|gans|gänse/i;
 const isPerm = o => /dauerpreis/i.test(o.note || ''); // ALDI-Regalpreis, kein Angebot
-const OFFERS_SHOWN = () => OFFERS_ALL().filter(o => !isPerm(o)); // für Angebote-Seiten und Startseite
+const OFFERS_SHOWN = () => OFFERS_ALL().filter(o => !isPerm(o)); // echte Angebote (ohne Dauerpreise)
+const hasSave = o => o.pct != null; // Ersparnis bekannt (Normalpreis der Quelle oder eigener Preis)
+const OFFERS_SAVE = () => OFFERS_SHOWN().filter(hasSave); // Startseite: nur Angebote mit bekannter Ersparnis
+const OFFERS_LIST = () => UI.noSave ? OFFERS_SHOWN() : OFFERS_SAVE(); // Angebote-Seite: standardmäßig nur mit bekannter Ersparnis, auf Wunsch alle
 const quietOffer = o => !!(o.p && o.p.onlyList && !onList(o.p.id) && !viaWatch(o.p.id)); // z. B. Wurst: nur zeigen, wenn du es auf der Liste hast
 const OFFERS_ALL = () => CACHE || (CACHE = [...SRC.offers, ...S.manual].map(enrich).filter(o => o.state !== 'expired' && !o.excluded));
-const rank = (a, b) => (a.up && b.up && a.up.base === b.up.base) ? a.up.v - b.up.v : (!!b.up - !!a.up) || a.price - b.price;
+const rank = (a, b) => ((a.up && b.up && a.up.base === b.up.base) ? a.up.v - b.up.v : (!!b.up - !!a.up) || a.price - b.price) || ((b.pct != null) - (a.pct != null)); // bei Gleichstand zählt das Angebot mit bekannter Ersparnis
 const isNear = o => o.store.tier === 'A';
 function productInfo(p) {
   if (!p) return { p, now: [], next: [], nearBest: null, best: null, nextBest: null };
@@ -349,6 +353,7 @@ function decision(info, item) {
   if (nextBest && b.up && nextBest.up && nextBest.up.base === b.up.base && nextBest.up.v < b.up.v * 0.9 && !(item && item.urgent))
     return { tag: 'Lohnt sich warten', cls: 't-warn', why: `Nächste Woche ${eur(nextBest.price)}${nextBest.up ? ' (' + eur(nextBest.up.v) + ' / ' + unitLbl(nextBest.up.base) + ')' : ''} bei ${nextBest.store.short} (ab ${fmtD(nextBest.valid[0])}), deutlich günstiger.` };
   if (p.stock && b.pct != null && !b.dubious && b.pct * 100 >= S.set.stockPct) return { tag: 'Vorratskauf', cls: 't-stock', why: `${Math.round(b.pct * 100)} % Ersparnis${saveEur(b) >= 0.05 ? ' (' + eur(saveEur(b)) + ')' : ''} (${b.kind}). ${p.meat ? 'Portionsweise einfrieren.' : 'Haltbar, auf Vorrat sinnvoll.'}` };
+  if (isPerm(b)) return { tag: 'Dauerpreis', cls: '', why: 'Regalpreis, kein Angebot.' };
   const ends = b.daysLeft <= 1;
   return { tag: ends ? 'Heute kaufen' : 'Diese Woche', cls: 't-ok', why: (ends ? 'Angebot endet bald. ' : '') + (p.perish ? 'Schnell verderblich, nicht auf Vorrat kaufen.' : ends ? 'Heute noch mitnehmen.' : 'Kein Zeitdruck.') };
 }
@@ -441,7 +446,7 @@ function orderCats(cs) { // Rubriken, aus denen du oft kaufst, zuerst; sonst Rei
 }
 const mainProducts = () => PRODUCTS.filter(p => freq(p) >= 2).sort((a, b) => recScore(b) - recScore(a) || a.name.localeCompare(b.name, 'de'));
 const chipHtml = p => {
-  const on = onList(p.id), i = productInfo(p), b0 = i.nearBest || i.best, b = b0 && !isPerm(b0) ? b0 : null; // Dauerpreise sind keine Ersparnis
+  const on = onList(p.id), i = productInfo(p), qq = UI.qa && UI.qs, b0 = qq ? i.now.filter(o => o.store.id === qq).sort(rank)[0] : i.nearBest || i.best, b = b0 && !isPerm(b0) ? b0 : null; // Dauerpreise sind keine Ersparnis; bei gewähltem Laden zählt nur dieser Laden
   return `<button class="chip ${on ? 'on' : ''} ${freq(p) >= 2 ? 'main' : ''}" data-pid="${p.id}" onclick="chipTap('${p.id}')" aria-pressed="${on}">${on ? '✓' : iconFor(p)} ${esc(p.name.split(' /')[0])}${!on && b && b.pct != null && !b.dubious ? ` <b style="color:var(--acc)">−${Math.round(b.pct * 100)}%<span class="qst"> ${esc(b.store.short)}</span></b>` : ''}</button>`;
 };
 function toggleP(id) { if (onList(id)) { S.list = S.list.filter(i => !(i.pid === id && !i.done)); save(); render(); } else addP(id); }
@@ -459,7 +464,7 @@ function quickAdd() {
   const toggle = `<button class="chip arrow" onclick="toggleQa()" aria-expanded="${open}">${open ? '▴ Weniger' : '▾ Mehr'}</button>`;
   const title = main.length ? '⭐ Deine Hauptprodukte' : 'Schnell hinzufügen';
   if (!shown.length && !fill.length && !due.length && !open) return `<div class="qa"><div class="row sp qh"><span class="mute">Schnell hinzufügen</span>${toggle}</div></div>`;
-  const qsRow = open ? `<div class="row nowrap qbar"><div class="chips scroll grow" role="group" aria-label="Laden wählen"><button class="chip ${!qs ? 'on' : ''}" onclick="setQs('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && storeCount(s.id) > 0).map(s => `<button class="chip ${qs === s.id ? 'on' : ''}" onclick="setQs('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>${toggle}</div>${qs ? `<div class="mute small qh" style="margin:0 0 6px">Zeigt, was bei ${esc(STORE(qs).short)} im Angebot ist, und Produkte, die gerade in keinem Laden im Angebot sind.</div>` : ''}` : '';
+  const qsRow = open ? `<div class="row nowrap qbar"><div class="chips scroll grow" role="group" aria-label="Laden wählen"><button class="chip ${!qs ? 'on' : ''}" onclick="setQs('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && OFFERS_SHOWN().some(o => o.store.id === s.id)).map(s => `<button class="chip ${qs === s.id ? 'on' : ''}" onclick="setQs('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>${toggle}</div>${qs ? `<div class="mute small qh" style="margin:0 0 6px">Zeigt, was bei ${esc(STORE(qs).short)} im Angebot ist, und Produkte, die gerade in keinem Laden im Angebot sind.</div>` : ''}` : '';
   let h = `<div class="qa">${open ? qsRow : `<div class="row sp qh"><span class="mute">${title}${due.length ? ' · 📌 jetzt günstiger' : ''}</span>${toggle}</div>`}<div class="chips">${dueChips}${shown.map(chipHtml).join('')}${fill.map(chipHtml).join('')}</div>`;
   if (open) {
     const cats = orderCats([...new Set(rest.map(p => p.cat))]);
@@ -558,25 +563,32 @@ V.list = () => {
 };
 const SEARCH_CATS = { fleisch: 'Fleisch', frischfleisch: 'Fleisch', wurst: 'Wurst & Aufschnitt', aufschnitt: 'Wurst & Aufschnitt', obst: 'Obst & Gemüse', gemüse: 'Obst & Gemüse', gemuese: 'Obst & Gemüse', milchprodukte: 'Milchprodukte', getränke: 'Getränke', getraenke: 'Getränke', drogerie: 'Drogerie & Gesundheit', haushalt: 'Haushalt & Wäsche' }; // ein ganzes Rubrik-Wort sucht die ganze Rubrik („Fleisch“ = alles Fleisch zum Braten, nicht nur Hackfleisch)
 function offersFiltered() {
-  const q = UI.q.toLowerCase().trim(), cat = SEARCH_CATS[q]; if (cat) return OFFERS_SHOWN().filter(o => o.p && o.p.cat === cat);
-  return OFFERS_SHOWN().filter(o => !q || (o.name + ' ' + (o.desc || '') + ' ' + o.store.short + ' ' + (o.p ? o.p.name : '')).toLowerCase().includes(q));
+  const q = UI.q.toLowerCase().trim(), cat = SEARCH_CATS[q]; if (cat) return OFFERS_LIST().filter(o => o.p && o.p.cat === cat);
+  return OFFERS_LIST().filter(o => !q || (o.name + ' ' + (o.desc || '') + ' ' + o.store.short + ' ' + (o.p ? o.p.name : '')).toLowerCase().includes(q));
 }
 // Angebote nach Entfernung getrennt: Vor Ort (City-Center) · Spaziergang (Lidl) · Mit dem Auto (Großmarkt)
 const WHERE = { local: ['A'], walk: ['B'], car: ['C', 'D'] };
-const whereCount = k => OFFERS_SHOWN().filter(o => o.state === 'now' && WHERE[k].includes(o.store.tier)).length;
+const whereCount = k => OFFERS_LIST().filter(o => o.state === 'now' && o.p && !quietOffer(o) && WHERE[k].includes(o.store.tier)).length;
+const cardsIn = html => (html.match(/class="card offer"/g) || []).length;
+function noSaveExtra() { // wie viele Karten kämen in der AKTUELLEN Ansicht (Laden, Reiter, Suche) dazu, wenn auch Angebote ohne bekannte Ersparnis gezeigt würden?
+  const was = UI.noSave, mo = UI.more, ox = UI._x; UI.more = true; let on = 0, off = 0;
+  try { UI.noSave = true; on = cardsIn(offersBody()); UI.noSave = false; off = cardsIn(offersBody()); } catch (e) { } finally { UI.noSave = was; UI.more = mo; UI._x = ox; }
+  return Math.max(0, on - off);
+}
+const xNote = () => UI._x ? `Hier gibt es nur Angebote ohne bekannte Ersparnis (${UI._x}). Tippe oben auf „anzeigen“.` : '';
 function offersBody() {
   if (UI.store && UI.store !== 'all') return storeBody();
   const w = UI.where || 'local', tiers = WHERE[w], t = UI.offers;
   const offs = offersFiltered().filter(o => tiers.includes(o.store.tier)), byPct = (a, b) => (b.pct || 0) - (a.pct || 0), lim = (a, n) => UI.more ? a : a.slice(0, n);
   const more = (a, n) => !UI.more && a.length > n ? `<div style="text-align:center;margin:10px"><button class="btn" onclick="UI.more=true;renderOffers()">Alle ${a.length} anzeigen</button></div>` : '';
   const intro = w === 'walk' ? (t === 'week' ? extraBody() : '') : w === 'car' ? `<div class="banner info">🚗 Hier fährst du extra hin (Großmarkt, Selgros, METRO, Handelshof). Das ist nur eine Option, wenn du Zeit und Lust hast. Eine Route dafür plant die App nicht. METRO-Preise gelten für Gewerbekunden.</div>` : '';
-  const none = w === 'local' ? 'Keine Treffer. Tippe oben auf „Angebote suchen" oder „Neueste Angebote".' : w === 'walk' ? 'Aktuell keine Lidl-Angebote zu deinen Produkten.' : 'Aktuell keine Großmarkt-Angebote zu deinen Produkten.';
+  const none = w === 'local' ? 'Keine Treffer. Tippe oben auf „Angebote suchen" oder „Neueste Angebote".' : w === 'walk' ? 'Aktuell keine Lidl-Angebote zu deinen Produkten.' : 'Aktuell keine Großmarkt-Angebote zu deinen Produkten.'; // (xNote ersetzt die Meldung, wenn Angebote ohne bekannte Ersparnis ausgeblendet sind)
   if (t === 'week' || t === 'next') {
     const st = t === 'week' ? 'now' : 'next', m = offs.filter(o => o.state === st && o.p).sort(byPct);
     const a = m.filter(o => onList(o.p.id)), b = m.filter(o => !a.includes(o) && viaWatch(o.p.id)), c = m.filter(o => !a.includes(o) && !b.includes(o) && (!quietOffer(o) || UI.q)).sort((x, y) => (buyHist(y.p.id).n > 0) - (buyHist(x.p.id).n > 0)); // schon gekaufte Produkte zuerst
-    return `${intro}${t === 'next' ? nextStatusLine() + '<div class="banner info">📌 Tippe bei einem Angebot auf „Merken“. Das Produkt erscheint dann in der Woche, in der es günstiger ist, oben bei „Schnell hinzufügen“ und in deiner Liste.</div>' : ''}${t === 'next' && !m.length ? empty('🗓️', 'Noch keine Angebote für nächste Woche bekannt. Sie erscheinen meist ab Samstag.') : ''}
+    return `${intro}${t === 'next' ? nextStatusLine() + '<div class="banner info">📌 Tippe bei einem Angebot auf „Merken“. Das Produkt erscheint dann in der Woche, in der es günstiger ist, oben bei „Schnell hinzufügen“ und in deiner Liste.</div>' : ''}${t === 'next' && !m.length ? empty('🗓️', xNote() || 'Noch keine Angebote für nächste Woche bekannt. Sie erscheinen meist ab Samstag.') : ''}
     ${a.length ? `<h2>Auf deiner Liste</h2>${grid(lim(a, 30).map(o => offerCard(o)).join(''))}${more(a, 30)}` : ''}${b.length ? `<h2>👁 Deine Favoriten</h2>${grid(lim(b, 30).map(o => offerCard(o)).join(''))}${more(b, 30)}` : ''}
-    ${c.length ? `<h2>Weitere Treffer aus deiner Dauerliste</h2>${grid(lim(c, 24).map(o => offerCard(o)).join(''))}${more(c, 24)}` : ''}${t === 'week' && !(a.length + b.length + c.length) && w !== 'walk' ? empty('🔎', SRC.live ? none : 'Noch nichts geladen. Tippe oben auf „Angebote suchen".') : ''}`;
+    ${c.length ? `<h2>Weitere Treffer aus deiner Dauerliste</h2>${grid(lim(c, 24).map(o => offerCard(o)).join(''))}${more(c, 24)}` : ''}${t === 'week' && !(a.length + b.length + c.length) && w !== 'walk' ? empty('🔎', xNote() || (SRC.live ? none : 'Noch nichts geladen. Tippe oben auf „Angebote suchen".')) : ''}`;
   }
   if (t === 'discover') {
     const d = offs.filter(o => !o.p && o.food && !o.dubious && o.pct != null && o.pct >= 0.25 && o.state === 'now').sort(byPct);
@@ -584,16 +596,18 @@ function offersBody() {
   }
   const meat = offs.filter(o => o.state === 'now' && o.p && o.p.meat).sort((a, b) => rank(a, b));
   const stock = offs.filter(o => o.state === 'now' && o.p && o.p.stock && !o.p.meat && o.pct != null && o.pct * 100 >= S.set.stockPct).sort(byPct);
-  return `${intro}<h2>🥩 Fleisch, alle Angebote nach Preis</h2>${meat.length ? grid(lim(meat, 24).map(o => offerCard(o)).join('')) + more(meat, 24) : empty('🥩', 'Hier gibt es gerade kein Fleischangebot.')}
+  return `${intro}<h2>🥩 Fleisch${UI.noSave ? ', alle Angebote' : ' mit bekannter Ersparnis'}, nach Preis</h2>${meat.length ? grid(lim(meat, 24).map(o => offerCard(o)).join('')) + more(meat, 24) : empty('🥩', 'Hier gibt es gerade kein Fleischangebot.')}
   <h2>Haltbares ab ${S.set.stockPct} % Ersparnis</h2>${stock.length ? grid(lim(stock, 24).map(o => offerCard(o)).join('')) : empty('📦', 'Aktuell nichts, das den Schwellwert erreicht.')}`;
 }
 const SEG = (cur, items, fn, cls = '') => `<div class="seg ${cls}">${items.map(([k, l]) => `<button class="${k === cur ? 'on' : ''}" onclick="${fn}('${k}')">${l}</button>`).join('')}</div>`;
 V.offers = () => `${SEG(UI.store && UI.store !== 'all' ? '' : (UI.where || 'local'), [['local', `🏠 Vor Ort <small>${whereCount('local')}</small>`], ['walk', `🚶 Spazieren <small>${whereCount('walk')}</small>`], ['car', `🚗 Auto <small>${whereCount('car')}</small>`]], 'setWhere', 'seg3')}${storeRow()}
   <div class="chips scroll" style="margin:0 0 10px">${[['week', 'Diese Woche'], ['next', `Nächste Woche <small>${nextBadge()}</small>`], ['discover', 'Entdecken'], ['stock', 'Vorrat & Fleisch']].filter(([k]) => !(UI.store && UI.store !== 'all') || k === 'week' || k === 'next').map(([k, l]) => `<button class="chip ${k === UI.offers ? 'on' : ''}" onclick="setOff('${k}')">${l}</button>`).join('')}</div>
-  <div class="add"><input id="oq" placeholder="Angebote durchsuchen…" value="${esc(UI.q)}" oninput="UI.q=this.value;UI.more=false;renderOffers()"></div><div id="olist">${offersBody()}</div>`;
+  <div class="add"><input id="oq" placeholder="Angebote durchsuchen…" value="${esc(UI.q)}" oninput="UI.q=this.value;UI.more=false;renderOffers()"></div><div id="nsb">${noSaveBar()}</div><div id="olist">${offersBody()}</div>`;
+const noSaveBar = () => { const x = UI.noSave ? 0 : noSaveExtra(); UI._x = x; if (!UI.noSave && !x) return ''; return `<div class="mute small nosave">${UI.noSave ? 'Auch Angebote ohne bekannte Ersparnis.' : 'Nur Angebote mit bekannter Ersparnis.'} <button class="lnk" onclick="toggleNoSave()">${UI.noSave ? 'Nur mit Ersparnis zeigen' : x + ' weitere ohne bekannte Ersparnis anzeigen'}</button></div>`; };
+const toggleNoSave = () => { UI.noSave = !UI.noSave; if (UI.store && UI.store !== 'all' && !storeCount(UI.store)) UI.store = 'all'; UI.more = false; render(); };
 const setWhere = k => { UI.where = k; UI.store = 'all'; UI.more = false; render(); };
 const setStore = k => { UI.store = k; UI.more = false; if (k !== 'all' && !['week', 'next'].includes(UI.offers)) UI.offers = 'week'; render(); };
-const storeCount = id => OFFERS_SHOWN().filter(o => o.store.id === id && o.state === 'now').length;
+const storeCount = id => OFFERS_LIST().filter(o => o.store.id === id && o.state === 'now').length;
 const storeRow = () => `<div class="chips scroll" style="margin:0 0 8px" role="group" aria-label="Laden wählen"><button class="chip ${!UI.store || UI.store === 'all' ? 'on' : ''}" onclick="setStore('all')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && storeCount(s.id) > 0).map(s => `<button class="chip ${UI.store === s.id ? 'on' : ''}" onclick="setStore('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)} <small>${storeCount(s.id)}</small></button>`).join('')}</div>`;
 function storeBody() { // alle Angebote eines Ladens, deine Produkte zuerst
   const id = UI.store, st = STORE(id), state = UI.offers === 'next' ? 'next' : 'now', byPct = (x, y) => (y.dubious ? 0 : (y.pct || 0)) - (x.dubious ? 0 : (x.pct || 0));
@@ -601,19 +615,19 @@ function storeBody() { // alle Angebote eines Ladens, deine Produkte zuerst
   return `<div class="banner info">${st.tier === 'A' ? '🏠' : st.tier === 'B' ? '🚶' : '🚗'} <b>${esc(st.name)}</b> · ${all.length} Angebote ${state === 'next' ? 'für nächste Woche' : 'diese Woche'}</div>` +
     (mine.length ? `<h2>Zu deiner Liste und deinen Favoriten</h2>${grid((UI.more ? mine : mine.slice(0, 30)).map(o => offerCard(o)).join(''))}${!UI.more && mine.length > 30 ? `<div style="text-align:center;margin:10px"><button class="btn" onclick="UI.more=true;renderOffers()">Alle ${mine.length} anzeigen</button></div>` : ''}` : '') +
     (rest.length ? `<h2>Alle Angebote bei ${esc(st.short)}</h2>${grid(lim.map(o => offerCard(o)).join(''))}${!UI.more && rest.length > 24 ? `<div style="text-align:center;margin:10px"><button class="btn" onclick="UI.more=true;renderOffers()">Alle ${rest.length} anzeigen</button></div>` : ''}` : '') +
-    (!all.length ? empty('🏷️', state === 'next' ? `Für ${esc(st.short)} sind noch keine Angebote für nächste Woche bekannt.` : `Für ${esc(st.short)} sind gerade keine Angebote geladen.`) : '');
+    (!all.length ? empty('🏷️', xNote() || (state === 'next' ? `Für ${esc(st.short)} sind noch keine Angebote für nächste Woche bekannt.` : `Für ${esc(st.short)} sind gerade keine Angebote geladen.`)) : '');
 }
-const renderOffers = () => { const e = $('#olist'); if (e) e.innerHTML = offersBody(); };
+const renderOffers = () => { const n = $('#nsb'); if (n) n.innerHTML = noSaveBar(); const e = $('#olist'); if (e) e.innerHTML = offersBody(); };
 V.watch = () => {
   return `<div class="banner info">👁 <b>Was ist das?</b> Favoriten sind deine Dauerprodukte. Die App prüft sie bei jeder Angebotssuche, auch wenn sie nicht auf deiner Liste stehen, und zeigt dir starke Angebote dafür auf der Startseite. Favoriten: <b>${S.watch.length}</b></div>
   <div class="add"><input id="wn" placeholder="Eigenes Produkt als Favorit, z. B. Lachs" onkeydown="if(event.key==='Enter')addCustom()"><button class="btn pri" onclick="addCustom()">+</button></div>
   <div class="add"><input placeholder="Produkte filtern…" value="${esc(UI.wq || '')}" oninput="UI.wq=this.value;$('#wl').innerHTML=watchBody()"></div><div id="wl">${watchBody()}</div>`;
 };
-function watchBody() { const qq = (UI.wq || '').toLowerCase(); return orderCats([...new Set(PRODUCTS.map(p => p.cat))]).map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id) || byUse(a, b)); const line = p => { const i = productInfo(p), b = i.nearBest || i.best; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %${saveEur(b) >= 0.05 ? ' · spart ' + eur(saveEur(b)) : ''}` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
+function watchBody() { const qq = (UI.wq || '').toLowerCase(); return orderCats([...new Set(PRODUCTS.map(p => p.cat))]).map(c => { const l = PRODUCTS.filter(p => p.cat === c && (!p.custom || watched(p.id) || onList(p.id)) && (!qq || p.name.toLowerCase().includes(qq))).sort((a, b) => watched(b.id) - watched(a.id) || byUse(a, b)); const line = p => { const i = productInfo(p), b0 = i.nearBest || i.best, b = b0 && !isPerm(b0) && hasSave(b0) ? b0 : null; return `<div class="item"><button class="ico ${watched(p.id) ? 'on' : ''}" onclick="watchP('${p.id}')" title="${watched(p.id) ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}">👁</button>${thumb(b && b.img, iconFor(p), 'sm')}<div class="grow"><div class="nm" style="cursor:default">${esc(p.name)}</div><div class="mute">${b ? `<b style="color:var(--ink)">${eur(b.price)}</b> ${esc(b.store.short)}${b.pct != null ? ` · −${Math.round(b.pct * 100)} %${saveEur(b) >= 0.05 ? ' · spart ' + eur(saveEur(b)) : ''}` : ''}` : 'Kein Angebot bekannt'}${p.note ? ' · ' + esc(p.note) : ''}</div></div><button class="btn sm" onclick="addP('${p.id}')">+ Liste</button></div>`; }; return l.length ? `<h2>${ICON[c] || ''} ${c}</h2><div class="card tight">${l.map(line).join('')}</div>` : ''; }).join(''); }
 V.route = () => routeView();
 V.bon = () => bonView();
 function extraBody() {
-  const offs = OFFERS_SHOWN().filter(o => o.state === 'now' && o.p && !o.bulk && o.store.tier === 'B' && !quietOffer(o));
+  const offs = OFFERS_LIST().filter(o => o.state === 'now' && o.p && !o.bulk && o.store.tier === 'B' && !quietOffer(o));
   if (!offs.length) return empty('🚶', 'Keine Angebote bei Lidl für deine Produkte bekannt.');
   const by = {}; offs.forEach(o => (by[o.store.id] = by[o.store.id] || []).push(o));
   return `<div class="banner info">Dein Hauptbereich ist das City-Center Chorweiler. Hier siehst du, ob sich ein Abstecher woanders lohnt. Rechnung: Ersparnis gegenüber dem City-Center-Angebot (oder Referenz) minus Zeit für Hin- und Rückweg. „Lohnt sich" ab ${S.set.hourly} € pro Extra-Stunde (Einstellung, meine Annahme). <b>Lidl</b> ist dein Spaziergang-Ziel: Wenn du eh dort spazierst, lohnt jede Ersparnis.</div>` + Object.entries(by).map(([id, list]) => {
@@ -632,7 +646,7 @@ function extraBody() {
   }).join('');
 }
 function woandersBody() {
-  const offs = OFFERS_SHOWN().filter(o => o.store.tier === 'D' && o.state === 'now').sort((a, b) => (b.pct || 0) - (a.pct || 0));
+  const offs = OFFERS_LIST().filter(o => o.store.tier === 'D' && o.state === 'now').sort((a, b) => (b.pct || 0) - (a.pct || 0));
   return `<div class="banner info">Optional, wenn du Zeit und Lust hast: Großmarkt (Selgros Köln-Am Butzweilerhof, METRO, Handelshof) oder Bestellung. Das gehört nicht zur normalen Einkaufsliste. METRO-Preise gelten für Gewerbekunden. Orte und Öffnungszeiten findest du unter Mehr → Läden.</div>` + (offs.length ? grid(offs.map(o => offerCard(o)).join('')) : empty('🏪', 'Aktuell keine Großmarkt-Angebote bekannt. Eigene Funde (z. B. aus dem Selgros-Prospekt) trägst du unter Mehr ein.'));
 }
 // Prospekte: je Laden Zugang zu den Aktionsseiten, mit Stand aus den geladenen Daten
@@ -642,7 +656,7 @@ V.pro = () => {
   const card = s => {
     const now = cnt(s.id, 'now'), next = cnt(s.id, 'next'), canNext = NEXT_STORES.includes(s.id);
     const links = s.id === 'aldi' ? [['Diese Woche', s.links[0][1]], ['Nächste Woche', aldiNext ? 'https://www.aldi-sued.de/angebote/' + aldiNext : s.links[0][1]], ...s.links.slice(1)] : s.links;
-    return `<div class="card"><div class="row sp"><b>${esc(s.short)}</b><span class="mute">${now ? '✓ ' + now + ' Angebote in der App' : 'keine Preise in der App'}</span></div>
+    return `<div class="card"><div class="row sp"><b>${esc(s.short)}</b><span class="mute">${now ? '✓ ' + now + ' Angebote in der App, ' + all.filter(o => o.store.id === s.id && o.state === 'now' && hasSave(o)).length + ' mit bekannter Ersparnis' : 'keine Preise in der App'}</span></div>
       ${canNext ? `<div class="mute" style="margin-top:2px">Nächste Woche: ${next ? '✓ ' + next + ' Angebote da' : '⏳ noch nicht veröffentlicht'}</div>` : ''}
       <div class="row prolinks" style="margin-top:8px;flex-wrap:wrap;gap:8px">${links.map(l => `<a class="btn" href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join('')}</div></div>`;
   };
@@ -651,7 +665,7 @@ V.pro = () => {
 };
 V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow">Bon fotografieren: Die App liest ihn, lernt, wo du was kaufst, und findet Spartipps.<div class="mute"><button class="lnk" onclick="bonList()">${S.bons.length} Bons gespeichert, ansehen</button> · 📷 Foto-Lesen: ${aiKey() ? '✓ eingerichtet' : 'noch nicht eingerichtet'} <button class="lnk" onclick="aiSheet()">${aiKey() ? 'ändern' : 'einrichten'}</button></div></div><button class="btn pri sm" onclick="go('bon')">📷 Bon</button></div>
   <h2>🎨 Darstellung</h2><div class="card">${SEG(S.set.theme || 'auto', [['auto', 'Automatisch'], ['light', '☀️ Hell'], ['dark', '🌙 Dunkel']], 'setTheme')}<div class="mute small" style="margin-top:6px">Automatisch folgt der Einstellung deines Handys.</div></div>
-  ${repeatBlock()}${diagBlock()}<h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
+  ${repeatBlock()}${arcBlock()}${diagBlock()}<h2>💾 Sichern &amp; umziehen</h2><div class="card"><div class="small">Speichert <b>alle deine Daten</b> in einer Datei: Liste, Favoriten, gespeicherte Bons, Einstellungen. Für ein neues Handy oder nach einer Neuinstallation: Datei dorthin schicken und dort <b>Importieren</b>. Bon-Fotos und dein Google-Schlüssel sind nicht dabei.</div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="exp()">⬆ Exportieren</button><button class="btn" onclick="$('#imp').click()">⬇ Importieren</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="imp(this)"></div><div class="mute small" style="margin-top:6px">${S.lastBackup ? 'Letzte Sicherung: ' + esc(fmtD(S.lastBackup)) : 'Noch keine Sicherung gemacht.'}</div></div>
   ${storageCard()}<h2>Datenstand</h2><div class="card"><div>${SRC.live ? `Letzte Suche: <b>${new Date(SRC.fetched).toLocaleString('de-DE')}</b><br><span class="mute">${SRC.offers.length} Angebote · ${esc(SRC.source)}</span>` : 'Noch keine Suche. Tippe oben auf „Angebote suchen".'}</div>
   <div class="mute" style="margin-top:8px">Wichtig: Die Angebote sind Händler-weit. Ob genau deine Filiale in Chorweiler mitmacht, wird nicht geprüft. <b>ALDI SÜD</b> kommt direkt von der ALDI-Webseite: ${SRC.aldi && SRC.aldi.ok ? '✓ ' + SRC.aldi.count + ' Produkte geladen' : '⚠ aktuell nicht geladen' + (SRC.aldi && SRC.aldi.error ? ' (' + esc(SRC.aldi.error) + ')' : '') + ', bitte Prospekt-Link bei Läden nutzen'}. Abgedeckt sind REWE, Netto, Lidl, METRO, ALDI und teilweise dm. Penny ist bewusst nicht dabei.</div></div>
   <h2>Läden</h2>${['A', 'B', 'D'].map(t => `<div class="card"><h3><i class="dot t${t}"></i>${TIER_LABEL[t]}</h3>${STORES.filter(s => s.tier === t).map(s => `<details style="margin-top:8px"><summary><b>${esc(s.short)}</b> <span class="mute">${t === 'A' ? '3 Min zu Fuß' : t === 'B' ? s.walk + ' Min zu Fuß' : s.car ? 'ca. ' + s.car + ' Min Auto' : ''}</span></summary><div class="mute" style="padding:6px 0">${esc(s.addr)}<br>Öffnungszeiten: ${esc(s.hours)}${s.transit ? '<br>' + esc(s.transit) : ''}${s.note ? '<br>' + esc(s.note) : ''}</div><div class="row">${s.links.map(l => `<a href="${l[1]}" target="_blank" rel="noopener">${esc(l[0])}</a>`).join(' · ')}</div></details>`).join('')}</div>`).join('')}
@@ -663,7 +677,7 @@ V.more = () => `<h2>🧾 Kassenbon</h2><div class="card row sp"><div class="grow
   <label class="f">gültig bis<input id="mv" type="date"></label></div><div class="row" style="margin-top:10px"><button class="btn pri" onclick="addOffer()">Speichern</button><span class="mute">Merkt sich den Preis auch als dein Referenzpreis.</span></div>
   ${S.manual.map((o, i) => `<div class="item"><div class="grow">${esc(o.name)} · ${eur(o.price)} · ${esc(STORE(o.store).short)}</div><button class="ico" onclick="delOffer(${i})">✕</button></div>`).join('')}</div>
   <h2>Einstellungen</h2><div class="card"><div class="fgrid"><label class="f">Wert deiner Zeit (€/Std.)<input type="number" id="sh" value="${S.set.hourly}"></label><label class="f">Vorrat ab … % Ersparnis<input type="number" id="sp" value="${S.set.stockPct}"></label><label class="f">Max. Autofahrt (Min)<input type="number" id="sc" value="${S.set.carMax}"></label><label class="f">Spartipp ab … % günstiger<input type="number" id="st" value="${S.set.tipPct}"></label><label class="f">Starke Angebote ab … % Ersparnis<input type="number" id="sg" min="5" max="90" value="${S.set.topPct}"></label></div><button class="btn" style="margin-top:10px" onclick="saveSet()">Speichern</button></div>
-  <h2>Zurücksetzen</h2><div class="card row"><button class="btn danger" onclick="if(confirm('Alle Daten dieser App löschen? Mach vorher eine Sicherung.')){localStorage.removeItem(LS);localStorage.removeItem('einkauf.diag');location.reload()}">Alles löschen</button></div>`;
+  <h2>Zurücksetzen</h2><div class="card row"><button class="btn danger" onclick="if(confirm('Alle Daten dieser App löschen? Mach vorher eine Sicherung.')){localStorage.removeItem(LS);localStorage.removeItem('einkauf.diag');try{indexedDB.deleteDatabase('einkauf-archiv')}catch(e){}location.reload()}">Alles löschen</button></div>`;
 
 /* ================= Aktionen ================= */
 function toast(t) { feedbackText(esc(t)); } // alle Meldungen erscheinen in der festen Leiste über dem Menü
@@ -931,28 +945,28 @@ function compare(pid) {
   const nh = nextHint(info);
   $('#sheetbox').innerHTML = `<div class="row sp"><h3>${iconFor(p)} ${esc(p.name)}</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
     ${p.pref ? `<div class="mute">Dein Standardladen: <b>${esc(STORE(p.pref).name)}</b></div>` : ''}
-    ${nextLine(nh)}${mk(info.now, 'Diese Woche')}${info.next.length ? mk(info.next, 'Nächste Woche', true) : nextStatusLine()}
+    ${nextLine(nh)}${mk(info.now.filter(o => !isPerm(o)), 'Diese Woche')}${info.next.length ? mk(info.next, 'Nächste Woche', true) : nextStatusLine()}
     <div class="mute" style="margin-top:10px">Preise aus Händler-Prospekten, ohne Gewähr. Regalpreise vor Ort können abweichen.</div>
     <div class="row" style="margin-top:10px">${onList(p.id) ? '' : `<button class="btn pri sm" onclick="addP('${p.id}');closeSheet()">+ Liste</button>`}<button class="btn sm" onclick="closeSheet()">Schließen</button></div>`;
   $('#sheet').hidden = false;
 }
 const setHomeStore = k => { UI.hs = k; render(); const c = document.querySelector('.chips.scroll[aria-label="Laden wählen"] .chip.on'), r = c && c.parentNode; if (r) r.scrollLeft = Math.max(0, c.getBoundingClientRect().left - r.getBoundingClientRect().left + r.scrollLeft - 40); /* gewählten Laden sichtbar machen */ };
 function topSummary() {
-  const offsAll = OFFERS_SHOWN().filter(o => o.state === 'now' && o.price > 0 && !quietOffer(o));
+  const offsAll = OFFERS_SAVE().filter(o => o.state === 'now' && o.price > 0 && !quietOffer(o));
   if (!offsAll.length) return tipsBlock();
   const hs = UI.hs && offsAll.some(o => o.store.id === UI.hs) ? UI.hs : '', offs = hs ? offsAll.filter(o => o.store.id === hs) : offsAll;
-  const homeRow = `<div class="chips scroll" style="margin:0 0 8px" role="group" aria-label="Laden wählen"><button class="chip ${!hs ? 'on' : ''}" onclick="setHomeStore('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && offsAll.some(o => o.store.id === s.id)).map(s => `<button class="chip ${hs === s.id ? 'on' : ''}" onclick="setHomeStore('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>`;
+  const homeRow = `<div class="chips scroll" style="margin:0 0 8px" role="group" aria-label="Laden wählen"><button class="chip ${!hs ? 'on' : ''}" onclick="setHomeStore('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && s.tier !== 'D' && offsAll.some(o => o.store.id === s.id)).map(s => `<button class="chip ${hs === s.id ? 'on' : ''}" onclick="setHomeStore('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>`;
   const dedupe = a => { const s = new Set(); return a.filter(o => { const k = o.store.id + (o.p ? o.p.id : o.name); if (s.has(k)) return false; s.add(k); return true; }); };
   const score = o => (o.pct || 0) * (o.regularIsUvp ? 0.6 : 1);
   const byPct = (a, b) => score(b) - score(a);
   const food = o => o.p || o.food;
   const HOME_MAX = 30; // so viele Karten zeigt jede Rubrik der Startseite höchstens
   const near = dedupe(offs.filter(o => o.store.tier === 'A' && food(o) && !o.dubious && o.pct != null && o.pct >= 0.15).sort(byPct)).slice(0, HOME_MAX);
-  const habit = dedupe(offs.filter(o => o.p && habitOk(o.p) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, HOME_MAX).map(o => ({ ...o, why: grundText(o.p) }));
+  const habit = dedupe(offs.filter(o => o.p && !o.dubious && habitOk(o.p) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, HOME_MAX).map(o => ({ ...o, why: grundText(o.p) }));
   const topAll = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= S.set.topPct / 100 && !near.includes(o)).sort(byPct)), top = topAll.slice(0, HOME_MAX);
   const sec = (title, sub, a) => a.length ? `<h2>${title}</h2><div class="mute" style="margin:-4px 4px 8px">${sub}</div><div class="hs">${a.map(o => offerCard(o)).join('')}</div>` : '';
   const none = hs && !near.length && !habit.length && !top.length ? `<div class="banner info">Bei ${esc(STORE(hs).short)} gibt es gerade keine starken Angebote mit bekannter Ersparnis. <button class="lnk" onclick="setStore('${hs}');go('offers')">Alle Angebote bei ${esc(STORE(hs).short)} ansehen</button></div>` : '';
-  return tipsBlock() + homeRow + none + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', `<button class="chip" onclick="topPctSheet()" aria-label="Schwelle für starke Angebote ändern">Ab ${S.set.topPct} % Ersparnis ▾</button> <span class="mute small">${topAll.length > top.length ? 'die ' + top.length + ' stärksten von ' + topAll.length : topAll.length + ' Angebote'}, stärkste zuerst</span>`, top);
+  return tipsBlock() + homeRow + none + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die gerade reduziert sind und nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', `<button class="chip" onclick="topPctSheet()" aria-label="Schwelle für starke Angebote ändern">Ab ${S.set.topPct} % Ersparnis ▾</button> <span class="mute small">${topAll.length > top.length ? 'die ' + top.length + ' stärksten von ' + topAll.length : topAll.length + ' Angebote'}, stärkste zuerst</span>`, top);
 }
 const byId = id => S.list.find(i => i.id === id);
 const tick = id => { const i = byId(id); if (!i) return; i.done = !i.done; shortCheckEnd(); save(); render(); };
@@ -983,7 +997,7 @@ function addOffer() {
 const delOffer = i => { S.manual.splice(i, 1); CACHE = null; save(); render(); };
 function saveSet() { S.set = { ...S.set, hourly: +$('#sh').value || 15, stockPct: +$('#sp').value || 20, carMax: +$('#sc').value || 25, tipPct: +$('#st').value || 20, topPct: Math.min(90, Math.max(5, +$('#sg').value || 30)) }; save(); render(); toast('Gespeichert'); }
 async function exp() { // alle Daten in eine Datei: teilen (z. B. an ein anderes Handy) oder herunterladen
-  const name = 'einkauf-daten-' + isoDay(TODAY) + '.json', json = JSON.stringify({ app: 'intelligente-einkaufsliste', exportiert: new Date().toISOString(), daten: S }, null, 1);
+  const name = 'einkauf-daten-' + isoDay(TODAY) + '.json', arch = await Promise.race([arcAll(), new Promise(r => setTimeout(() => r([]), 2500))]), json = JSON.stringify({ app: 'intelligente-einkaufsliste', exportiert: new Date().toISOString(), daten: S, archiv: arch }, null, 1);
   const file = new File([json], name, { type: 'application/json' });
   const done = () => { S.lastBackup = isoDay(TODAY); save(); render(); feedbackText('✓ Daten exportiert: ' + esc(name)); };
   try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Einkaufsliste Sicherung' }); return done(); } } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -999,7 +1013,7 @@ function imp(el) {
     if (!n.list.length && !n.bons.length && !Object.keys(n.adds).length && !n.custom.length) return alert('In dieser Datei habe ich keine Einkaufsdaten gefunden.');
     if (!confirm(`Diese Daten übernehmen?\n\n${n.list.length} Artikel auf der Liste\n${n.bons.length} gespeicherte Bons\n${n.watch.length} Favoriten\n\nDas ersetzt die Daten auf diesem Gerät. Der jetzige Stand wird vorher als Kopie aufgehoben.`)) return;
     try { if (!localStorage.getItem(LS + '.vorImport')) localStorage.setItem(LS + '.vorImport', JSON.stringify({ t: Date.now(), daten: S })); } catch (e) { return alert('Die Sicherheitskopie des jetzigen Stands konnte nicht angelegt werden (Speicher voll). Der Import wurde abgebrochen. Mach zuerst eine Sicherung (⬆ Exportieren).'); } // die älteste Kopie bleibt erhalten
-    UI.undo = null; UI.undoMove = null; S = n; migrateCustom(); S.custom.forEach(regCustom); repairRefs(); CACHE = null; if (!save()) return; render(); feedbackText('✓ Daten importiert.');
+    UI.undo = null; UI.undoMove = null; S = n; migrateCustom(); S.custom.forEach(regCustom); repairRefs(); CACHE = null; if (!save()) return; if (Array.isArray(j.archiv)) arcPut(j.archiv.slice(0, 20000)); render(); feedbackText('✓ Daten importiert.');
   }).catch(() => alert('Die Datei konnte nicht gelesen werden.'));
 }
 const setOff = k => { UI.offers = k; UI.more = false; render(); };
