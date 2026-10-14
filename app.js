@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 146, t: '14.10. 12:35' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 147, t: '14.10. 15:11' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -445,10 +445,14 @@ const chipHtml = p => {
   return `<button class="chip ${on ? 'on' : ''} ${freq(p) >= 2 ? 'main' : ''}" data-pid="${p.id}" onclick="chipTap('${p.id}')" aria-pressed="${on}">${on ? '✓' : iconFor(p)} ${esc(p.name.split(' /')[0])}${!on && b && b.pct != null && !b.dubious ? ` <b style="color:var(--acc)">−${Math.round(b.pct * 100)}%<span class="qst"> ${esc(b.store.short)}</span></b>` : ''}</button>`;
 };
 function toggleP(id) { if (onList(id)) { S.list = S.list.filter(i => !(i.pid === id && !i.done)); save(); render(); } else addP(id); }
+const setQs = k => { UI.qs = k; render(); };
 function quickAdd() {
-  const due = laterDue(), main = mainProducts(), open = UI.qa;
-  const others = PRODUCTS.filter(p => !main.includes(p) && watched(p.id));
-  const rest = PRODUCTS.filter(p => !main.includes(p) && !others.includes(p) && !p.custom && !(p.virtual && !p.sam));
+  const due = laterDue(), open = UI.qa, qs = open && UI.qs && STORES.some(s => s.id === UI.qs) ? UI.qs : '';
+  // Laden gewählt: Produkte mit echtem Angebot in diesem Laden, dazu Produkte, die in keinem Laden im Angebot sind
+  const qsOk = p => { if (!qs) return true; const n = productInfo(p).now.filter(o => !isPerm(o)); return !n.length || n.some(o => o.store.id === qs); };
+  const main = mainProducts().filter(qsOk);
+  const others = PRODUCTS.filter(p => !main.includes(p) && watched(p.id) && qsOk(p));
+  const rest = PRODUCTS.filter(p => !main.includes(p) && !others.includes(p) && !p.custom && !(p.virtual && !p.sam) && qsOk(p));
   const shown = open ? main : main.slice(0, 18);
   const fill = open ? [] : others.slice(0, Math.max(0, 10 - shown.length)); // solange die App noch lernt: deine Standard-Favoriten
   const dueChips = due.map(x => `<button class="chip due" onclick="laterToList('${x.id}')" title="Von dir gemerkt, jetzt günstiger">📌 ${esc(x.name)}</button>`).join('');
@@ -458,7 +462,8 @@ function quickAdd() {
   let h = `<div class="qa"><div class="row sp qh"><span class="mute">${title}${due.length ? ' · 📌 jetzt günstiger' : ''}</span>${toggle}</div><div class="chips">${dueChips}${shown.map(chipHtml).join('')}${fill.map(chipHtml).join('')}</div>`;
   if (open) {
     const cats = orderCats([...new Set(rest.map(p => p.cat))]);
-    h += (others.length ? `<div class="mute qh" style="margin-top:8px">Weitere Favoriten</div><div class="chips">${others.map(chipHtml).join('')}</div>` : '') +
+    h += `<div class="chips scroll" style="margin:8px 0 0" role="group" aria-label="Laden wählen"><button class="chip ${!qs ? 'on' : ''}" onclick="setQs('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && storeCount(s.id) > 0).map(s => `<button class="chip ${qs === s.id ? 'on' : ''}" onclick="setQs('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>${qs ? `<div class="mute small qh">Zeigt, was bei ${esc(STORE(qs).short)} im Angebot ist, und Produkte, die gerade in keinem Laden im Angebot sind.</div>` : ''}` +
+    (others.length ? `<div class="mute qh" style="margin-top:8px">Weitere Favoriten</div><div class="chips">${others.map(chipHtml).join('')}</div>` : '') +
       `<div class="mute small qh" style="margin-top:8px">Die App lernt mit: Was du in letzter Zeit oft brauchst, steht vorne. Ab 2 Einkaufstagen wird ein Produkt zum Hauptprodukt, ab 3 zum Favoriten.</div>` +
       cats.map(c => `<div class="mute qh" style="margin-top:8px">${ICON[c] || ''} ${c}</div><div class="chips">${rest.filter(p => p.cat === c).sort(byUse).map(chipHtml).join('')}</div>`).join('');
   }

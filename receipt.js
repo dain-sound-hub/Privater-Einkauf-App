@@ -829,13 +829,21 @@ const bqNote = t => { BQ.note = t; if (BQ.running) bqStrip(); };
 function bqChanged() { bqStrip(); if (typeof cur !== 'undefined' && cur === 'bon' && !BON.parsed && !BON.done) render(); }
 function bqStrip() { // Statuszeile oben auf jeder Seite
   const el = document.getElementById('bqs'); if (!el) return;
-  const n = s => BQ.list.filter(m => m.status === s).length, run = n('liest'), rdy = n('gelesen'), wait = n('wartet'), bad = n('fehler'), dup = n('doppelt'), parts = [];
+  const n = s => BQ.list.filter(m => m.status === s).length, run = n('liest'), wait = n('wartet'), bad = n('fehler'), dup = n('doppelt'), parts = [];
+  const pend = BQ.list.filter(bqSaving), rdy = n('gelesen') - pend.length; // pend: frisch gelesen, wird in Sekunden von selbst gespeichert
+  clearTimeout(BQ.stripT); if (pend.length) BQ.stripT = setTimeout(bqStrip, 21000);
   if (run) parts.push(`🔄 Bon wird gelesen … <span class="mute">${esc(BQ.note)}</span>`);
+  if (pend.length) parts.push(`💾 ${pend.length} gelesen, wird gespeichert …`);
   if (rdy) parts.push(`✓ ${rdy} gelesen, bitte prüfen`);
   if (wait) parts.push(!aiKey() ? `⏳ ${wait} warten, Foto-Lesen einrichten` : BQ.keyProblem ? `⏳ ${wait} warten: ${esc(BQ.keyProblem)}` : run ? `⏳ ${wait} warten` : `⏳ ${wait} warten (Google gerade ausgelastet, später neu)`);
   if (dup) parts.push(`🔁 ${dup} doppelt`);
   if (bad) parts.push(`⚠ ${bad} nicht lesbar`);
-  el.innerHTML = parts.length ? `<button class="bqs" onclick="go('bon')">${parts.join(' · ')}</button>` : '';
+  el.innerHTML = parts.length ? `<button class="bqs" onclick="bqStripGo()">${parts.join(' · ')}</button>` : '';
+}
+const bqSaving = m => m.status === 'gelesen' && !m.hold && !m.warn && Date.now() - (m.readAt || 0) < 20000; // kein Grund zum Prüfen: die automatische Speicherung läuft gleich
+function bqStripGo() { // Tipp auf die Statuszeile: direkt zu dem Bon, der geprüft werden muss
+  const rev = BQ.list.filter(m => m.status === 'gelesen' && m.text && !bqSaving(m)).sort((a, b) => b.created - a.created);
+  go('bon'); if (rev.length) bonOpen(rev[0].id);
 }
 async function bonAblegen() {
   if (BON.ablegen) return; // Doppeltipp: läuft schon
@@ -909,7 +917,7 @@ async function bqRun(force) {
         if (parsed.total == null || !parsed.store || !parsed.date) { // etwas fehlt (Summe, Laden oder Datum): mit einem anderen Modell noch einmal versuchen und das vollständigere nehmen
           try { const t2 = await aiAsk(fotos, AI_PROMPT + ' Do not stop early: the transcription must include the last lines (SUMME/total, payment and date).', 2500, aiAsk.meta && aiAsk.meta.model), p2 = parseReceipt(t2, { ref: bonRef(m) }); if (p2.items.length >= parsed.items.length * 0.7 && (sc(p2) > sc(parsed) || (sc(p2) === sc(parsed) && p2.items.length > parsed.items.length))) { text = t2; parsed = p2; } } catch (e) { /* erstes Ergebnis behalten */ }
         }
-        bonDiag(m, text, parsed); Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', err: '', warn: '', hold: '' }); bqDupCheck(m, parsed);
+        bonDiag(m, text, parsed); Object.assign(m, { text, lowRead: (text.match(/\[\?\]/g) || []).length, total: parsed.total, status: 'gelesen', readAt: Date.now(), err: '', warn: '', hold: '' }); bqDupCheck(m, parsed);
         if (m.status === 'doppelt') { const add = await bqDupMerge(m).catch(() => 0); feedbackText('🔁 Dieser Bon ist doppelt und wird nicht mitgerechnet.' + (add ? ' Ich habe ' + add + ' fehlende Artikel im gespeicherten Bon ergänzt.' : '')); }
       } catch (e) {
         bonDiag(m, '', { items: [] }, e.message); // auch Fehlschläge (kein Bon, nicht lesbar, keine Positionen) festhalten

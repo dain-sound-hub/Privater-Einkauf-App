@@ -322,7 +322,7 @@ function listText() {
   if (plan.favs.length) { out.push('', 'Im Blick:'); plan.favs.forEach(x => out.push(line(x.it))); }
   return 'Einkaufsliste ' + new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + '\n' + out.join('\n');
 }
-const shareBtn = () => '<button class="shr" onclick="shareList()" aria-label="Liste teilen" title="Liste teilen">📤</button>';
+const shareBtn = () => '<button class="shr" onclick="shareList()" aria-label="Liste teilen" title="Liste teilen"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M18 5.2 6 12l12 6.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="5.2" r="3" fill="currentColor"/><circle cx="6" cy="12" r="3" fill="currentColor"/><circle cx="18" cy="18.8" r="3" fill="currentColor"/></svg></button>';
 async function shareList() {
   const t = listText(); if (!t) return feedbackText('Die Liste ist leer.', true);
   if (navigator.share) { try { await navigator.share({ title: 'Einkaufsliste', text: t }); return; } catch (e) { if (e && e.name === 'AbortError') return; } } // abgebrochen = nichts weiter
