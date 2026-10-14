@@ -58,3 +58,10 @@ Diese Datei fasst zusammen, was aus gefundenen Fehlern als **allgemeine Regel** 
 35. **Sammelbegriff als eigenes Produkt:** Ein eigenes Produkt, dessen Name nur ein Obst-/Gemüsewort oder ein Sammelbegriff ist (Obst, Gemüse, Früchte, Beeren, Salat), gehört zur Rubrik Obst & Gemüse und bekommt alle Frisch-Sperren (CAN_RX, Regal, Bindestrich, Bon), auch auf dem Fundstellen-Weg (customOk). Tiefkühl, getrocknet, Trocken-/Dörr- und Dose zählen nie als frisches Obst.
 36. **Sammelprodukte:** Obst, Gemüse, Käse, Wurst und Fleisch sind Sammelprodukte (virtual + sam + group). Ein Sammelwort auf der Liste zeigt das beste Angebot aller Sorten, Käufe jeder Sorte zählen dafür. Ein gleichnamiger eigener Eintrag wird beim Laden zum Sammelprodukt (Liste, Favoriten, Verlauf). Frischkäse zählt nicht zu Käse, Tiefkühl/getrocknet/Dose/Saft/Tee nie zu Obst und Gemüse. Wurst-Sorten (onlyList) erscheinen nie ungefragt in allgemeinen Angebotslisten.
 37. **Angebote = echte Angebote:** ALDI-Dauerpreise (Regalpreis, Hinweis „Dauerpreis“) erscheinen nicht unter Angebote und nicht auf der Startseite. Sie bleiben für die Preissuche der Liste und Route. Keine Ersparnis-Zeilen für Angebote ohne Vergleichspreis.
+
+## Ergänzt am 14.10. (Oberfläche)
+38. **Symbole in Kreisen und Knöpfen werden gezeichnet (CSS-Striche), nie als Text-Zeichen mit Polster:** Text-Zeichen sitzen je nach Schrift schief. Allgemeine Klassennamen wie .plus dürfen keine fremden Elemente treffen.
+39. **Grüne Flächen mit Schrift** nutzen --g1/--g2 und --on-acc (hell: weiß auf dunklem Grün, dunkel: dunkle Schrift auf hellem Grün). Kontrast mindestens 4,5:1 (große fette Schrift 3:1).
+40. **Produktbilder:** Prospekt-Titelbilder (/main.jpg) sind keine Produktfotos, dafür gilt das Symbol. Falsche Symbole (Wortgrenze bei cola/Rucola) wie Regel 1 verhindern.
+41. **Fenster** sperren das Scrollen der Seite dahinter (body.noscroll). Jede Ansicht, jedes Fenster nutzt dieselben Tokens (--gloss, --sh2).
+42. **Route** ist die Einkaufsliste im Laden: schmaler Kopf, Fortschritt x von y, Zeilen 36 px, Marke klein, Abgehaktes bleibt sichtbar im Block Erledigt.

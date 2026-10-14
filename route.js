@@ -109,13 +109,15 @@ const setLidl = k => { S.set.lidl = k; save(); render(); };
 function routeView() {
   askBoughtCard();
   const open = S.list.filter(i => !i.done && !hiddenShort(i));
-  if (!open.length) return empty('🧭', 'Noch keine Route. Trag auf der Liste ein, was du brauchst.<br>Die App sagt dir dann, in welchem Laden du was kaufst und in welcher Reihenfolge.') + `<div style="text-align:center"><button class="btn pri" onclick="go('list')">Zur Liste</button></div>`;
+  const doneIt = S.list.filter(i => i.done);
+  if (!open.length && !doneIt.length) return empty('🧭', 'Noch keine Route. Trag auf der Liste ein, was du brauchst.<br>Die App sagt dir dann, in welchem Laden du was kaufst und in welcher Reihenfolge.') + `<div style="text-align:center"><button class="btn pri" onclick="go('list')">Zur Liste</button></div>`;
   const plan = planRoute(), mode = S.set.lidl || 'auto';
   const row = x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route' });
   const favCard = plan.favs.length ? `<div class="card tight stop favc" data-store="fav" style="--sc:#e8a317"><div class="row nowrap sth"><span class="num">★</span><h3>Im Blick</h3></div>${plan.favs.map(x => cRow({ it: x.it, p: x.p, b: x.offer, info: x.info, note: x.note, heavy: x.heavy, ctx: 'route', rec: x.recName })).join('')}</div>` : '';
-  const cards = plan.stops.map((s, i) => `<div class="card tight stop" data-store="${s.store.id}" style="--sc:${storeColor(s.store.id)}"><div class="row nowrap sth"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶' : '🏠'} ${esc(s.store.short)}</h3></div>${s.items.map(row).join('')}</div>`).join('');
-  return `<div class="lhead rl"><b>🧭 Einkaufsroute</b><span class="sub">${plan.count} Artikel · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'}${shortOn() && S.short.view !== 'all' ? ' · ⚡ Kurzliste' : ''}</span></div>${shortSeg()}
-  ${favCard}${cards}
+  const cards = plan.stops.map((s, i) => `<div class="card tight stop" data-store="${s.store.id}" style="--sc:${storeColor(s.store.id)}"><div class="row nowrap sth"><span class="num">${i + 1}</span><h3>${s.kind === 'lidl' ? '🚶 ' : ''}${esc(s.store.short)}</h3></div>${s.items.map(row).join('')}</div>`).join('');
+  const total = plan.count + doneIt.length, doneBlock = doneIt.length ? `<div class="card tight stop done" style="--sc:#8a9a92"><div class="row nowrap sth"><span class="num">✓</span><h3>Erledigt</h3></div>${doneIt.map(it => cRow({ it, p: it.pid ? PROD(it.pid) : null, b: null, ctx: 'route' })).join('')}</div>` : '';
+  return `<div class="lhead rl"><b>🧭 Einkaufsroute</b><span class="sub">${doneIt.length} von ${total} erledigt · ${plan.stops.length} Stopp${plan.stops.length === 1 ? '' : 's'}${shortOn() && S.short.view !== 'all' ? ' · ⚡ Kurzliste' : ''}</span></div><div class="rprog" aria-hidden="true"><i style="width:${total ? Math.round(doneIt.length / total * 100) : 0}%"></i></div>${shortSeg()}
+  ${!open.length ? '<div class="mute" style="text-align:center;margin:6px 0">Alles erledigt. Tippe auf „Fertig“ in der Liste, um aufzuräumen.</div>' : ''}${favCard}${cards}${doneBlock}
   
   <details class="card tight" style="margin-top:12px"><summary class="mute">Einstellungen &amp; Hinweise</summary>
     ${plan.lidlPossible || mode !== 'auto' ? SEG(mode, [['auto', 'Lidl: Automatisch'], ['ja', 'Lidl: Ja'], ['nein', 'Lidl: Nein']], 'setLidl') + `<div class="mute small" style="margin:-6px 4px 8px">${mode === 'auto' ? 'Lidl wird nur eingeplant, wenn du dort mindestens 1,50 € sparst.' : mode === 'ja' ? 'Lidl wird eingeplant, sobald es dort etwas Günstigeres für leichte Artikel gibt.' : 'Lidl wird nicht eingeplant.'}</div>` : ''}

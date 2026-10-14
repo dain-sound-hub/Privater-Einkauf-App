@@ -232,7 +232,7 @@ function backInit() {
 backInit();
 
 /* ---------- Kassenbon-Knopf: schwebt rechts über der Menüleiste, nur bei Liste und Route ---------- */
-function bonFabSync() { const f = document.getElementById('bonfab'); if (f) f.hidden = !(cur === 'list' || cur === 'route'); }
+function bonFabSync() { const f = document.getElementById('bonfab'); if (f) f.hidden = cur !== 'list'; }
 
 /* ---------- Hauptprodukte: antippen = auf die Liste, lange drücken = Angebot genauer ansehen ---------- */
 let CHIP = { timer: 0, t: 0, x: 0, y: 0, pid: null };
@@ -385,3 +385,6 @@ function topPctSheet() {
   $('#sheet').hidden = false;
 }
 function setTopPct(v) { S.set.topPct = Math.min(90, Math.max(5, +v || 30)); save(); closeSheet(); render(); }
+
+// Offenes Fenster: die Seite dahinter scrollt nicht mehr mit
+(() => { const sh = document.getElementById('sheet'); if (!sh || !window.MutationObserver) return; new MutationObserver(() => { document.body.classList.toggle('noscroll', !sh.hidden); }).observe(sh, { attributes: true, attributeFilter: ['hidden'] }); })();

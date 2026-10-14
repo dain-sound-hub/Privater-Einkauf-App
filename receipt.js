@@ -449,7 +449,7 @@ function bonAssign(i) {
 }
 function bonAssignSearch() {
   const q = $('#ba') ? $('#ba').value : ''; BON.res = suggestFor(q, 6);
-  $('#bar').innerHTML = BON.res.map((s, j) => `<button class="sugrow" onclick="bonPick(${j})"><span class="em">${iconFor(s.pid ? PROD(s.pid) : null, s.t)}</span><span class="grow"><b>${esc(s.t)}</b></span><span class="plus">✓</span></button>`).join('') || '<div class="mute">Nichts gefunden. Lege es als neues Produkt an.</div>';
+  $('#bar').innerHTML = BON.res.map((s, j) => `<button class="sugrow" onclick="bonPick(${j})"><span class="em">${iconFor(s.pid ? PROD(s.pid) : null, s.t)}</span><span class="grow"><b>${esc(s.t)}</b></span><span class="plus ok" aria-hidden="true"></span></button>`).join('') || '<div class="mute">Nichts gefunden. Lege es als neues Produkt an.</div>';
 }
 function bonSetPid(i, pid) { const it = BON.parsed.items[i]; it.pid = pid; it.how = 'gewählt'; it.include = true; if (it.aliasKey && it.aliasKey.length >= 3 && pid) S.aliases[it.aliasKey] = pid; save(); closeSheet(); render(); }
 function bonPick(j) { const s = BON.res[j]; if (!s) return; const a = parseAdd(s.t); bonSetPid(BON.assign, a.pid || mkCustom(a.name).id); }
@@ -646,7 +646,7 @@ function bonFix(bid, i) {
 }
 function bonFixSearch() {
   const q = $('#bf') ? $('#bf').value : ''; BON.res = suggestFor(q, 6);
-  $('#bfr').innerHTML = BON.res.map((s, j) => `<button class="sugrow" onclick="bonFixPick(${j})"><span class="em">${iconFor(s.pid ? PROD(s.pid) : null, s.t)}</span><span class="grow"><b>${esc(s.t)}</b></span><span class="plus">✓</span></button>`).join('') || '<div class="mute">Nichts gefunden.</div>';
+  $('#bfr').innerHTML = BON.res.map((s, j) => `<button class="sugrow" onclick="bonFixPick(${j})"><span class="em">${iconFor(s.pid ? PROD(s.pid) : null, s.t)}</span><span class="grow"><b>${esc(s.t)}</b></span><span class="plus ok" aria-hidden="true"></span></button>`).join('') || '<div class="mute">Nichts gefunden.</div>';
 }
 function bonFixPick(j) {
   const s = BON.res[j]; if (!s || !FIX) return; const b = S.bons.find(x => x.id === FIX.bid), it = b && b.items[FIX.i]; if (!it) return;
