@@ -33,7 +33,7 @@ function dockPos() {
 }
 if (window.visualViewport) { visualViewport.addEventListener('resize', dockPos); visualViewport.addEventListener('scroll', dockPos); }
 const iaRow = () => '';
-const plusBtn = () => '<div class="fabrow"><button class="plus2" onclick="iaOpen()" aria-label="Artikel hinzufügen" title="Artikel hinzufügen">+</button></div>';
+const plusBtn = share => '<div class="fabrow">' + (share ? shareBtn() : '') + '<button class="plus2" onclick="iaOpen()" aria-label="Artikel hinzufügen" title="Artikel hinzufügen">+</button></div>';
 function planKeys(all) { const pl = planRoute(all), m = {}; pl.stops.forEach(s => s.items.forEach(x => { m[x.it.id] = s.store.id; })); pl.favs.forEach(x => { m[x.it.id] = 'fav'; }); return m; } // in welchem Laden steht der Artikel (wie in der Route)
 function listHead(title, sub) {
   const short = shortOn() ? '' : (S.list.filter(i => !i.done).length >= 2 ? '<button class="klnk" onclick="shortOpen()" aria-label="Schnelleinkauf starten" title="Schnelleinkauf: nur einen Teil der Liste zeigen">⚡ Schnelleinkauf</button>' : '');
@@ -322,7 +322,7 @@ function listText() {
   if (plan.favs.length) { out.push('', 'Im Blick:'); plan.favs.forEach(x => out.push(line(x.it))); }
   return 'Einkaufsliste ' + new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + '\n' + out.join('\n');
 }
-const shareBtn = () => '<div style="text-align:center;margin:0 0 10px"><button class="btn sm" onclick="shareList()">📤 Liste teilen</button></div>';
+const shareBtn = () => '<button class="shr" onclick="shareList()" aria-label="Liste teilen" title="Liste teilen">📤</button>';
 async function shareList() {
   const t = listText(); if (!t) return feedbackText('Die Liste ist leer.', true);
   if (navigator.share) { try { await navigator.share({ title: 'Einkaufsliste', text: t }); return; } catch (e) { if (e && e.name === 'AbortError') return; } } // abgebrochen = nichts weiter

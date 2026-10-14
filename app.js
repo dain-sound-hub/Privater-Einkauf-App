@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 144, t: '14.10. 10:21' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 146, t: '14.10. 12:35' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -548,7 +548,7 @@ V.list = () => {
   const bon = `<div style="text-align:center;margin:12px 0"><button class="btn" onclick="go('bon')">🧾 Kassenbon einlesen</button></div>`;
   // Liste zuerst. Ist sie leer, kommen Anleitung und Schnell-Hinzufügen gleich darunter.
   return open.length
-    ? `${head}${groupsHtml}${plusBtn()}${shareBtn()}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${topSummary()}`
+    ? `${head}${groupsHtml}${plusBtn(true)}${wagen}${qa}${sugg}${laterBlock()}${live}${help}${backupBanner}${topSummary()}`
     : `${head}${help}${backupBanner}${qa}${sugg}${laterBlock()}${live}${done.length ? '' : empty('🛒', 'Deine Liste ist leer.<br>Tippe auf <b>+</b>, um etwas einzutragen, oder wähle ein Hauptprodukt.')}${plusBtn()}${wagen}${topSummary()}`;
 };
 const SEARCH_CATS = { fleisch: 'Fleisch', frischfleisch: 'Fleisch', wurst: 'Wurst & Aufschnitt', aufschnitt: 'Wurst & Aufschnitt', obst: 'Obst & Gemüse', gemüse: 'Obst & Gemüse', gemuese: 'Obst & Gemüse', milchprodukte: 'Milchprodukte', getränke: 'Getränke', getraenke: 'Getränke', drogerie: 'Drogerie & Gesundheit', haushalt: 'Haushalt & Wäsche' }; // ein ganzes Rubrik-Wort sucht die ganze Rubrik („Fleisch“ = alles Fleisch zum Braten, nicht nur Hackfleisch)
@@ -931,9 +931,12 @@ function compare(pid) {
     <div class="row" style="margin-top:10px">${onList(p.id) ? '' : `<button class="btn pri sm" onclick="addP('${p.id}');closeSheet()">+ Liste</button>`}<button class="btn sm" onclick="closeSheet()">Schließen</button></div>`;
   $('#sheet').hidden = false;
 }
+const setHomeStore = k => { UI.hs = k; render(); const c = document.querySelector('.chips.scroll[aria-label="Laden wählen"] .chip.on'), r = c && c.parentNode; if (r) r.scrollLeft = Math.max(0, c.getBoundingClientRect().left - r.getBoundingClientRect().left + r.scrollLeft - 40); /* gewählten Laden sichtbar machen */ };
 function topSummary() {
-  const offs = OFFERS_SHOWN().filter(o => o.state === 'now' && o.price > 0 && !quietOffer(o));
-  if (!offs.length) return tipsBlock();
+  const offsAll = OFFERS_SHOWN().filter(o => o.state === 'now' && o.price > 0 && !quietOffer(o));
+  if (!offsAll.length) return tipsBlock();
+  const hs = UI.hs && offsAll.some(o => o.store.id === UI.hs) ? UI.hs : '', offs = hs ? offsAll.filter(o => o.store.id === hs) : offsAll;
+  const homeRow = `<div class="chips scroll" style="margin:0 0 8px" role="group" aria-label="Laden wählen"><button class="chip ${!hs ? 'on' : ''}" onclick="setHomeStore('')">Alle Läden</button>${STORES.filter(s => s.id !== 'online' && offsAll.some(o => o.store.id === s.id)).map(s => `<button class="chip ${hs === s.id ? 'on' : ''}" onclick="setHomeStore('${s.id}')"><i class="sdot" style="background:${storeColor(s.id)}"></i>${esc(s.short)}</button>`).join('')}</div>`;
   const dedupe = a => { const s = new Set(); return a.filter(o => { const k = o.store.id + (o.p ? o.p.id : o.name); if (s.has(k)) return false; s.add(k); return true; }); };
   const score = o => (o.pct || 0) * (o.regularIsUvp ? 0.6 : 1);
   const byPct = (a, b) => score(b) - score(a);
@@ -943,7 +946,8 @@ function topSummary() {
   const habit = dedupe(offs.filter(o => o.p && habitOk(o.p) && !onList(o.p.id) && o.store.tier !== 'D' && (o.store.tier === 'A' || o.store.tier === 'B' || (o.store.car || 99) <= S.set.carMax)).sort((a, b) => (isNear(b) - isNear(a)) || byPct(a, b))).slice(0, HOME_MAX).map(o => ({ ...o, why: grundText(o.p) }));
   const topAll = dedupe(offs.filter(o => o.store.tier !== 'D' && food(o) && !o.dubious && o.pct != null && o.pct >= S.set.topPct / 100 && !near.includes(o)).sort(byPct)), top = topAll.slice(0, HOME_MAX);
   const sec = (title, sub, a) => a.length ? `<h2>${title}</h2><div class="mute" style="margin:-4px 4px 8px">${sub}</div><div class="hs">${a.map(o => offerCard(o)).join('')}</div>` : '';
-  return tipsBlock() + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', `<button class="chip" onclick="topPctSheet()" aria-label="Schwelle für starke Angebote ändern">Ab ${S.set.topPct} % Ersparnis ▾</button> <span class="mute small">${topAll.length > top.length ? 'die ' + top.length + ' stärksten von ' + topAll.length : topAll.length + ' Angebote'}, stärkste zuerst</span>`, top);
+  const none = hs && !near.length && !habit.length && !top.length ? `<div class="banner info">Bei ${esc(STORE(hs).short)} gibt es gerade keine starken Angebote mit bekannter Ersparnis. <button class="lnk" onclick="setStore('${hs}');go('offers')">Alle Angebote bei ${esc(STORE(hs).short)} ansehen</button></div>` : '';
+  return tipsBlock() + homeRow + none + sec('🔥 Top-Angebote im City-Center', 'Netto, REWE, dm: wenige Minuten zu Fuß', near) + sec('🔁 Das kaufst du öfter, jetzt im Angebot', 'Favoriten und schon gekaufte Produkte, die nicht auf deiner Liste stehen. City-Center zuerst', habit) + sec('⭐ Allgemein starke Angebote', `<button class="chip" onclick="topPctSheet()" aria-label="Schwelle für starke Angebote ändern">Ab ${S.set.topPct} % Ersparnis ▾</button> <span class="mute small">${topAll.length > top.length ? 'die ' + top.length + ' stärksten von ' + topAll.length : topAll.length + ' Angebote'}, stärkste zuerst</span>`, top);
 }
 const byId = id => S.list.find(i => i.id === id);
 const tick = id => { const i = byId(id); if (!i) return; i.done = !i.done; shortCheckEnd(); save(); render(); };
