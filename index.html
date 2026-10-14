@@ -409,6 +409,11 @@ nav.bottom .navfab::before{width:24px;height:4px}nav.bottom .navfab::after{width
 .chips[aria-label="Laden wählen"] .chip small{font-size:10px}
 .chips[aria-label="Laden wählen"] .sdot{width:7px;height:7px;margin:0}
 .qbar{gap:6px;margin:0 0 6px;align-items:center}.qbar .chips{margin:0!important;min-width:0}.qbar>.chip.arrow{min-height:0;height:26px;padding:0 10px;font-size:12px;flex:none}
+/* Laden-Leisten: nicht gewählte Läden blass (50 %), der gewählte als glänzende, erhabene Blase, unterstrichen */
+.chips[aria-label="Laden wählen"] .chip{opacity:.5;background:transparent;border-color:transparent;transition:opacity .15s,transform .15s}
+.chips[aria-label="Laden wählen"] .chip.on{opacity:1;font-weight:800;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;color:var(--on-acc);border-color:color-mix(in srgb,var(--g2) 70%,#000);background:radial-gradient(ellipse at 30% 18%,rgba(255,255,255,.6),rgba(255,255,255,0) 58%),linear-gradient(color-mix(in srgb,var(--g1) 78%,#fff),var(--g1));box-shadow:0 2px 0 var(--g2),0 5px 10px var(--glow),inset 0 1px 1px rgba(255,255,255,.7),inset 0 -2px 3px rgba(0,0,0,.16);text-shadow:0 1px 0 rgba(0,0,0,.28);transform:translateY(-1px)}
+:root[data-theme="dark"] .chips[aria-label="Laden wählen"] .chip.on{text-shadow:none}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .chips[aria-label="Laden wählen"] .chip.on{text-shadow:none}}
 </style>
 </head>
 <body>
