@@ -455,16 +455,17 @@ function bonSetPid(i, pid) { const it = BON.parsed.items[i]; it.pid = pid; it.ho
 function bonPick(j) { const s = BON.res[j]; if (!s) return; const a = parseAdd(s.t); bonSetPid(BON.assign, a.pid || mkCustom(a.name).id); }
 function bonPickNew() { const it = BON.parsed.items[BON.assign]; const nm = it.name.replace(/\s+\d+[.,]?\d*\s?(kg|g|ml|l)\b/i, '').trim(); bonSetPid(BON.assign, mkCustom(nm).id); }
 function bonPickNone() { const it = BON.parsed.items[BON.assign]; it.pid = null; it.include = false; closeSheet(); render(); }
-function bonSave() {
-  const b = BON.parsed; if (!b) return;
+async function bonSave() {
+  const b = BON.parsed; if (!b || BON.saving) return;
   const store = (b.store || ($('#bs') && $('#bs').value) || '').trim(), date = b.date || ($('#bd') && $('#bd').value) || (BON.refDay || isoDay(TODAY)); // ohne Datum: der Tag des Fotos, wie beim automatischen Speichern
   if (!store) return feedbackText('Bitte wähle oben den Laden aus.', true);
   if (!dateSane(date)) return feedbackText('Das Datum ' + esc(fmtD(date)) + ' ist nicht plausibel (in der Zukunft oder älter als ein Jahr). Bitte oben das richtige Datum eintragen.', true);
   const items = b.items.filter(i => i.kind === 'item' && i.include);
   if (!items.length) return feedbackText('Es ist keine Position ausgewählt.', true);
   if (!BON.allowDup) { const d = bonDupOf(store, date, b.total, bonNames(items), BON.cur, b.time); if (d && !confirm(d.sure ? 'Diesen Bon hast du schon (' + bonStoreName(d.c.store) + ', ' + fmtD(d.c.date) + '). Trotzdem nochmal speichern? Dann zählt er doppelt.' : 'Es gibt schon einen Bon vom selben Laden und Tag mit derselben Summe, aber anderen Artikeln. Trotzdem speichern?')) return; }
-  const res = bonCommit(b, items, store, date, BON.cur, { lowRead: BON.lowRead });
-  save(); BON = { text: '', parsed: null, done: { lines: res.lines, ask: res.cand }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' }; render();
+  BON.saving = true; let res, okS = false; try { res = bonCommit(b, items, store, date, BON.cur, { lowRead: BON.lowRead, recId: BON.cur ? 'b_' + BON.cur : (BON.recId = BON.recId || uid()) }); okS = await bonFinish(res, BON.cur); } catch (e) { okS = false; } // ein Fehler darf den Speichern-Knopf nicht blockieren
+  if (!okS) { BON.saving = false; return feedbackText('⚠ Der Bon konnte nicht gespeichert werden (Speicher voll). Es ist nichts verloren, die Eingaben bleiben stehen. Schaffe Platz (z. B. Mehr → Sichern) und tippe noch einmal auf Speichern.', true); }
+  BON = { text: '', parsed: null, done: { lines: res.lines, ask: res.cand }, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' }; render();
 }
 // Name für ein neues Produkt aus einer unbekannten Bon-Zeile (KI-Name, sonst der aufgeräumte Bon-Name)
 function bonNewName(i) {
@@ -513,9 +514,9 @@ function bonCommit(b, items, store, date, qid, opt) {
   const partial = bonComplete(b) === false || !!opt.lowRead || items.length > 120;
   const oldTip = new Set(savingTips().map(t => t.p.id)), before = {};
   items.forEach(i => { if (i.pid) before[i.pid] = stammladen(i.pid); });
-  const rec = { id: uid(), date, saved: Date.now(), store, total: b.total, items: items.map(bonRecItem), ...(partial ? { partial: true } : {}), ...(b.time ? { time: b.time } : {}) };
+  const rec = { id: opt.recId || uid(), date, saved: Date.now(), store, total: b.total, items: items.map(bonRecItem), ...(partial ? { partial: true } : {}), ...(b.time ? { time: b.time } : {}) };
   if (!dateSane(date)) rec.du = true; // Datum in der Zukunft oder uralt: zählt nicht
-  S.bons.unshift(rec); S.bons = bonsSorted().slice(0, 60); BH = null; // Kaufhistorie neu rechnen, bevor Favoriten geprüft werden
+  S.bons = S.bons.filter(x => x.id !== rec.id); S.bons.unshift(rec); arcPut([rec]); /* ins Langzeit-Archiv, bevor die Arbeitsmenge gekürzt wird */ S.bons = bonsSorted().slice(0, 60); BH = null; // Kaufhistorie neu rechnen, bevor Favoriten geprüft werden
   const lines = [], spont = [], favNew = [];
   const seen = new Set(), seenP = new Set();
   items.forEach(i => {
@@ -542,8 +543,13 @@ function bonCommit(b, items, store, date, qid, opt) {
   [...seen].forEach(pid => { const st = stammladen(pid), was = before[pid]; if (st && (!was || was.store !== st.store)) lines.push(`📍 ${esc(PROD(pid).name)}: Du kaufst das meist bei <b>${esc(bonStoreName(st.store))}</b> (${st.n} von ${st.of} Käufen).`); });
   const newTips = savingTips().filter(t => !oldTip.has(t.p.id)); newTips.slice(0, 2).forEach(t => lines.push(`💡 ${esc(t.p.name)}: ${esc(tipText(t))}`));
   if (!S.lastBackup || (TODAY - d0(S.lastBackup)) / 864e5 > 14) lines.push('💾 Tipp: Mach bald eine Sicherung (Mehr → Exportieren). Bon-Fotos sind nicht in der Sicherung.');
-  if (qid) { bqSaved(qid, rec, total); lines.push('🗑️ Das Papier kannst du jetzt wegwerfen. Das Foto bleibt noch hier gespeichert.'); }
-  return { lines, cand, rec, total, partial, n: items.length };
+  return { lines, cand, rec, total, partial, n: items.length }; // abgeschlossen wird erst in bonFinish, nachdem das Speichern bestätigt ist
+}
+async function bonFinish(res, qid) { // „gespeichert“ gilt erst, wenn save() klappt; sonst Bon zurücknehmen, Warteschlange und Abschrift bleiben
+  if (save()) { if (qid) { res.lines.push('🗑️ Das Papier kannst du jetzt wegwerfen. Das Foto bleibt noch hier gespeichert.'); await bqSaved(qid, res.rec, res.total); } return true; }
+  S.bons = S.bons.filter(b => b.id !== res.rec.id); BH = null; CACHE = null; TIPS = null;
+  const m = qid && BQ.list.find(x => x.id === qid); if (m) { m.hold = 'Speichern nicht möglich (Speicher voll): bitte Platz schaffen, dann erneut prüfen'; try { await bqSaveMeta(m); } catch (e) { } }
+  return false;
 }
 // Automatisch speichern, sobald ein Bon gelesen ist (nur wenn Laden bekannt und kein Verdacht auf doppelt)
 async function bqAutoSave(m) {
@@ -557,9 +563,9 @@ async function bqAutoSave(m) {
   if (b.dateGuess) { m.hold = 'Jahr nicht sicher: bitte Datum prüfen'; await bqSaveMeta(m); return false; }
   const items = b.items.filter(i => i.kind === 'item' && i.include); if (!items.length) { m.hold = 'keine Artikel erkannt'; await bqSaveMeta(m); return false; }
   const pairs = await bqAiPair(items, date, b.time).catch(() => []);
-  const res = bonCommit(b, items, store, date, m.id, { lowRead: m.lowRead || 0, pairs });
-  if (res.cand.length) bonAskAdd(res.cand);
-  save(); if (res.cand.length) setTimeout(() => askPopup(true), 400);
+  const res = bonCommit(b, items, store, date, m.id, { lowRead: m.lowRead || 0, pairs, recId: 'b_' + m.id });
+  if (!(await bonFinish(res, m.id))) { feedbackText('⚠ Der Bon konnte nicht gespeichert werden (Speicher voll). Er bleibt in der Warteschlange, nichts ist verloren. Schaffe Platz (z. B. Mehr → Sichern) und speichere ihn dann unter „bitte prüfen“ noch einmal.', true); return false; }
+  if (res.cand.length) { bonAskAdd(res.cand); save(); setTimeout(() => askPopup(true), 400); }
   feedbackText(`✓ Bon gespeichert: ${res.n} Artikel bei ${esc(bonStoreName(store))}${res.partial ? ' (teilweise gelesen)' : ''}${dd.guess ? ' (Datum nicht erkannt, der Tag des Fotos gilt)' : ''}.${res.cand.length ? ' Auf der Liste fragt die App, was schon gekauft ist.' : ''}`);
   return true;
 }

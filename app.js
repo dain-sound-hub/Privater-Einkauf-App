@@ -1,5 +1,8 @@
 'use strict';
-const APP_BUILD = { v: 155, t: '14.10. 17:52' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 158, t: '14.10. 20:23' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+// Fremde Werte nie als Text in Handler einsetzen (Regel 50): Angebots-IDs bestehen nur aus Buchstaben, Ziffern und . : _ - (sonst wird eine feste Ersatz-ID aus dem Wert gebildet); jsq() macht aus einem Wert ein sicheres JavaScript-Zeichenkettenliteral für ein HTML-Attribut
+const safeOfferId = (v, fb) => { const s = (typeof v === 'string' || typeof v === 'number') ? String(v).slice(0, 80) : ''; if (/^[\w.:-]{1,80}$/.test(s)) return s; if (!s) return fb; let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) >>> 0; return 'x' + h.toString(36); };
+const jsq = v => String(JSON.stringify(String(v))).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // Fehlerschutz: ein unerwarteter Fehler zeigt eine ruhige Meldung statt einer leeren Seite; deine Daten bleiben gespeichert
 window.addEventListener('error', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
 window.addEventListener('unhandledrejection', () => { try { feedbackText('⚠ Etwas ist schiefgelaufen. Lade die App neu. Deine Liste bleibt gespeichert.', true); } catch (e) { } });
@@ -37,7 +40,7 @@ function sanitize(x) {
     later: arr(o.later).filter(l => l && idOk(l.id) && idOk(l.pid) && dateOk(l.from)).map(l => ({ id: l.id, pid: l.pid, name: String(l.name ?? '').slice(0, 80), qty: String(l.qty ?? '').slice(0, 20), from: l.from })),
     watch: Array.isArray(o.watch) ? o.watch.filter(idOk) : DEF.watch.slice(),
     custom: arr(o.custom).filter(c => c && idOk(c.id) && typeof c.name === 'string' && c.name.trim()).slice(0, 500).map(c => ({ id: c.id, name: c.name.slice(0, 80) })),
-    manual: arr(o.manual).filter(m => m && typeof m === 'object' && typeof m.name === 'string' && Number(m.price) > 0 && STORES.some(s => s.id === m.store) && Array.isArray(m.valid) && dateOk(m.valid[0]) && dateOk(m.valid[1])).map(m => ({ id: String(m.id ?? 'm' + Date.now()).slice(0, 40), store: m.store, name: m.name.slice(0, 80), price: Number(m.price), regular: num(m.regular, null), amount: num(m.amount, null), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(m.unit) ? m.unit : null, valid: [m.valid[0], m.valid[1]], manual: true })),
+    manual: arr(o.manual).filter(m => m && typeof m === 'object' && typeof m.name === 'string' && Number(m.price) > 0 && STORES.some(s => s.id === m.store) && Array.isArray(m.valid) && dateOk(m.valid[0]) && dateOk(m.valid[1])).map(m => ({ id: safeOfferId(m.id, 'm' + Date.now()).slice(0, 40), store: m.store, name: m.name.slice(0, 80), price: Number(m.price), regular: num(m.regular, null), amount: num(m.amount, null), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(m.unit) ? m.unit : null, valid: [m.valid[0], m.valid[1]], manual: true })),
     hist: (() => { const m = new Map(); arr(o.hist).slice(-5000).filter(h => h && idOk(h.pid) && Number.isFinite(+h.up) && +h.up > 0 && +h.up < 1e4).map(h => ({ pid: h.pid, up: +h.up, date: dateOk(h.date) && h.date <= today ? h.date : '', store: typeof h.store === 'string' ? h.store.slice(0, 20) : '' })).filter(h => !h.date || h.date >= minDay).forEach((h, i) => m.set(h.date ? h.pid + '|' + h.date + '|' + h.store : '?' + h.pid + '|' + h.up + '|' + h.store, h)); return [...m.values()].slice(-400); })(), // erst bereinigen, dann kürzen; ein Eintrag je Produkt, Tag und Laden (der neueste)
     buys: Object.fromEntries(Object.entries(o.buys && typeof o.buys === 'object' && !Array.isArray(o.buys) ? o.buys : {}).filter(([k, n]) => k.length <= 90 && Number.isFinite(+n) && +n >= 0).slice(0, 3000).map(([k, n]) => [k, +n])),
     set: { hourly: num(set.hourly, 15), stockPct: num(set.stockPct, 20), carMax: num(set.carMax, 25), lidl: ['auto', 'ja', 'nein'].includes(set.lidl) ? set.lidl : 'auto', tipPct: num(set.tipPct, 20), topPct: Math.min(90, Math.max(5, num(set.topPct, 30))), noDragTip: !!set.noDragTip, theme: ['light', 'dark'].includes(set.theme) ? set.theme : 'auto' }
@@ -178,7 +181,7 @@ function cleanOffers(list) {
     const price = pos(o.price), v0 = day(Array.isArray(o.valid) ? o.valid[0] : null), v1 = day(Array.isArray(o.valid) ? o.valid[1] : null);
     if (!price || !v0 || !v1 || v1 < v0 || (v1 - v0) / 864e5 > MAX_OFFER_SPAN_DAYS) { bad++; continue; }
     const c = {
-      id: txt(o.id, 80) || (o.store + '-' + out.length), store: o.store.slice(0, 20), name: txt(o.name, 200), img: https(o.img), desc: txt(o.desc, 300), cats: txt(o.cats, 200), pid: null,
+      id: safeOfferId(o.id, o.store + '-' + out.length), store: o.store.slice(0, 20), name: txt(o.name, 200), img: https(o.img), desc: txt(o.desc, 300), cats: txt(o.cats, 200), pid: null,
       price, regular: pos(o.regular), regularIsUvp: o.regularIsUvp === true, unitPrice: pos(o.unitPrice), base: ['kg', 'l', 'st'].includes(o.base) ? o.base : undefined,
       amount: pos(o.amount), unit: ['g', 'kg', 'ml', 'l', 'st'].includes(o.unit) ? o.unit : undefined, count: pos(o.count), valid: [o.valid[0], o.valid[1]], src: https(o.src), note: txt(o.note, 200),
       found: Array.isArray(o.found) ? o.found.filter(f => typeof f === 'string').map(f => f.slice(0, 60)).slice(0, 20) : [],
@@ -380,8 +383,8 @@ function offerCard(o, opt = {}) {
   if (o.state === 'next') t.push('<span class="tag t-warn">ab ' + fmtD(o.valid[0]) + '</span>');
   if (o.appRequired) t.push('<span class="tag t-warn">nur mit App/Coupon</span>');
   const nh = p && o.state === 'now' ? nextHint(productInfo(p)) : null;
-  const laterBtn = !opt.noAdd && (o.state === 'next' || nh) ? `<button class="btn sm" onclick="rememberOffer('${esc(o.id)}')">📌 Merken</button>` : '';
-  const add = opt.noAdd || o.state === 'next' || (p && onList(p.id)) ? '' : p ? `<button class="btn sm" onclick="addP('${p.id}')">+ Liste</button>` : `<button class="btn sm" onclick="addOfferItem('${esc(o.id)}')">+ Liste</button>`; // auch Neues, das du sonst nie kaufst
+  const laterBtn = !opt.noAdd && (o.state === 'next' || nh) ? `<button class="btn sm" onclick="rememberOffer(${jsq(o.id)})">📌 Merken</button>` : '';
+  const add = opt.noAdd || o.state === 'next' || (p && onList(p.id)) ? '' : p ? `<button class="btn sm" onclick="addP('${p.id}')">+ Liste</button>` : `<button class="btn sm" onclick="addOfferItem(${jsq(o.id)})">+ Liste</button>`; // auch Neues, das du sonst nie kaufst
   const badge = o.pct != null ? `<span class="pct ${o.dubious ? 'dub' : ''}" ${o.dubious ? 'title="Vergleich mit Hersteller-UVP, vermutlich Schein-Rabatt"' : ''}>${o.dubious ? '≈ ' : ''}−${Math.round(o.pct * 100)} %</span>${saveTag(o)}` : '';
   return `<div class="card offer" style="--sc:${storeColor(o.store.id)}"><div class="ohead">${thumb(o.img, iconFor(p, o.name), '', true)}
   <div class="grow"><div class="row sp nowrap"><h3 class="grow">${esc(o.name)}</h3>${badge}</div>
@@ -997,15 +1000,17 @@ function addOffer() {
 const delOffer = i => { S.manual.splice(i, 1); CACHE = null; save(); render(); };
 function saveSet() { S.set = { ...S.set, hourly: +$('#sh').value || 15, stockPct: +$('#sp').value || 20, carMax: +$('#sc').value || 25, tipPct: +$('#st').value || 20, topPct: Math.min(90, Math.max(5, +$('#sg').value || 30)) }; save(); render(); toast('Gespeichert'); }
 async function exp() { // alle Daten in eine Datei: teilen (z. B. an ein anderes Handy) oder herunterladen
-  const name = 'einkauf-daten-' + isoDay(TODAY) + '.json', arch = await Promise.race([arcAll(), new Promise(r => setTimeout(() => r([]), 2500))]), json = JSON.stringify({ app: 'intelligente-einkaufsliste', exportiert: new Date().toISOString(), daten: S, archiv: arch }, null, 1);
+  const name = 'einkauf-daten-' + isoDay(TODAY) + '.json', arch = await Promise.race([arcAll(), new Promise(r => setTimeout(() => r(null), 5000))]);
+  if (arch === null && !confirm('Das Langzeit-Archiv konnte gerade nicht gelesen werden. Die Sicherung würde ohne die archivierten Bons erstellt.\n\nTrotzdem sichern? Abbrechen = es wird nichts gesichert.')) return;
+  const json = JSON.stringify({ app: 'intelligente-einkaufsliste', exportiert: new Date().toISOString(), daten: S, archiv: arch || [], archivVollstaendig: arch !== null }, null, 1);
   const file = new File([json], name, { type: 'application/json' });
-  const done = () => { S.lastBackup = isoDay(TODAY); save(); render(); feedbackText('✓ Daten exportiert: ' + esc(name)); };
+  const done = () => { if (arch !== null) { S.lastBackup = isoDay(TODAY); save(); } render(); feedbackText(arch !== null ? '✓ Daten exportiert: ' + esc(name) : '⚠ Daten OHNE Archiv exportiert: ' + esc(name) + '. Bitte später noch einmal sichern.', arch === null); };
   try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Einkaufsliste Sicherung' }); return done(); } } catch (e) { if (e && e.name === 'AbortError') return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); done();
 }
 function imp(el) {
   const f = el.files[0]; el.value = ''; if (!f) return;
-  f.text().then(t => {
+  f.text().then(async t => {
     let j; try { j = JSON.parse(t); } catch (e) { return alert('Das ist keine gültige Sicherungsdatei.'); }
     const mine = j && j.app === 'intelligente-einkaufsliste' && j.daten, alt = !mine && j && Array.isArray(j.list) && Array.isArray(j.bons) && j.watch !== undefined; // alt = Sicherung einer älteren Version ohne Kennung
     if (!mine && !alt) return alert('Das ist keine Sicherung dieser App. Bitte nur Dateien nehmen, die du hier mit „Exportieren“ erstellt hast.');
@@ -1013,7 +1018,7 @@ function imp(el) {
     if (!n.list.length && !n.bons.length && !Object.keys(n.adds).length && !n.custom.length) return alert('In dieser Datei habe ich keine Einkaufsdaten gefunden.');
     if (!confirm(`Diese Daten übernehmen?\n\n${n.list.length} Artikel auf der Liste\n${n.bons.length} gespeicherte Bons\n${n.watch.length} Favoriten\n\nDas ersetzt die Daten auf diesem Gerät. Der jetzige Stand wird vorher als Kopie aufgehoben.`)) return;
     try { if (!localStorage.getItem(LS + '.vorImport')) localStorage.setItem(LS + '.vorImport', JSON.stringify({ t: Date.now(), daten: S })); } catch (e) { return alert('Die Sicherheitskopie des jetzigen Stands konnte nicht angelegt werden (Speicher voll). Der Import wurde abgebrochen. Mach zuerst eine Sicherung (⬆ Exportieren).'); } // die älteste Kopie bleibt erhalten
-    UI.undo = null; UI.undoMove = null; S = n; migrateCustom(); S.custom.forEach(regCustom); repairRefs(); CACHE = null; if (!save()) return; if (Array.isArray(j.archiv)) arcPut(j.archiv.slice(0, 20000)); render(); feedbackText('✓ Daten importiert.');
+    UI.undo = null; UI.undoMove = null; S = n; migrateCustom(); S.custom.forEach(regCustom); repairRefs(); CACHE = null; if (!save()) return; let aok = true; if (Array.isArray(j.archiv) && j.archiv.length) aok = await Promise.race([arcPut(j.archiv.slice(0, 20000)), new Promise(r => setTimeout(() => r(false), 10000))]); render(); feedbackText(aok ? '✓ Daten importiert.' : '⚠ Daten importiert, aber das Langzeit-Archiv konnte nicht vollständig wiederhergestellt werden. Importiere die Datei später noch einmal.', !aok);
   }).catch(() => alert('Die Datei konnte nicht gelesen werden.'));
 }
 const setOff = k => { UI.offers = k; UI.more = false; render(); };

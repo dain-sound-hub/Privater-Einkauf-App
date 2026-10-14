@@ -71,7 +71,7 @@ if (loadErr) { console.error('FEHLER beim Laden der App-Dateien:', loadErr); pro
   if (ji > 0) { // beliebigen Auswertungs-Code gegen die App-Logik laufen lassen (optional mit --export <Datei> als Datenstand); Ergebnis wird als JSON ausgegeben
     const ex = process.argv.indexOf('--export');
     if (ex > 0) { sb.__t.exp = JSON.parse(fs.readFileSync(process.argv[ex + 1], 'utf8')).daten; run('S = sanitize(__t.exp); S.custom.forEach(regCustom); CACHE = null; S.remapV = 0; bonRemapOld(true); BH = null;'); }
-    console.log(JSON.stringify(run(fs.readFileSync(process.argv[ji + 1], 'utf8')), null, 1));
+    console.log(JSON.stringify(await run(fs.readFileSync(process.argv[ji + 1], 'utf8')), null, 1)); // auch async-Skripte
   }
   const hi = process.argv.indexOf('--habit');
   if (hi > 0) { // Warum erscheint ein Angebot unter „Das kaufst du öfter, jetzt im Angebot“? Zeigt Produkt und Grund (Favorit oder Kauf-/Eintragshäufigkeit) mit den Daten einer Exportdatei

@@ -392,11 +392,19 @@ function setTopPct(v) { S.set.topPct = Math.min(90, Math.max(5, +v || 30)); save
 /* ---------- Langzeit-Archiv: jeder gespeicherte Bon bleibt für immer erhalten (IndexedDB), auch wenn die App-Daten nur die letzten 60 Bons führen. Grundlage für spätere Auswertungen. ---------- */
 const ARC = { p: null, t: 0 };
 const arcOpen = () => ARC.p || (ARC.p = new Promise((res, rej) => { try { const rq = indexedDB.open('einkauf-archiv', 1); rq.onupgradeneeded = () => { rq.result.createObjectStore('bons', { keyPath: 'id' }); }; rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); } catch (e) { rej(e); } }));
-async function arcPut(list) { // schreibt oder aktualisiert Bons (gleiche Nummer = gleicher Bon), löscht nie etwas
-  try { const a = (Array.isArray(list) ? list : []).filter(b => b && typeof b.id === 'string' && typeof b.date === 'string' && Array.isArray(b.items)); if (!a.length) return; const db = await arcOpen(); await new Promise((res, rej) => { const tx = db.transaction('bons', 'readwrite'), st = tx.objectStore('bons'); a.forEach(b => st.put(JSON.parse(JSON.stringify(b)))); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch (e) { }
+const arcClean = b => { if (!b || typeof b !== 'object' || typeof b.id !== 'string' || !/^[\w-]{1,60}$/.test(b.id) || typeof b.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.date) || !Array.isArray(b.items)) return null; return { ...b, items: b.items.filter(i => i && typeof i === 'object').slice(0, 2000) }; }; // Eingang prüfen (Regel 17)
+async function arcPut(list) { // true = alles sicher im Archiv. Ein bestehender Eintrag wird nie durch eine KÜRZERE Fassung (weniger Positionen) ersetzt; die Arbeitsmenge der App (gekürzt) darf das Original nicht überschreiben
+  try {
+    const a = (Array.isArray(list) ? list : []).map(arcClean).filter(Boolean); if (!a.length) return true;
+    const db = await arcOpen();
+    await new Promise((res, rej) => { const tx = db.transaction('bons', 'readwrite'), st = tx.objectStore('bons'); a.forEach(b => { const g = st.get(b.id); g.onsuccess = () => { const o = g.result; if (!o || o.items.length <= b.items.length) st.put(JSON.parse(JSON.stringify(b))); }; }); tx.oncomplete = res; tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error || new Error('abgebrochen')); });
+    return true;
+  } catch (e) { ARC.err = String((e && e.message) || e); return false; }
 }
-async function arcAll() { try { const db = await arcOpen(); return await new Promise((res, rej) => { const rq = db.transaction('bons', 'readonly').objectStore('bons').getAll(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error); }); } catch (e) { return []; } }
+async function arcAll() { // null = Lesen fehlgeschlagen (das ist nicht dasselbe wie „leer“)
+  try { const db = await arcOpen(); return await new Promise((res, rej) => { const rq = db.transaction('bons', 'readonly').objectStore('bons').getAll(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error); }); } catch (e) { return null; }
+}
 const arcLater = () => { clearTimeout(ARC.t); ARC.t = setTimeout(() => { try { arcPut(S.bons); } catch (e) { } }, 2500); }; // nach jedem Speichern der App-Daten kurz warten, dann abgleichen
-async function arcFill() { const el = document.getElementById('arcinfo'); if (!el) return; const a = await arcAll(); el.textContent = a.length ? `🗄️ Langzeit-Archiv: ${a.length} Bons mit ${a.reduce((s, b) => s + b.items.length, 0)} Positionen. Bleibt für spätere Auswertungen erhalten.` : '🗄️ Langzeit-Archiv: noch leer. Jeder gespeicherte Bon kommt automatisch hinein.'; }
+async function arcFill() { const el = document.getElementById('arcinfo'); if (!el) return; const a = await arcAll(); if (!a) { el.textContent = '🗄️ Langzeit-Archiv: kann gerade nicht gelesen werden.'; return; } el.textContent = a.length ? `🗄️ Langzeit-Archiv: ${a.length} Bons mit ${a.reduce((s, b) => s + b.items.length, 0)} Positionen. Bleibt für spätere Auswertungen erhalten.` : '🗄️ Langzeit-Archiv: noch leer. Jeder gespeicherte Bon kommt automatisch hinein.'; }
 const arcBlock = () => { setTimeout(arcFill, 0); return '<div class="mute small" id="arcinfo" style="margin:8px 4px"></div>'; };
 setTimeout(() => { try { arcPut(S.bons); } catch (e) { } }, 3000); // beim Start: die vorhandenen Bons ins Archiv
