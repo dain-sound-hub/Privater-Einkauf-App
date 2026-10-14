@@ -355,6 +355,46 @@ function usualBlock(o, mini, p0) { // Vergleich eines Angebots mit deinem Standa
   return `<div class="usl">🛒 <b>Dein Standard:</b> ${std} · ${u.up ? eur(u.up) + '/' + unitLbl(u.base) : eur(u.paid)} (zuletzt ${eur(u.paid)}${u.pack ? ' für ' + packLabel(u.base, u.pack) : ''}), ${u.n}× in einem Monat gekauft</div>${v ? `<div class="usl2 ${cls}">Dieses Angebot${same ? ' (gleiche Marke)' : obr ? ' (' + esc(obr) + ')' : ''}: <b>${v}</b></div>` : ''}`;
 }
 
+// Was du sonst kaufst: das Produkt (Marke), bei dem du am häufigsten gekauft hast, mit deinem letzten Preis. Ohne Mindestanzahl und ohne Rabatt-Bedingung (Sammelprodukte zählen ihre Sorten mit).
+function lastBuy(pid) {
+  const p = PROD(pid), ids = new Set(p && p.group ? [...p.group, pid] : [pid]), log = [];
+  for (const b of S.bons) if (!b.du) for (const it of b.items) if (it.pid && ids.has(it.pid) && it.p > 0) {
+    const q = it.q || 1, paid = it.p / q; if (!(paid >= 0.05 && paid <= 300)) continue;
+    let pk = it.k && it.a > 0 && it.a <= 1000, up = pk ? it.p / (it.a * q) : null; if (up != null && !(isFinite(up) && up >= 0.01 && up <= 3000)) { pk = false; up = null; }
+    log.push({ date: b.date, store: b.store, brand: it.b || '', name: it.n, paid, base: pk ? it.k : null, pack: pk ? it.a : null, up });
+  }
+  if (!log.length) return null;
+  log.sort((a, b) => b.date.localeCompare(a.date));
+  const key = l => l.brand ? 'b:' + fold(l.brand) : 'n:' + fold(l.name).slice(0, 12), groups = {};
+  log.slice(0, 40).forEach(l => (groups[key(l)] = groups[key(l)] || []).push(l));
+  const best = Object.values(groups).sort((a, b) => b.length - a.length || b[0].date.localeCompare(a[0].date))[0], latest = best[0];
+  const ups = best.filter(l => l.up && l.base === latest.base).map(l => l.up).sort((a, b) => a - b), cs = {}; best.forEach(l => cs[l.store] = (cs[l.store] || 0) + 1);
+  return { brand: latest.brand, name: latest.name, store: Object.entries(cs).sort((a, b) => b[1] - a[1])[0][0], date: latest.date, base: latest.base, pack: latest.pack, paid: latest.paid, up: ups.length ? ups[Math.floor(ups.length / 2)] : null, n: best.length };
+}
+function buyBlock(p, info) { // oben im Preisvergleich: dein üblicher Kauf mit Preis (auch ohne Rabatt) und Vergleich mit dem besten Angebot dieser Woche
+  const u = lastBuy(p.id), li = S.list.find(i => !i.done && (i.pid === p.id || ((PROD(i.pid) || {}).group || []).includes(p.id)));
+  if (!u && !li) return '';
+  let h = '<div class="usl top">';
+  if (li) h += '📝 <b>Auf deiner Liste:</b> ' + esc(li.name) + (li.qty ? ' · ' + esc(qtyLabel(li.qty)) : '') + (u ? '<br>' : '');
+  if (u) {
+    let un = u.name.replace(/\s+\d[\d.,]*\s?(?:kg|g|ml|l|er|stk)\b.*/i, '').trim();
+    { const nz = s => fold(s).replace(/[^a-z0-9]/g, ''), bl = nz(u.brand), tk = un.split(/\s+/); let acc = '', k = 0; while (bl && k < tk.length && acc.length < bl.length) acc += nz(tk[k++]); if (bl && acc === bl) un = tk.slice(k).join(' '); } // Marke nicht doppelt (auch bei „GUT&GUENSTIG“ gegen „Gut & Günstig“)
+    h += '⭐ <b>Das kaufst du am öftesten:</b> ' + (u.brand ? esc(u.brand) + ' ' : '') + esc(un.slice(0, 32)) + ' bei ' + esc(bonStoreName(u.store)) + ' · <b>' + eur(u.paid) + '</b>' + (u.up ? ' (' + eur(u.up) + '/' + unitLbl(u.base) + ')' : '') + ' · zuletzt ' + esc(fmtD(u.date)) + (u.n > 1 ? ', ' + u.n + '× gekauft' : '');
+    const o = info.now.filter(x => !isPerm(x)).sort(rank)[0];
+    if (o) {
+      let d = null, e = null, note = '';
+      if (o.up && u.up && o.up.base === u.base && u.up > 0) { d = (o.up.v - u.up) / u.up; e = (o.up.v - u.up) * (qtyBase(o) || u.pack || 1); }
+      else if (o.price && u.paid) { d = (o.price - u.paid) / u.paid; e = o.price - u.paid; note = ' (Packungsgröße unklar)'; }
+      if (d != null) {
+        const pct = Math.round(Math.abs(d) * 100), eu = Math.abs(e) >= 0.05 ? eur(Math.abs(e)) : '', br = bonBrand(o.name, o.p);
+        const v = Math.abs(d) < 0.03 ? 'etwa gleich teuer' : d < 0 ? pct + ' % günstiger' + (eu ? ' (spart ' + eu + ')' : '') : pct + ' % teurer' + (eu ? ' (' + eu + ' mehr)' : '');
+        h += '<div class="usl2 ' + (Math.abs(d) < 0.03 ? 'mute' : d < 0 ? 'ok' : 'warn') + '">Bestes Angebot diese Woche (' + esc(o.store.short) + (br ? ', ' + esc(br) : '') + ', ' + eur(o.price) + '): <b>' + v + '</b> als dein üblicher Kauf' + note + '</div>';
+      }
+    }
+  } else h += '<div class="mute small">Noch kein Kauf von dir bekannt. Nach dem nächsten Bon steht hier, was du sonst bezahlst.</div>';
+  return h + '</div>';
+}
+
 /* ---------- Bildschirm „Bon einlesen" ---------- */
 let BON = { text: '', parsed: null, done: null, assign: null, res: [], photos: [], busy: false, lowRead: 0, cur: null, fromPhoto: false, curPhotos: [], addTo: null, detail: null, allowDup: false, dupWarn: '' };
 const BON_SAMPLE = `REWE Markt GmbH

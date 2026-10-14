@@ -87,3 +87,5 @@ Diese Datei fasst zusammen, was aus gefundenen Fehlern als **allgemeine Regel** 
 54. **Entscheidung und Wartehinweis vergleichen mit dem Angebot der Zeile,** nicht mit dem besten City-Center-Angebot. Der bekannte Preis des Standardladens bleibt stehen, auch ohne Prozent. Wortgrenzen auch in route.js (Rucola ≠ Cola). Ablaufprüfung: node tests/pruefen.js --js tests/ablauf/route.js
 
 Bewusst offen (Entscheidung des Nutzers): Lidl mit Listenmenge (D1), Vergleich gegen geplante Route (D2), Route stabil halten (D3), Wurst bei der Abholung (D4), Vollbeleg-Archiv (D5), Fremdladen-Referenz p.ref (D6), Änderungen an research-core.js (C5/C7/C8/C10).
+
+55. **Preisvergleich-Fenster (i) zeigt oben, was du sonst kaufst:** Listenartikel (mit Menge), dein häufigster Kauf (Marke, Laden, letzter Preis, €/Einheit, Anzahl, Datum) auch ohne Rabatt und ohne Mindestanzahl, dazu der Vergleich des besten Angebots dieser Woche mit diesem Preis (in % und €). Ablaufprüfung: node tests/pruefen.js --js tests/ablauf/vergleich.js

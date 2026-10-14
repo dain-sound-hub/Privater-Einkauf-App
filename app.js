@@ -1,5 +1,5 @@
 'use strict';
-const APP_BUILD = { v: 160, t: '14.10. 20:27' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
+const APP_BUILD = { v: 162, t: '14.10. 20:40' }; // wird von bump.js gesetzt: Versionsnummer und Zeit der letzten Änderung
 // Fremde Werte nie als Text in Handler einsetzen (Regel 50): Angebots-IDs bestehen nur aus Buchstaben, Ziffern und . : _ - (sonst wird eine feste Ersatz-ID aus dem Wert gebildet); jsq() macht aus einem Wert ein sicheres JavaScript-Zeichenkettenliteral für ein HTML-Attribut
 const safeOfferId = (v, fb) => { const s = (typeof v === 'string' || typeof v === 'number') ? String(v).slice(0, 80) : ''; if (/^[\w.:-]{1,80}$/.test(s)) return s; if (!s) return fb; let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) >>> 0; return 'x' + h.toString(36); };
 const jsq = v => String(JSON.stringify(String(v))).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -941,19 +941,20 @@ function closeSheet() { const s = $('#sheet'); if (s) s.hidden = true; UI.askShe
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 function compare(pid) {
   const p = PROD(pid); if (!p) return;
-  const info = productInfo(p);
+  const info = productInfo(p), own = lastBuy(p.id), ownBrand = own && own.brand ? fold(own.brand) : ''; // deine Marke wird in der Tabelle markiert
   const mk = (list, label, nextMode) => {
     const shown = STORES.filter(s => s.tier !== 'D' || list.some(o => o.store.id === s.id));
     const rows = shown.map(s => ({ s, o: list.find(o => o.store.id === s.id) }));
     let best = null;
     rows.filter(r => r.o).forEach(r => { if (!best || ((r.o.up && best.o.up && r.o.up.base === best.o.up.base) ? r.o.up.v < best.o.up.v : r.o.price < best.o.price)) best = r; });
     const cell = r => r.o
-      ? `<td><b>${eur(r.o.price)}</b>${r.o.regular ? ` <s class="mute">${eur(r.o.regular)}</s>` : ''}<div class="mute clamp">${esc(r.o.name.slice(0, 40))}</div></td><td>${r.o.up ? eur(r.o.up.v) + '/' + unitLbl(r.o.up.base) : ''}${r.o.pct != null && !r.o.dubious ? `<div><span class="pct">−${Math.round(r.o.pct * 100)} %</span>${saveTag(r.o)}</div>` : ''}</td>`
+      ? `<td><b>${eur(r.o.price)}</b>${r.o.regular ? ` <s class="mute">${eur(r.o.regular)}</s>` : ''}<div class="mute clamp">${esc(r.o.name.slice(0, 40))}</div>${ownBrand && r.o.p && fold(bonBrand(r.o.name, r.o.p)) === ownBrand ? '<span class="tag t-ok">⭐ dein Produkt</span>' : ''}</td><td>${r.o.up ? eur(r.o.up.v) + '/' + unitLbl(r.o.up.base) : ''}${r.o.pct != null && !r.o.dubious ? `<div><span class="pct">−${Math.round(r.o.pct * 100)} %</span>${saveTag(r.o)}</div>` : ''}</td>`
             : `<td colspan="2" class="mute">${nextMode && NEXT_STORES.includes(r.s.id) && !OFFERS_ALL().some(o => o.store.id === r.s.id && o.state === 'next') ? '⏳ Prospekt für nächste Woche noch nicht veröffentlicht' : 'kein Angebot bekannt' + (r.s.id === 'dm' ? ' (hat selten Prospektpreise)' : '')}</td>`;
     return `<h4>${label}</h4><table class="cmp">${rows.map(r => `<tr class="${best && r === best ? 'win' : ''}"><td><i class="dot t${r.s.tier}"></i>${esc(r.s.short)}${best && r === best ? ' ✓' : ''}</td>${cell(r)}</tr>`).join('')}</table>${best ? `<div class="small">✓ Am günstigsten: <b>${esc(best.s.name)}</b></div>` : ''}`;
   };
   const nh = nextHint(info);
   $('#sheetbox').innerHTML = `<div class="row sp"><h3>${iconFor(p)} ${esc(p.name)}</h3><button class="ico" onclick="closeSheet()" aria-label="Schließen">✕</button></div>
+    ${buyBlock(p, info)}
     ${p.pref ? `<div class="mute">Dein Standardladen: <b>${esc(STORE(p.pref).name)}</b></div>` : ''}
     ${nextLine(nh)}${mk(info.now.filter(o => !isPerm(o)), 'Diese Woche')}${info.next.length ? mk(info.next, 'Nächste Woche', true) : nextStatusLine()}
     <div class="mute" style="margin-top:10px">Preise aus Händler-Prospekten, ohne Gewähr. Regalpreise vor Ort können abweichen.</div>
